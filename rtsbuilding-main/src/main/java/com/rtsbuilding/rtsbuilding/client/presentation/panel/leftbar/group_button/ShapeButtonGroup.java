@@ -148,6 +148,11 @@ public final class ShapeButtonGroup extends AbstractButtonGroup {
         return modeShapes[MODE_DESTRUCTION] == SINGLE_BLOCK;
     }
 
+    /** 建造模式（{@link #MODE_CONSTRUCTION}）下是否选中"线"形状（画笔画线建造）。 */
+    public boolean isLineConstructionSelected() {
+        return modeShapes[MODE_CONSTRUCTION] == LINE;
+    }
+
     @Override
     protected void onButtonClick(int index) {
         super.onButtonClick(index);

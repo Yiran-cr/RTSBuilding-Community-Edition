@@ -4,6 +4,7 @@ import com.rtsbuilding.rtsbuilding.common.RtsBuildEnergy;
 import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
 import com.rtsbuilding.rtsbuilding.server.history.ServerHistoryManager;
 import com.rtsbuilding.rtsbuilding.server.service.RtsBatchJobTickOps;
+import com.rtsbuilding.rtsbuilding.server.service.RtsPendingPlacementService;
 import com.rtsbuilding.rtsbuilding.server.service.RtsProgressRefresher;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
@@ -213,9 +214,16 @@ public final class RtsPlacementBatch {
                 }
                 remaining--;
                 if (!keepGoing) {
-                    // 放置失败（物品不足），回退索引保留位置，将 job 挂起到 pendingJobs
-                    // 后续通过 resumePendingJob / submitPendingPlacement 唤醒
                     if (hasWorkflowEntry) {
+                        // 区分失败原因，避免"位置问题"被误判为"缺货"而挂起整个作业：
+                        // 1) 位置不可访问（超范围/保护/维度）→ 跳过该位置，继续下一个；
+                        // 2) 放置失败但物品充足 → 跳过该位置，继续下一个；
+                        // 3) 物品不足 → 回退索引保留位置，将 job 挂起到 pendingJobs 等待补货。
+                        if (!RtsLinkedStorageResolver.canAccessWorldTarget(player, clickedPos)
+                                || !RtsPendingPlacementService.isOutOfItems(player, session, job)) {
+                            job.skippedWhileProcessing++;
+                            continue;
+                        }
                         job.unconsumeLast();
                         session.placement.placeBatchJobs.removeFirst();
                         session.placement.pendingJobs.addLast(job);

@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ScaleSliderComponent;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ToggleSwitch;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
+import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
@@ -90,7 +91,7 @@ public abstract class SettingsSection {
         int animH = (int) (contentFullH * section.getContentProgress());
         if (animH > 0) {
             
-            g.fill(headerX + 5, headerBottom - 2, headerX + headerW - 5, headerBottom, getSeparatorColor());
+            SdfRenderer.drawPill(g, headerX + 5, headerBottom - 2, headerW - 10, 2, getSeparatorColor());
 
             int contentTop = headerBottom + CONTENT_TOP_GAP;
             g.flush();

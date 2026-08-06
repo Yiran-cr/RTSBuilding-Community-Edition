@@ -2,7 +2,7 @@ package com.rtsbuilding.rtsbuilding.client.input;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import net.neoforged.neoforge.client.settings.KeyModifier;
 import org.lwjgl.glfw.GLFW;
@@ -44,6 +44,25 @@ public final class RtsKeyMappings {
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_M,
             CATEGORY_FUNCTION
+    );
+
+    
+    public static final KeyMapping CAMERA_ROTATE_KEY = new KeyMapping(
+            "key.rtsbuilding.camera_rotate",
+            KeyConflictContext.GUI,
+            InputConstants.Type.MOUSE,
+            GLFW.GLFW_MOUSE_BUTTON_MIDDLE,
+            CATEGORY_CAMERA
+    );
+
+    
+    public static final KeyMapping CAMERA_PAN_KEY = new KeyMapping(
+            "key.rtsbuilding.camera_pan",
+            KeyConflictContext.GUI,
+            KeyModifier.SHIFT,
+            InputConstants.Type.MOUSE,
+            GLFW.GLFW_MOUSE_BUTTON_RIGHT,
+            CATEGORY_CAMERA
     );
 
     
@@ -115,17 +134,31 @@ public final class RtsKeyMappings {
             CATEGORY_FUNCTION
     );
 
-    
-    public static void register(RegisterKeyMappingsEvent event) {
-        event.register(OPEN_GEAR_MENU_KEY);
-        event.register(TOGGLE_DEBUG_OVERLAY_KEY);
-        event.register(TOGGLE_CAMERA_MODE_KEY);
-        event.register(MOVE_PLAYER_KEY);
-        event.register(TOGGLE_SELECT_MODE_KEY);
-        event.register(TOGGLE_BIND_MODE_KEY);
-        event.register(TOGGLE_DIRECTION_ROTATE_MODE_KEY);
-        event.register(TOGGLE_ITEM_PICKUP_MODE_KEY);
-        event.register(UNDO_KEY);
-        event.register(CYCLE_MODE_KEY);
+    /**
+     * 按住时：点击模式将选中位置偏移到射线命中面外侧一格（默认左 Ctrl，可配置）。
+     * 框选模式选点同样遵循该按键。
+     */
+    public static final KeyMapping PLACE_OFFSET_KEY = new KeyMapping(
+            "key.rtsbuilding.place_offset",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_LEFT_CONTROL,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 检查 {@link #PLACE_OFFSET_KEY} 绑定的按键当前是否按下。
+     * <p>直接读取绑定键的 GLFW 状态（键盘或鼠标），不依赖每 tick 的
+     * {@code KeyMappingState} 更新（后者在自定义 Screen 中不可靠），
+     * 同时跟随玩家在设置中的自定义绑定。</p>
+     */
+    public static boolean isPlaceOffsetDown() {
+        InputConstants.Key bound = PLACE_OFFSET_KEY.getKey();
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        if (window == 0L) return false;
+        if (bound.getType() == InputConstants.Type.MOUSE) {
+            return GLFW.glfwGetMouseButton(window, bound.getValue()) == GLFW.GLFW_PRESS;
+        }
+        return GLFW.glfwGetKey(window, bound.getValue()) == GLFW.GLFW_PRESS;
     }
 }

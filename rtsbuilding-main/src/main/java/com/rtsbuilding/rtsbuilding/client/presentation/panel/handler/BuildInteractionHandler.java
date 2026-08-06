@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.handler;
 
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.building.BuildingModule;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.mining.MiningModule;
+import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.input.layer.CameraInputLayer;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
@@ -15,6 +16,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelector;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
+import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster.CursorRay;
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningValidator;
@@ -31,8 +33,10 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import org.lwjgl.glfw.GLFW;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 import static com.rtsbuilding.rtsbuilding.client.presentation.event.model.EventResult.CONSUMED;
@@ -48,6 +52,29 @@ public final class BuildInteractionHandler {
 
     private boolean miningActive;
     private int miningMouseButton = -1;
+
+    // ── 单方块模式长按持续操作（放置/破坏） ──────────────────────────
+
+    /** 持续放置间隔（tick）：长按右键期间每隔该值放置一格。 */
+    private static final int HOLD_PLACE_INTERVAL = 2;
+
+    /** 持续破坏切换间隔（tick）：当前方块挖完后等待该值再挖下一个。 */
+    private static final int HOLD_MINE_INTERVAL = 10;
+
+    /** 长按右键持续放置进行中。 */
+    private boolean rightHoldActive;
+
+    /** 长按左键持续破坏进行中。 */
+    private boolean leftHoldActive;
+
+    /** 持续放置倒计时。 */
+    private int holdPlaceCooldown;
+
+    /** 持续破坏切换倒计时。 */
+    private int holdMineCooldown;
+
+    /** 当前按压周期内是否已放置过（区分"单击"与"长按"）。 */
+    private boolean holdPlaceFired;
 
     /** 上次记录的框选阶段，用于检测框选确认（COMPLETE）沿以自动触发拾取。 */
     private BoxSelector.Phase lastBoxPhase = BoxSelector.Phase.IDLE;
@@ -80,6 +107,19 @@ public final class BuildInteractionHandler {
             return handleLeftClick(screen, leftSidebarPanel) ? CONSUMED : PASS;
         }
 
+        // 线模式建造：按住右键拖拽画线。消费右键按下，阻止相机层记录右键（相机右键拖拽不旋转，无副作用）
+        if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && !isAltDown() && !isShiftDown()) {
+            if (tryStartLineBrush(screen, leftSidebarPanel)) return CONSUMED;
+            // 单方块持续放置：右键按下进入持续放置状态（首次放置由 handleTick 立即执行，
+            // 快速单击由 handleMouseRelease 兜底放置一次）
+            if (isSingleBlockPlaceActive(screen, leftSidebarPanel)) {
+                this.rightHoldActive = true;
+                this.holdPlaceCooldown = 0;
+                this.holdPlaceFired = false;
+                return CONSUMED;
+            }
+        }
+
         return PASS;
     }
 
@@ -91,7 +131,20 @@ public final class BuildInteractionHandler {
 
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && this.miningActive) {
             stopMining();
+            this.leftHoldActive = false;
+            this.holdMineCooldown = 0;
             return CONSUMED;
+        }
+
+        // 线模式建造：松开右键结束画线并沿线段批量放置。
+        // 独立于下方右键放置块（不受 Shift/相机拖拽状态影响），保证拖拽松开也能正常收尾。
+        if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT
+                && !screen.isMouseOverRtsPanelApi(event.x(), event.y())
+                && isWorldArea(event.x(), event.y(), screen)
+                && isInBuildOrInteractiveMode(topBarPanel)
+                && kernel.renderPipeline().lineBrush.isDragging()
+                && isLineBuildActive(screen, leftSidebarPanel)) {
+            return finishLinePlace(screen, leftSidebarPanel);
         }
 
         if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && !isAltDown() && !isShiftDown()
@@ -99,7 +152,18 @@ public final class BuildInteractionHandler {
                 && isWorldArea(event.x(), event.y(), screen)
                 && isInBuildOrInteractiveMode(topBarPanel)
                 && !shouldSkipRightClickRelease(screen, leftSidebarPanel)) {
-            
+            // 单方块持续放置：松开右键结束持续放置。
+            // 快速单击（按下后 handleTick 尚未放置）兜底放置一次，避免漏放。
+            if (this.rightHoldActive) {
+                boolean fired = this.holdPlaceFired;
+                this.rightHoldActive = false;
+                this.holdPlaceCooldown = 0;
+                this.holdPlaceFired = false;
+                if (!fired) {
+                    placeSelectedAtCursor(screen, leftSidebarPanel);
+                }
+                return CONSUMED;
+            }
             if (!cameraInputLayer.wasDragged(button)) {
                 return runPrimaryActionAt(screen, leftSidebarPanel);
             }
@@ -129,6 +193,58 @@ public final class BuildInteractionHandler {
      * </ul>
      */
     public void handleTick(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        // 线模式建造：画线激活时实时更新预览（右键拖拽方向由鼠标位置决定，无需 mouseDragged 事件）；
+        // 画线激活状态消失时清除遗留的拖拽状态（切换形状/选择/模式等）
+        if (isLineBuildActive(screen, leftSidebarPanel)) {
+            updateLineBrushHover(screen);
+        } else if (kernel.renderPipeline().lineBrush.isDragging()) {
+            kernel.renderPipeline().lineBrush.reset();
+        }
+
+        // 单方块持续放置：长按右键按固定间隔在鼠标指向处放置方块
+        if (this.rightHoldActive) {
+            if (!isSingleBlockPlaceActive(screen, leftSidebarPanel)
+                    || !isMouseButtonDown(GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
+                this.rightHoldActive = false;
+                this.holdPlaceCooldown = 0;
+            } else if (this.holdPlaceCooldown > 0) {
+                this.holdPlaceCooldown--;
+            } else {
+                placeSelectedAtCursor(screen, leftSidebarPanel);
+                this.holdPlaceFired = true;
+                this.holdPlaceCooldown = HOLD_PLACE_INTERVAL;
+            }
+        }
+
+        // 单方块持续破坏：长按左键，当前方块挖完后（activePos 被清空）等待间隔再挖下一个目标。
+        // 兜底：若服务端完成信号丢失但目标方块已消失（被挖掉），视为挖完并切换到下一个。
+        if (this.leftHoldActive) {
+            if (!isSingleBlockMineActive(screen, leftSidebarPanel)
+                    || (leftSidebarPanel != null && leftSidebarPanel.isUltimineActive())
+                    || !isMouseButtonDown(GLFW.GLFW_MOUSE_BUTTON_LEFT)) {
+                this.leftHoldActive = false;
+                this.holdMineCooldown = 0;
+            } else {
+                MiningModule holdMining = kernel.module(MiningModule.class);
+                Minecraft holdMc = Minecraft.getInstance();
+                if (holdMining != null && holdMc.level != null) {
+                    BlockPos cur = holdMining.getActivePos();
+                    if (cur != null && holdMc.level.getBlockState(cur).isAir()) {
+                        holdMining.clearActivePos();
+                        cur = null;
+                    }
+                    if (cur == null) {
+                        if (this.holdMineCooldown > 0) {
+                            this.holdMineCooldown--;
+                        } else {
+                            mineAtCursor(screen, leftSidebarPanel);
+                            this.holdMineCooldown = HOLD_MINE_INTERVAL;
+                        }
+                    }
+                }
+            }
+        }
+
         // 相机激活检查与服务端 RtsFunnelService.validate（RtsCameraManager.isActive）保持一致：
         // 未开启 RTS 相机时服务端会静默拒绝，这里直接不发包，避免无效请求
         if (leftSidebarPanel == null || !leftSidebarPanel.isItemPickupActive()
@@ -212,8 +328,8 @@ public final class BuildInteractionHandler {
         var ray = CursorRaycaster.computeCursorRay(mc, screen);
         if (ray == null) return false;
 
-        BlockHitResult hit = ray.raycastBlock(mc);
-        if (hit == null || hit.getType() != HitResult.Type.BLOCK) return false;
+        BlockHitResult hit = resolveBuildHit(mc, screen, ray);
+        if (hit == null) return false;
 
         MiningModule miningModule = kernel.module(MiningModule.class);
         if (miningModule == null) return false;
@@ -259,6 +375,9 @@ public final class BuildInteractionHandler {
                 toolSlot, toolItemId, false, false);
         this.miningActive = true;
         this.miningMouseButton = GLFW.GLFW_MOUSE_BUTTON_LEFT;
+        // 长按左键持续破坏：当前方块挖完后由 handleTick 自动切换到下一个目标
+        this.leftHoldActive = true;
+        this.holdMineCooldown = 0;
         return true;
     }
 
@@ -273,6 +392,122 @@ public final class BuildInteractionHandler {
         this.miningMouseButton = -1;
     }
 
+    // ── 线模式建造（按住右键拖拽画线） ───────────────────────────────
+
+    /** 线模式建造是否激活：点击模式 + 建造模式 + 建造侧"线"形状 + 已选中方块物品。 */
+    private boolean isLineBuildActive(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        if (leftSidebarPanel == null || screen == null || !screen.isClickButtonSelected()) return false;
+        BuildingModule bm = kernel.module(BuildingModule.class);
+        return bm != null && bm.getMode() == BuilderMode.BUILD
+                && leftSidebarPanel.isLineBuildShapeSelected()
+                && bm.hasSelectedItem();
+    }
+
+    /** 右键按下：记录画线起点并进入拖拽状态。 */
+    private boolean tryStartLineBrush(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        if (!isLineBuildActive(screen, leftSidebarPanel)) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return false;
+        var ray = CursorRaycaster.computeCursorRay(mc, screen);
+        if (ray == null) return false;
+        BlockHitResult hit = resolveBuildHit(mc, screen, ray);
+        if (hit == null) return false;
+        kernel.renderPipeline().lineBrush.start(hit.getBlockPos());
+        return true;
+    }
+
+    /** 每 tick 更新画线悬停位置（起点→当前指针的线段预览）。 */
+    private void updateLineBrushHover(BuilderScreen screen) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        var ray = CursorRaycaster.computeCursorRay(mc, screen);
+        if (ray == null) {
+            kernel.renderPipeline().lineBrush.updateHover(null);
+            return;
+        }
+        BlockHitResult hit = resolveBuildHit(mc, screen, ray);
+        kernel.renderPipeline().lineBrush.updateHover(hit == null ? null : hit.getBlockPos());
+    }
+
+    // ── 单方块模式长按持续放置/破坏 ──────────────────────────────────
+
+    /** 单方块持续放置是否激活：点击模式 + 建造模式 + 建造侧单方块形状 + 已选中方块物品。 */
+    private boolean isSingleBlockPlaceActive(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        if (leftSidebarPanel == null || screen == null || !screen.isClickButtonSelected()) return false;
+        BuildingModule bm = kernel.module(BuildingModule.class);
+        return bm != null && bm.getMode() == BuilderMode.BUILD
+                && leftSidebarPanel.isSingleBlockBuildShapeSelected()
+                && bm.hasSelectedItem();
+    }
+
+    /** 单方块持续破坏是否激活：点击模式 + 建造模式 + 破坏侧单方块形状。 */
+    private boolean isSingleBlockMineActive(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        if (leftSidebarPanel == null || screen == null || !screen.isClickButtonSelected()) return false;
+        BuildingModule bm = kernel.module(BuildingModule.class);
+        return bm != null && bm.getMode() == BuilderMode.BUILD
+                && leftSidebarPanel.isSingleBlockBreakShapeSelected();
+    }
+
+    private static boolean isMouseButtonDown(int button) {
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        return window != 0L && GLFW.glfwGetMouseButton(window, button) == GLFW.GLFW_PRESS;
+    }
+
+    /** 在鼠标指向处放置一次当前选中的方块（含 Ctrl 面偏移）。 */
+    private void placeSelectedAtCursor(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        var ray = CursorRaycaster.computeCursorRay(mc, screen);
+        if (ray == null) return;
+        BlockHitResult hit = resolveBuildHit(mc, screen, ray);
+        if (hit == null) return;
+        BuildingModule bm = kernel.module(BuildingModule.class);
+        if (bm == null) return;
+        bm.placeSelected(hit, isShiftDown(), ray.origin(), ray.direction());
+    }
+
+    /** 在鼠标指向处触发一次单方块挖掘（含 Ctrl 面偏移）。 */
+    private void mineAtCursor(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return;
+        var ray = CursorRaycaster.computeCursorRay(mc, screen);
+        if (ray == null) return;
+        BlockHitResult hit = resolveBuildHit(mc, screen, ray);
+        if (hit == null) return;
+        BuildingModule bm = kernel.module(BuildingModule.class);
+        String toolItemId = bm != null ? bm.getSelectedItemId() : "";
+        int toolSlot = mc.player.getInventory().selected;
+        MiningModule mm = kernel.module(MiningModule.class);
+        if (mm != null) {
+            mm.startMining(hit.getBlockPos(), hit.getDirection().get3DDataValue(),
+                    toolSlot, toolItemId, false, false);
+        }
+    }
+
+    /** 右键松开：沿起点→终点线段批量放置并复位画笔。 */
+    private EventResult finishLinePlace(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        BuildingModule bm = kernel.module(BuildingModule.class);
+        if (bm == null) return CONSUMED;
+        Minecraft mc = Minecraft.getInstance();
+        var lineBrush = kernel.renderPipeline().lineBrush;
+        List<BlockPos> positions = lineBrush.computeLinePositions();
+        lineBrush.reset();
+        if (positions.isEmpty()) return CONSUMED;
+        Vec3 rayOrigin = Vec3.ZERO;
+        Vec3 rayDir = Vec3.ZERO;
+        if (mc.level != null) {
+            var ray = CursorRaycaster.computeCursorRay(mc, screen);
+            if (ray != null) {
+                rayOrigin = ray.origin();
+                rayDir = ray.direction();
+            }
+        }
+        RtsClientPacketGateway.sendLinePlace(positions,
+                (byte) bm.getPlaceRotateSteps(), isShiftDown(), true,
+                bm.getSelectedItemId(), rayOrigin, rayDir);
+        return CONSUMED;
+    }
+
     
     private EventResult runPrimaryActionAt(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
         Minecraft mc = Minecraft.getInstance();
@@ -281,8 +516,8 @@ public final class BuildInteractionHandler {
         var ray = CursorRaycaster.computeCursorRay(mc, screen);
         if (ray == null) return PASS;
 
-        BlockHitResult hit = ray.raycastBlock(mc);
-        if (hit == null || hit.getType() != HitResult.Type.BLOCK) return PASS;
+        BlockHitResult hit = resolveBuildHit(mc, screen, ray);
+        if (hit == null) return PASS;
 
         BuildingModule buildingModule = kernel.module(BuildingModule.class);
         if (buildingModule == null) return PASS;
@@ -460,5 +695,25 @@ public final class BuildInteractionHandler {
         long window = Minecraft.getInstance().getWindow().getWindow();
         return GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS
                 || GLFW.glfwGetKey(window, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+    }
+
+    private static boolean isCtrlDown() {
+        return RtsKeyMappings.isPlaceOffsetDown();
+    }
+
+    /**
+     * 解析鼠标射线命中的方块。点击模式下按住 Ctrl 时，将选中位置偏移到命中面外侧一格
+     * （与框选工具 Ctrl 行为一致），射线命中点调整为偏移方块中心。
+     * 框选模式下不偏移（由 {@link BoxSelector} 自行处理）。
+     */
+    @Nullable
+    private BlockHitResult resolveBuildHit(Minecraft mc, BuilderScreen screen, CursorRay ray) {
+        BlockHitResult hit = ray.raycastBlock(mc);
+        if (hit == null || hit.getType() != HitResult.Type.BLOCK) return null;
+        if (screen.isClickButtonSelected() && isCtrlDown()) {
+            BlockPos shifted = hit.getBlockPos().relative(hit.getDirection());
+            return new BlockHitResult(Vec3.atCenterOf(shifted), hit.getDirection(), shifted, hit.isInside());
+        }
+        return hit;
     }
 }

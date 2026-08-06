@@ -12,6 +12,8 @@
   "key.rtsbuilding.open_gear_menu": "打开设置面板",
   "key.rtsbuilding.toggle_debug_overlay": "切换辅助显示",
   "key.rtsbuilding.toggle_camera_mode": "切换相机模式",
+  "key.rtsbuilding.camera_rotate": "旋转视角（按住拖拽）",
+  "key.rtsbuilding.camera_pan": "移动相机（按住拖拽）",
   "key.rtsbuilding.move_player": "移动玩家到目标位置",
   "key.rtsbuilding.toggle_select_mode": "切换选择模式",
   "key.rtsbuilding.toggle_bind_mode": "切换绑定模式",
@@ -20,6 +22,7 @@
   "key.rtsbuilding.undo": "撤销放置",
 
   "key.rtsbuilding.cycle_mode": "循环切换模式",
+  "key.rtsbuilding.place_offset": "偏移选中位置（命中面外侧一格）",
 
   "button.rtsbuilding.fluid_occlusion": "流体遮挡",
 
@@ -38,6 +41,7 @@
   "screen.rtsbuilding.settings.category.personalization": "个性化设置",
   "screen.rtsbuilding.settings.category.rendering": "渲染设置",
   "screen.rtsbuilding.settings.category.controls": "操作设置",
+  "screen.rtsbuilding.settings.category.keybinds": "按键设置",
   "screen.rtsbuilding.settings.category.personalization.theme": "UI主题：%s",
   "screen.rtsbuilding.settings.theme.light": "浅色",
   "screen.rtsbuilding.settings.theme.dark": "深色",

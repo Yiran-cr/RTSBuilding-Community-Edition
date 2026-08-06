@@ -12,7 +12,7 @@ import com.rtsbuilding.rtsbuilding.client.infrastructure.module.pathfinding.Path
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.remote.RemoteMenuModule;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.storage.StorageModule;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.workflow.WorkflowModule;
-import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
+import com.rtsbuilding.rtsbuilding.client.input.RtsKeybinds;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.util.render.RtsShaders;
@@ -26,7 +26,6 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 
 @EventBusSubscriber(modid = RtsbuildingMod.MODID, value = Dist.CLIENT)
@@ -43,11 +42,6 @@ public final class RtsClientBootstrap {
     @SubscribeEvent
     public static void onRegisterLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
         event.registerLayerDefinition(RtsDroneRenderer.LAYER_LOCATION, rts_drone::createBodyLayer);
-    }
-
-    @SubscribeEvent
-    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-        RtsKeyMappings.register(event);
     }
 
     @SubscribeEvent
@@ -133,6 +127,10 @@ public final class RtsClientBootstrap {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
+            // RTS 按键不再注册到原版"按键绑定"界面，改由 RTS 设置面板内的
+            // "按键设置"折叠条目配置；此处加载自定义绑定并应用到 KeyMapping 对象。
+            RtsKeybinds.load();
+
             // 终端点亮模型属性：RTS 模式开启时（TERMINAL_LIT 组件为 true）物品模型
             // 切换为 rts_terminal_lit（由 rts_terminal.json 的 overrides 引用）。
             ItemProperties.register(

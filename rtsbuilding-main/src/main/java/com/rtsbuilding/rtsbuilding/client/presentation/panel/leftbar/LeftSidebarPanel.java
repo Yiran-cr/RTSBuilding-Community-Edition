@@ -141,6 +141,11 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         return shapeGroup.isSingleBlockDestructionSelected();
     }
 
+    /** 形状按钮组"建造"侧是否选中"线"形状（画笔画线建造）。 */
+    public boolean isLineBuildShapeSelected() {
+        return shapeGroup.isLineConstructionSelected();
+    }
+
 
     
 

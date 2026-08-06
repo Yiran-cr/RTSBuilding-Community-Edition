@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.client.presentation.standalone;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.rtsbuilding.rtsbuilding.client.application.service.ScreenCoordinator;
+import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.input.layer.CameraInputLayer;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
@@ -532,7 +533,7 @@ public class BuilderScreen extends Screen {
                 && mouseY < this.height - downH
                 && !isMouseOverUI(mouseX, mouseY)) {
             var bs = kernel.renderPipeline().boxSelector;
-            bs.updateHoverFromScreen(Minecraft.getInstance(), this, hasControlDown());
+            bs.updateHoverFromScreen(Minecraft.getInstance(), this, RtsKeyMappings.isPlaceOffsetDown());
         }
 
         cursorStyleManager.update(mouseX, mouseY);

@@ -12,6 +12,8 @@
   "key.rtsbuilding.open_gear_menu": "Open Settings",
   "key.rtsbuilding.toggle_debug_overlay": "Toggle Debug Overlay",
   "key.rtsbuilding.toggle_camera_mode": "Toggle Camera Mode",
+  "key.rtsbuilding.camera_rotate": "Rotate Camera (Hold & Drag)",
+  "key.rtsbuilding.camera_pan": "Pan Camera (Hold & Drag)",
   "key.rtsbuilding.move_player": "Move Player to Target",
   "key.rtsbuilding.toggle_select_mode": "Toggle Select Mode",
   "key.rtsbuilding.toggle_bind_mode": "Toggle Bind Mode",
@@ -20,6 +22,7 @@
   "key.rtsbuilding.undo": "Undo Placement",
 
   "key.rtsbuilding.cycle_mode": "Cycle Mode",
+  "key.rtsbuilding.place_offset": "Offset Target (Face-Outside Block)",
 
   "button.rtsbuilding.fluid_occlusion": "Fluid Occlusion",
 
@@ -38,6 +41,7 @@
   "screen.rtsbuilding.settings.category.personalization": "Personalization",
   "screen.rtsbuilding.settings.category.rendering": "Rendering",
   "screen.rtsbuilding.settings.category.controls": "Controls",
+  "screen.rtsbuilding.settings.category.keybinds": "Keybinds",
   "screen.rtsbuilding.settings.category.personalization.theme": "Theme: %s",
   "screen.rtsbuilding.settings.theme.light": "Light",
   "screen.rtsbuilding.settings.theme.dark": "Dark",

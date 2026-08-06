@@ -2,11 +2,13 @@ package com.rtsbuilding.rtsbuilding.client.render.pass;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.rtsbuilding.rtsbuilding.PerformanceConfig;
+import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.background.ScreenBackgroundPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 
 public final class InteractionTargetPass implements RenderPass {
 
@@ -75,7 +77,12 @@ public final class InteractionTargetPass implements RenderPass {
         } else if (hit.hasBlock()) {
             if (hit.blockHit() == null) return;
             isBlock = true;
-            var pos = hit.blockHit().getBlockPos();
+            BlockPos pos = hit.blockHit().getBlockPos();
+            // 点击模式按住 Ctrl：与 BuildInteractionHandler.resolveBuildHit 一致，
+            // 目标选中位置偏移到命中面外侧一格，高亮同步跟随。
+            if (isCtrlDown()) {
+                pos = pos.relative(hit.blockHit().getDirection());
+            }
             double off = LINE_OFFSET;
             tMinX = pos.getX() - off; tMinY = pos.getY() - off; tMinZ = pos.getZ() - off;
             tMaxX = pos.getX() + 1 + off; tMaxY = pos.getY() + 1 + off; tMaxZ = pos.getZ() + 1 + off;
@@ -118,6 +125,10 @@ public final class InteractionTargetPass implements RenderPass {
                     smoothTarget.maxX(), smoothTarget.maxY(), smoothTarget.maxZ(),
                     r, g, b, CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA, distance);
         }
+    }
+
+    private static boolean isCtrlDown() {
+        return RtsKeyMappings.isPlaceOffsetDown();
     }
 
     @Override

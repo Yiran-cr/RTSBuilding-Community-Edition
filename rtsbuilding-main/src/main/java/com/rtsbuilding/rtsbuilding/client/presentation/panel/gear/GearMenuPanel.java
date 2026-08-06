@@ -27,6 +27,7 @@ public final class GearMenuPanel extends RtsPanel {
     private final RenderingSection renderingSection = new RenderingSection();
     private final PersonalizationSection personalizationSection = new PersonalizationSection();
     private final OperationSection operationSection = new OperationSection();
+    private final KeybindSection keybindSection = new KeybindSection();
 
     
     private final ScrollBar scrollBar = new ScrollBar();
@@ -55,7 +56,8 @@ public final class GearMenuPanel extends RtsPanel {
         return CONTENT_TOP_PAD
                 + renderingSection.totalHeight(cw)
                 + personalizationSection.totalHeight(cw)
-                + operationSection.totalHeight(cw);
+                + operationSection.totalHeight(cw)
+                + keybindSection.totalHeight(cw);
     }
 
     
@@ -91,6 +93,8 @@ public final class GearMenuPanel extends RtsPanel {
         personalizationSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
         sectionY += personalizationSection.totalHeight(cw);
         operationSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
+        sectionY += operationSection.totalHeight(cw);
+        keybindSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
 
         
         if (scrollBar.isVisible()) {
@@ -128,7 +132,9 @@ public final class GearMenuPanel extends RtsPanel {
             sectionCY += renderingSection.totalHeight(cw);
             if (personalizationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
             sectionCY += personalizationSection.totalHeight(cw);
-            operationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW);
+            if (operationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
+            sectionCY += operationSection.totalHeight(cw);
+            keybindSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW);
         }
     }
 
@@ -175,6 +181,30 @@ public final class GearMenuPanel extends RtsPanel {
             return true;
         }
         return scrollBar.handleScroll(scrollY);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (keybindSection.isCapturing() && isInsideWindow(mouseX, mouseY)) {
+            keybindSection.captureMouse(button);
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    protected boolean handleWindowKeyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keybindSection.isCapturing()) {
+            keybindSection.captureKey(keyCode, scanCode, modifiers);
+            return true;
+        }
+        return super.handleWindowKeyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    protected void onClose() {
+        keybindSection.cancelCapture();
+        super.onClose();
     }
 
     @Override

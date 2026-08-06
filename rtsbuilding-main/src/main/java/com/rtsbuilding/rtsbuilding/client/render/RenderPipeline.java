@@ -77,6 +77,12 @@ public final class RenderPipeline {
     
     public UltiminePreviewPass ultiminePreviewPass;
 
+    /** 线模式建造画笔状态机。 */
+    public final LineBrushSelector lineBrush = new LineBrushSelector();
+
+    /** 线模式建造预览。 */
+    public LineBrushRenderPass lineBrushRenderPass;
+
     
     
     
@@ -105,6 +111,10 @@ public final class RenderPipeline {
         
         this.ultiminePreviewPass = new UltiminePreviewPass();
         registerPass(this.ultiminePreviewPass);
+
+        var lbrp = new LineBrushRenderPass(lineBrush);
+        this.lineBrushRenderPass = lbrp;
+        registerPass(lbrp);
     }
 
     

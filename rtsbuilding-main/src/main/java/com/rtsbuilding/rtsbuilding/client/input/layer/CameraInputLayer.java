@@ -1,10 +1,13 @@
 package com.rtsbuilding.rtsbuilding.client.input.layer;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.input.InputLayer;
+import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
-import net.minecraft.client.Minecraft;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.gui.screens.Screen;
+import net.neoforged.neoforge.client.settings.KeyModifier;
 
 public final class CameraInputLayer implements InputLayer {
 
@@ -14,7 +17,7 @@ public final class CameraInputLayer implements InputLayer {
     private int pressedButton = -1;
 
     
-    private boolean pressedWithShift;
+    private boolean pressedPan;
 
     
     private double accumulatedDragDistance = 0.0D;
@@ -43,11 +46,17 @@ public final class CameraInputLayer implements InputLayer {
     @Override
     public boolean onMouseClicked(double mouseX, double mouseY, int button) {
         if (!isActive()) return false;
-        
-        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE
-                || button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+
+        if (matchesBind(RtsKeyMappings.CAMERA_ROTATE_KEY, button)) {
             this.pressedButton = button;
-            this.pressedWithShift = isShiftDown();
+            this.pressedPan = false;
+            this.accumulatedDragDistance = 0.0D;
+            this.draggedPastThreshold = false;
+            return true;
+        }
+        if (matchesBind(RtsKeyMappings.CAMERA_PAN_KEY, button)) {
+            this.pressedButton = button;
+            this.pressedPan = true;
             this.accumulatedDragDistance = 0.0D;
             this.draggedPastThreshold = false;
             return true;
@@ -60,7 +69,7 @@ public final class CameraInputLayer implements InputLayer {
         if (this.pressedButton == button) {
             boolean wasDragged = this.draggedPastThreshold;
             this.pressedButton = -1;
-            this.pressedWithShift = false;
+            this.pressedPan = false;
             this.accumulatedDragDistance = 0.0D;
             this.draggedPastThreshold = false;
             
@@ -72,7 +81,7 @@ public final class CameraInputLayer implements InputLayer {
     @Override
     public boolean onMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (!isActive()) return false;
-        
+
         if (button != this.pressedButton) return false;
 
         CameraModule cam = kernel.module(CameraModule.class);
@@ -88,25 +97,12 @@ public final class CameraInputLayer implements InputLayer {
             return true;
         }
 
-        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
-            cam.queueRotateDrag(dragX, dragY);
-            return true;
-        }
-
-        if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && this.pressedWithShift) {
+        if (this.pressedPan) {
             cam.queueDragMove(dragX, dragY);
-            return true;
+        } else {
+            cam.queueRotateDrag(dragX, dragY);
         }
-
-        
         return true;
-    }
-
-    
-    private static boolean isShiftDown() {
-        long window = Minecraft.getInstance().getWindow().getWindow();
-        return GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS
-                || GLFW.glfwGetKey(window, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
     }
 
     @Override
@@ -116,5 +112,28 @@ public final class CameraInputLayer implements InputLayer {
 
         cam.queueScroll(scrollY);
         return true;
+    }
+
+    /**
+     * 判断给定鼠标按钮是否匹配某个相机操作键。
+     * <p>鼠标按钮命中后，无修饰键要求的绑定直接放行（拖拽时允许自然按住修饰键），
+     * 有修饰键要求的绑定（如平移默认 Shift+右键）做严格修饰校验，
+     * 避免与右键点击交互冲突。</p>
+     */
+    private static boolean matchesBind(KeyMapping mapping, int button) {
+        InputConstants.Key bound = mapping.getKey();
+        if (bound.getType() != InputConstants.Type.MOUSE) return false;
+        if (bound.getValue() != button) return false;
+        KeyModifier required = mapping.getKeyModifier();
+        if (required == KeyModifier.NONE) return true;
+        boolean ctrl = Screen.hasControlDown();
+        boolean alt = Screen.hasAltDown();
+        boolean shift = Screen.hasShiftDown();
+        return switch (required) {
+            case SHIFT -> shift && !ctrl && !alt;
+            case CONTROL -> ctrl && !alt && !shift;
+            case ALT -> alt && !ctrl && !shift;
+            default -> false;
+        };
     }
 }

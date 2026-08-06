@@ -46,6 +46,14 @@ public final class MiningModule implements FeatureModule {
         state.renderStage = -1;
     }
 
+    /** 清除活跃挖掘目标（供持续破坏在完成信号丢失时兜底切换下一个目标）。 */
+    public void clearActivePos() {
+        state.activePos = null;
+        state.activeFace = -1;
+        state.renderPos = null;
+        state.renderStage = -1;
+    }
+
     
     
     
@@ -63,6 +71,12 @@ public final class MiningModule implements FeatureModule {
 
     public void applyMineProgress(BlockPos pos, int stage) {
         state.applyMineProgress(pos, stage);
+        // 服务端报告当前目标破坏完成/中止（stage < 0）：清除活跃目标，
+        // 允许长按左键持续破坏机制切换到下一个方块。
+        if (stage < 0 && state.activePos != null && state.activePos.equals(pos)) {
+            state.activePos = null;
+            state.activeFace = -1;
+        }
     }
 
     

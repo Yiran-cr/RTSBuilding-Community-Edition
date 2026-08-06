@@ -227,6 +227,31 @@ public final class RtsPendingPlacementService {
     }
 
     /**
+     * 判断放置作业当前是否因物品不足而无法继续。
+     * <p>主手放置（{@code itemId} 为空）不依赖网络物品，永不视为缺货；
+     * 创造模式永不缺货。用于区分"物品不足挂起"与"位置问题跳过"。</p>
+     */
+    public static boolean isOutOfItems(ServerPlayer player, RtsStorageSession session,
+                                       RtsPlacementBatch.PlaceBatchJob job) {
+        String itemId = job.itemId();
+        if (itemId == null || itemId.isBlank()) {
+            return false;
+        }
+        if (player != null && player.isCreative()) {
+            return false;
+        }
+        ItemStack template = resolveTemplate(job.itemPrototype(), itemId);
+        if (template.isEmpty()) {
+            return true;
+        }
+        long available = RtsServer.get().transfer().countLinkedItemsMatching(player,
+                stack -> ItemStack.isSameItemSameComponents(stack, template));
+        available = RtsCountUtil.saturatedAdd(available,
+                RtsProgressRefresher.countItemsInPlayerInventory(player, template));
+        return available < 1;
+    }
+
+    /**
      * Checks if a pending job currently has enough items to continue execution.
      */
     private static boolean canResumeJob(ServerPlayer player, RtsStorageSession session,
