@@ -54,6 +54,12 @@ public record S2CRtsStoragePagePayload(
     public static final byte RECENT_FLUID_USED = 4;
     public static final byte RECENT_FLUID_CRAFTED = 5;
 
+    /**
+     * “最近使用”条目的最大数量，服务端会话与客户端展示共用此上限，
+     * 避免两端数量不一致（服务端发 24、客户端截 16 的边界问题）。
+     */
+    public static final int RECENT_ENTRY_LIMIT = 24;
+
     public static final Type<S2CRtsStoragePagePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "s2c_rts_storage_page"));
 
@@ -65,20 +71,17 @@ public record S2CRtsStoragePagePayload(
                 for (Long packedPos : payload.linkedPositions()) {
                     buf.writeLong(packedPos == null ? 0L : packedPos.longValue());
                 }
-                int linkedDetailSize = Math.min(
-                        payload.linkedPositions().size(),
-                        Math.min(payload.linkedNames().size(),
-                                Math.min(payload.linkedModes().size(),
-                                        Math.min(payload.linkedPriorities().size(),
-                                                Math.min(payload.linkedIconItemIds().size(),
-                                                        payload.linkedWorldAvailable().size())))));
-                buf.writeVarInt(linkedDetailSize);
-                for (int i = 0; i < linkedDetailSize; i++) {
-                    buf.writeUtf(payload.linkedNames().get(i) == null ? "" : payload.linkedNames().get(i), 128);
-                    buf.writeByte(payload.linkedModes().get(i) == null ? 0 : payload.linkedModes().get(i));
-                    buf.writeVarInt(payload.linkedPriorities().get(i) == null ? 0 : payload.linkedPriorities().get(i));
-                    buf.writeUtf(payload.linkedIconItemIds().get(i) == null ? "" : payload.linkedIconItemIds().get(i), 128);
-                    buf.writeBoolean(Boolean.TRUE.equals(payload.linkedWorldAvailable().get(i)));
+                // 六个 linked 详情列表必须等长写入（与 linkedPositions 长度一致），
+                // 缺失/超长统一用默认值补齐，避免编码端 Math.min 截断导致解码后
+                // 各列表长度不齐、客户端静默丢行。
+                int linkedSize = payload.linkedPositions().size();
+                buf.writeVarInt(linkedSize);
+                for (int i = 0; i < linkedSize; i++) {
+                    buf.writeUtf(listGet(payload.linkedNames(), i, ""), 128);
+                    buf.writeByte(listGet(payload.linkedModes(), i, (byte) 0));
+                    buf.writeVarInt(listGet(payload.linkedPriorities(), i, 0));
+                    buf.writeUtf(listGet(payload.linkedIconItemIds(), i, ""), 128);
+                    buf.writeBoolean(listGet(payload.linkedWorldAvailable(), i, false));
                 }
                 buf.writeVarInt(payload.page());
                 buf.writeVarInt(payload.totalPages());
@@ -291,5 +294,13 @@ public record S2CRtsStoragePagePayload(
     @Override
     public @NotNull Type<? extends CustomPacketPayload> type() {
         return TYPE;
+    }
+
+    private static <T> T listGet(List<T> list, int index, T defaultValue) {
+        if (list == null || index < 0 || index >= list.size()) {
+            return defaultValue;
+        }
+        T value = list.get(index);
+        return value == null ? defaultValue : value;
     }
 }

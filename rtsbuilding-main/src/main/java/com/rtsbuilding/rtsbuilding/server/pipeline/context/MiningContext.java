@@ -260,18 +260,6 @@ public class MiningContext extends PipelineContext {
             return this;
         }
 
-        /** 区域操作的形状类型。 */
-        public Builder shapeType(byte shapeType) {
-            args.put(UltimineExecutePipe.ARG_SHAPE_TYPE.name(), shapeType);
-            return this;
-        }
-
-        /** 区域操作的填充类型。 */
-        public Builder fillType(byte fillType) {
-            args.put(UltimineExecutePipe.ARG_FILL_TYPE.name(), fillType);
-            return this;
-        }
-
         /** AREA_DESTROY 的位置列表。 */
         public Builder positions(List<BlockPos> positions) {
             args.put(UltimineExecutePipe.ARG_POSITIONS.name(), positions);

@@ -141,9 +141,7 @@ public final class RtsPipelineRegistration {
     /**
      * AREA_MINE —— 3D 体积区域挖掘（Tick 驱动的生命周期）。
      *
-     * <p>结构与 ULTIMINE 相同，但使用区域特定的目标扫描。
-     * {@link RtsUltimineProcessor}
-     * 使用 {@code AreaOperationExecutor} 进行目标扫描。</p>
+     * <p>结构与 ULTIMINE 相同，但使用区域特定的目标扫描（固定立方体全框）。</p>
      */
     private static void registerAreaMine() {
         PipelineRegistry.miningPipeline(RtsWorkflowType.AREA_MINE)

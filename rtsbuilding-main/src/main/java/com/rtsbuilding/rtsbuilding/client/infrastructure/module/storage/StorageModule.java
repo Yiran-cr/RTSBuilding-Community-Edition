@@ -66,14 +66,6 @@ public final class StorageModule implements FeatureModule {
         state.applyStorageDirty(payload);
     }
 
-    
-    
-    
-
-    public void requestPage(int page) {
-        state.requestStoragePage(page);
-    }
-
     public void setSearch(String search) {
         state.setStorageSearch(search);
     }

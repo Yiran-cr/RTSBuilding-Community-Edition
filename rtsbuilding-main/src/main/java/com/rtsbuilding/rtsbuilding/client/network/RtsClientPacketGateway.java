@@ -6,14 +6,19 @@ import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
 import com.rtsbuilding.rtsbuilding.network.message.C2SAction;
 import com.rtsbuilding.rtsbuilding.network.message.C2SCameraPosePayload;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class RtsClientPacketGateway {
@@ -48,6 +53,16 @@ public final class RtsClientPacketGateway {
     public static void sendUnlinkStorage(BlockPos pos) {
         var t = tag(); t.putLong("pos", pos.asLong());
         PacketDistributor.sendToServer(act(ActionType.UNLINK_STORAGE, t));
+    }
+
+    /**
+     * 通知服务端从会话“最近使用”记录中删除一条条目（按注册表 ID）。
+     * 服务端真正移除后，条目不会在重进/重启后复活。
+     */
+    public static void sendRemoveRecentEntry(String itemId) {
+        if (itemId == null || itemId.isBlank()) return;
+        var t = tag(); t.putString("itemId", itemId);
+        PacketDistributor.sendToServer(act(ActionType.REMOVE_RECENT_ENTRY, t));
     }
 
     public static void sendRequestStoragePage(int page, String search, String category,
@@ -237,6 +252,86 @@ public final class RtsClientPacketGateway {
         if (menuSlot < 0) return;
         var t = tag(); t.putInt("slot", menuSlot);
         PacketDistributor.sendToServer(act(ActionType.IMPORT_MENU_SLOT, t));
+    }
+
+    // ── Box-select area operations (build mode) ──
+
+    /**
+     * 框选模式批量破坏：收集框选区域 [min, max) 内的可破坏方块位置，
+     * 交给服务端 {@code AREA_DESTROY} 队列按 tick 节流破坏。
+     */
+    public static void sendAreaBoxDestroy(BlockPos min, BlockPos max, int toolSlot,
+                                          String toolItemId, boolean toolProtectionEnabled) {
+        if (min == null || max == null) return;
+        Level level = Minecraft.getInstance().level;
+        if (level == null) return;
+        List<Long> positions = collectAreaPositions(level, min, max, false);
+        if (positions.isEmpty()) return;
+        var t = tag();
+        var list = new ListTag();
+        for (Long l : positions) list.add(net.minecraft.nbt.LongTag.valueOf(l));
+        t.put("positions", list);
+        t.putByte("toolSlot", (byte) Mth.clamp(toolSlot, 0, 8));
+        t.putString("toolItemId", toolItemId == null ? "" : toolItemId);
+        t.putBoolean("toolProtectionEnabled", toolProtectionEnabled);
+        PacketDistributor.sendToServer(act(ActionType.AREA_DESTROY, t));
+    }
+
+    /**
+     * 框选模式批量放置：收集框选区域 [min, max) 内的可替换（空气）位置，
+     * 交给服务端 {@code PLACE_BATCH} 队列按 tick 节流放置当前选中方块。
+     */
+    public static void sendAreaBoxPlace(BlockPos min, BlockPos max, byte rotateSteps,
+                                        boolean forcePlace, boolean skipIfOccupied, String itemId,
+                                        Vec3 rayOrigin, Vec3 rayDir) {
+        if (min == null || max == null || itemId == null || itemId.isBlank()) return;
+        Level level = Minecraft.getInstance().level;
+        if (level == null) return;
+        List<Long> positions = collectAreaPositions(level, min, max, true);
+        if (positions.isEmpty()) return;
+        var t = tag();
+        var list = new ListTag();
+        for (Long l : positions) list.add(net.minecraft.nbt.LongTag.valueOf(l));
+        t.put("positions", list);
+        t.putByte("face", (byte) Direction.UP.get3DDataValue());
+        t.putByte("rotateSteps", rotateSteps);
+        t.putBoolean("forcePlace", forcePlace);
+        t.putBoolean("skipIfOccupied", skipIfOccupied);
+        t.putString("itemId", itemId);
+        t.putDouble("hitOffsetX", 0.5);
+        t.putDouble("hitOffsetY", 0.5);
+        t.putDouble("hitOffsetZ", 0.5);
+        t.putDouble("rayOriginX", rayOrigin.x); t.putDouble("rayOriginY", rayOrigin.y); t.putDouble("rayOriginZ", rayOrigin.z);
+        t.putDouble("rayDirX", rayDir.x); t.putDouble("rayDirY", rayDir.y); t.putDouble("rayDirZ", rayDir.z);
+        PacketDistributor.sendToServer(act(ActionType.PLACE_BATCH, t));
+    }
+
+    /**
+     * 遍历框选区域 [min, max) 收集目标位置，最多 {@link NetworkConstants#MAX_POSITIONS} 个。
+     *
+     * @param place {@code true} 收集可替换位置（批量放置），{@code false} 收集可破坏方块位置（批量破坏）
+     */
+    private static List<Long> collectAreaPositions(Level level, BlockPos min, BlockPos max, boolean place) {
+        List<Long> positions = new ArrayList<>();
+        for (int y = min.getY(); y < max.getY(); y++) {
+            for (int z = min.getZ(); z < max.getZ(); z++) {
+                for (int x = min.getX(); x < max.getX(); x++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    BlockState state = level.getBlockState(pos);
+                    boolean match;
+                    if (place) {
+                        match = state.isAir() || state.canBeReplaced();
+                    } else {
+                        match = !state.isAir() && state.getDestroySpeed(level, pos) >= 0.0F;
+                    }
+                    if (match) {
+                        positions.add(pos.asLong());
+                        if (positions.size() >= NetworkConstants.MAX_POSITIONS) return positions;
+                    }
+                }
+            }
+        }
+        return positions;
     }
 
     // ── Funnel (item pickup) ──

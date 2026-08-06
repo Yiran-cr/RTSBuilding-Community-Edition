@@ -22,6 +22,11 @@ public final class BoxSelector {
     private BlockPos pointB;
     private BlockPos pointC;
 
+    /** 最近一次右键点击是否改变了框选状态（选点推进或重置）。
+     *  <p>用于区分“正在框选/重置”与“框选已完成的独立确认点击”：
+     *  完成框选的那次右键（第三次选点）也会改变状态，松开时不得被当作批量放置确认。</p> */
+    private boolean lastRightClickChangedPhase;
+
     
     private BlockPos hoverPos;
 
@@ -90,18 +95,32 @@ public final class BoxSelector {
 
     
     public void handleRightClickWithHover() {
-        if (this.hoverPos == null) return;
+        if (this.hoverPos == null) {
+            lastRightClickChangedPhase = false;
+            return;
+        }
 
         if (phase == Phase.COMPLETE) {
             
             if (isOutsideSelection(this.hoverPos)) {
+                lastRightClickChangedPhase = true;
                 reset();
+            } else {
+                // 框内点击：不改变框选状态，可作为批量操作确认
+                lastRightClickChangedPhase = false;
             }
             
             return;
         }
 
+        // 选点推进（IDLE→AWAITING_B→AWAITING_C→COMPLETE）都会改变框选状态
+        lastRightClickChangedPhase = true;
         handleRightClick(this.hoverPos);
+    }
+
+    /** 最近一次右键点击是否改变了框选状态（选点/重置）。 */
+    public boolean lastRightClickChangedPhase() {
+        return lastRightClickChangedPhase;
     }
 
     

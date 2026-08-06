@@ -2,7 +2,6 @@ package com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid;
 
 import com.rtsbuilding.rtsbuilding.client.domain.state.FluidEntry;
 import com.rtsbuilding.rtsbuilding.client.domain.state.RecentEntry;
-import com.rtsbuilding.rtsbuilding.client.domain.state.StorageEntry;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.building.BuildingModule;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.storage.StorageModule;
@@ -285,9 +284,8 @@ public final class GridInputHandler {
             if (!shiftEntry.isFluid() && !shiftEntry.stack().isEmpty()) {
                 // RTS 模式下禁止对“开启该模式的终端”进行拿去/快速转移
                 if (CameraModule.isLockedTerminal(shiftEntry.stack())) return true;
-                // 背包来源条目 → 存入绑定存储；存储条目 → 转入背包/打开的容器
-                boolean fromInventory = shiftEntry.originalEntry() instanceof StorageEntry se && se.isPlayerInventory();
-                RtsClientPacketGateway.sendLinkedQuickMove(shiftEntry.stack().copyWithCount(1), fromInventory);
+                // 合并条目：从网络（存储优先、背包兜底）提取转入背包/打开的容器
+                RtsClientPacketGateway.sendLinkedQuickMove(shiftEntry.stack().copyWithCount(1));
                 return true;
             }
         }
@@ -305,16 +303,18 @@ public final class GridInputHandler {
                     // 拿起：提取一组到 carried 立即跟随鼠标，并同步启用为建造选材（拿起就能用）
                     ItemStack prototype = clickedEntry.stack().copyWithCount(1);
                     int amount = Math.min(64, Math.max(1, (int) clickedEntry.count()));
-                    // 背包来源条目 → 只从背包提取（所见即所得）；存储条目 → 存储优先提取
-                    boolean fromInventory = clickedEntry.originalEntry() instanceof StorageEntry se && se.isPlayerInventory();
-                    RtsClientPacketGateway.sendLinkedPickup(prototype, amount, fromInventory);
-                    menu.setCarried(prototype.copyWithCount(amount)); // 乐观跟随，服务端权威经 S2C 同步
+                    // 合并条目：从网络（存储优先、背包兜底）提取，与合并显示的网络总量一致
+                    RtsClientPacketGateway.sendLinkedPickup(prototype, amount);
+                    // 不再乐观 setCarried：服务端实际提取量经 S2CRtsCarriedSyncPayload 权威回写，
+                    // 避免“乐观 64 / 实际不足”导致 carried 数量与实际不一致（C2 修复）
                     state.selectedSlotIndex = idx;
                     enableItem(clickedEntry.stack());
                 } else {
                     // 携带中点击条目：全部放回网络（原版“点击放回”语义）
                     String itemId = BuiltInRegistries.ITEM.getKey(carried.getItem()).toString();
-                    RtsClientPacketGateway.sendReturnCarried(itemId, 64);
+                    // 传实际携带数量：服务端按 min(amount, carried.getCount()) 存回，
+                    // 大堆叠（>64）时也能全部存回，避免只存回 64（B1 边界修复）
+                    RtsClientPacketGateway.sendReturnCarried(itemId, carried.getCount());
                     menu.setCarried(ItemStack.EMPTY);
                     // 放回的是当前启用选材 → 取消启用（启用只在“拿起”期间有效，放回即失效）
                     if (ItemStack.isSameItemSameComponents(carried, state.currentSelectedItem)) {
@@ -487,8 +487,9 @@ public final class GridInputHandler {
         if (menu == null || menu.getCarried().isEmpty()) return false;
         ItemStack carried = menu.getCarried();
         String itemId = BuiltInRegistries.ITEM.getKey(carried.getItem()).toString();
-        // amount=64：服务端取 min(amount, carried.getCount())，即全部存入；剩余由 S2C 同步回来
-        RtsClientPacketGateway.sendReturnCarried(itemId, 64);
+        // 传实际携带数量：服务端按 min(amount, carried.getCount()) 存回，
+        // 大堆叠（>64）时也能全部存回（B1 边界修复）
+        RtsClientPacketGateway.sendReturnCarried(itemId, carried.getCount());
         menu.setCarried(ItemStack.EMPTY); // 乐观清空，服务端权威状态通过 S2CRtsCarriedSyncPayload 同步
         // 放回的是当前启用选材 → 取消启用（启用只在“拿起”期间有效，放回即失效）
         if (ItemStack.isSameItemSameComponents(carried, state.currentSelectedItem)) {
@@ -667,7 +668,8 @@ public final class GridInputHandler {
             cancelSelection();
         }
 
-        
+        // 服务端权威删除：会话 recentEntries 真正移除，条目重进/重启后不再复活（C3 修复）
+        RtsClientPacketGateway.sendRemoveRecentEntry(removedId);
         sm.removeRecentEntry(removedId);
         return true;
     }

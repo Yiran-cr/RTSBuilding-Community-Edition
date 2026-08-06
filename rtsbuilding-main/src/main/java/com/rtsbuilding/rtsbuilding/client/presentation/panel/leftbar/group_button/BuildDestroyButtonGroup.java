@@ -14,7 +14,8 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * 左面板建造/破坏按钮组：第一个为建造（construction.png），第二个为破坏（destruction.png）。
- * 互斥单选，默认选中建造。背景沿用左面板按钮组的矢量绘制（{@code SdfRenderer.drawButtonBg}），
+ * 互斥单选，默认选中建造。选中的按钮仅表示“当前重点模式”（用于形状按钮组的模式切换），
+ * 放置与破坏两种功能始终同时可用。背景沿用左面板按钮组的矢量绘制（{@code SdfRenderer.drawButtonBg}），
  * 图标贴图与其他按钮一致（1024x512 水平主题对）。
  */
 public final class BuildDestroyButtonGroup extends AbstractButtonGroup {

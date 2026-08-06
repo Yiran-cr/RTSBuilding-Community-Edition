@@ -31,7 +31,9 @@ public final class ServerActionHandler {
 
     public static void handle(C2SAction payload, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            if (!(ctx.player() instanceof ServerPlayer p)) return;
+            // C2SAction.decode 在 ActionType ordinal 越界时返回 null（见 C2SAction#decode），
+            // 这里必须在任何字段访问前判空，防止恶意包触发 NPE。
+            if (payload == null || !(ctx.player() instanceof ServerPlayer p)) return;
             try { dispatch(payload, p); }
             catch (Exception e) { LOG.error("Error handling {} from {}: {}", payload.actionType(), p.getName().getString(), e.getMessage()); }
         });
@@ -50,6 +52,7 @@ public final class ServerActionHandler {
                 boolean enable = t.getBoolean("startAtPlayerHead");
                 String terminalUuid = null;
                 if (enable) {
+                    ItemStack terminal = ItemStack.EMPTY;
                     // Turn-on may consume terminal energy when the rtsbuilding_technologized
                     // addon is installed; without it the terminal is durability-free.
                     RtsTerminalEnergy.Provider energy = RtsTerminalEnergy.get();
@@ -62,11 +65,24 @@ public final class ServerActionHandler {
                                 return;
                             }
                         }
-                        // 记录“开启该模式的那把终端”，RTS 模式下禁止对它拿去/启用
-                        if (!stack.has(RtsItems.TERMINAL_UUID.get())) {
-                            stack.set(RtsItems.TERMINAL_UUID.get(), java.util.UUID.randomUUID().toString());
+                        terminal = stack;
+                    } else {
+                        ItemStack stack = p.getMainHandItem();
+                        if (!stack.is(RtsItems.RTS_TERMINAL.get())) {
+                            stack = p.getOffhandItem();
                         }
-                        terminalUuid = stack.get(RtsItems.TERMINAL_UUID.get());
+                        if (stack.is(RtsItems.RTS_TERMINAL.get())) {
+                            terminal = stack;
+                        }
+                    }
+                    if (!terminal.isEmpty()) {
+                        // 记录“开启该模式的那把终端”，RTS 模式下禁止对它拿去/启用
+                        if (!terminal.has(RtsItems.TERMINAL_UUID.get())) {
+                            terminal.set(RtsItems.TERMINAL_UUID.get(), java.util.UUID.randomUUID().toString());
+                        }
+                        terminalUuid = terminal.get(RtsItems.TERMINAL_UUID.get());
+                        // 点亮终端：模型切换为 rts_terminal_lit，直到关闭 RTS 模式
+                        terminal.set(RtsItems.TERMINAL_LIT.get(), true);
                     }
                 }
                 RtsCameraManager.toggle(p, enable, terminalUuid);
@@ -88,6 +104,19 @@ public final class ServerActionHandler {
                 Direction face = safeFace(t);
                 RtsServer.get().placement().placeSelected(p, BlockPos.of(t.getLong("pos")), face, t.getDouble("hitX"), t.getDouble("hitY"), t.getDouble("hitZ"), t.getByte("rotateSteps"), t.getBoolean("forcePlace"), t.getBoolean("skipIfOccupied"), t.getString("itemId"), net.minecraft.world.item.ItemStack.EMPTY, t.getDouble("rayOriginX"), t.getDouble("rayOriginY"), t.getDouble("rayOriginZ"), t.getDouble("rayDirX"), t.getDouble("rayDirY"), t.getDouble("rayDirZ"), t.getBoolean("quickBuild"), false);
             }
+            case PLACE_BATCH -> {
+                if (!isBuildMode(p)) return;
+                var list = t.getList("positions", net.minecraft.nbt.Tag.TAG_LONG);
+                var positions = new ArrayList<BlockPos>();
+                for (int i = 0; i < list.size(); i++) positions.add(BlockPos.of(((net.minecraft.nbt.LongTag) list.get(i)).getAsLong()));
+                Direction face = safeFace(t);
+                RtsServer.get().placement().enqueuePlaceBatch(p, positions, face,
+                        t.getDouble("hitOffsetX"), t.getDouble("hitOffsetY"), t.getDouble("hitOffsetZ"),
+                        t.getByte("rotateSteps"), t.getBoolean("forcePlace"), t.getBoolean("skipIfOccupied"),
+                        t.getString("itemId"), net.minecraft.world.item.ItemStack.EMPTY,
+                        t.getDouble("rayOriginX"), t.getDouble("rayOriginY"), t.getDouble("rayOriginZ"),
+                        t.getDouble("rayDirX"), t.getDouble("rayDirY"), t.getDouble("rayDirZ"));
+            }
             case PLACE_FLUID -> {
                 if (!isBuildMode(p)) return;
                 Direction face = safeFace(t);
@@ -108,7 +137,7 @@ public final class ServerActionHandler {
             }
             case AREA_MINE -> {
                 if (!isBuildMode(p)) return;
-                RtsServer.get().mining().areaMine(p, t.getInt("minX"), t.getInt("maxX"), t.getInt("minY"), t.getInt("maxY"), t.getInt("minZ"), t.getInt("maxZ"), t.getByte("toolSlot"), t.getString("toolItemId"), net.minecraft.world.item.ItemStack.EMPTY, t.getByte("shapeType"), t.getByte("fillType"), t.getBoolean("toolProtectionEnabled"));
+                RtsServer.get().mining().areaMine(p, t.getInt("minX"), t.getInt("maxX"), t.getInt("minY"), t.getInt("maxY"), t.getInt("minZ"), t.getInt("maxZ"), t.getByte("toolSlot"), t.getString("toolItemId"), net.minecraft.world.item.ItemStack.EMPTY, t.getBoolean("toolProtectionEnabled"));
             }
             case AREA_DESTROY -> {
                 if (!isBuildMode(p)) return;
@@ -129,6 +158,8 @@ public final class ServerActionHandler {
             }
             case QUICK_DROP -> RtsServer.get().transfer().quickDropLinkedItem(p, t.getString("itemId"), (byte) t.getInt("amount"), t.getDouble("dropX"), t.getDouble("dropY"), t.getDouble("dropZ"));
             case LINKED_PICKUP -> {
+                // RTS 模式门禁：转移操作属于 RTS 存储浏览器交互，与 QUICK_DROP 的校验保持一致。
+                if (!RtsCameraManager.isActive(p)) return;
                 // Pick linked-storage items into the open container menu carried slot.
                 var prototype = net.minecraft.world.item.ItemStack.parseOptional(p.registryAccess(), t.getCompound("prototype"));
                 if (prototype.isEmpty()) return;
@@ -137,19 +168,29 @@ public final class ServerActionHandler {
                 PacketDistributor.sendToPlayer(p, new S2CRtsCarriedSyncPayload(p.containerMenu.getCarried()));
             }
             case RETURN_CARRIED -> {
+                // RTS 模式门禁：转移操作属于 RTS 存储浏览器交互，与 QUICK_DROP 的校验保持一致。
+                if (!RtsCameraManager.isActive(p)) return;
                 // Return the carried stack (or part of it) back to the linked storage.
                 RtsServer.get().transfer().returnCarriedToLinked(p, t.getString("itemId"), t.getInt("amount"));
                 PacketDistributor.sendToPlayer(p, new S2CRtsCarriedSyncPayload(p.containerMenu.getCarried()));
             }
             case LINKED_QUICK_MOVE -> {
+                // RTS 模式门禁：转移操作属于 RTS 存储浏览器交互，与 QUICK_DROP 的校验保持一致。
+                if (!RtsCameraManager.isActive(p)) return;
                 // Shift-style quick move from linked storage straight into the open menu.
                 var quickPrototype = net.minecraft.world.item.ItemStack.parseOptional(p.registryAccess(), t.getCompound("prototype"));
                 if (quickPrototype.isEmpty()) return;
                 RtsServer.get().transfer().quickMoveLinkedItem(p, quickPrototype, t.getBoolean("fromInventory"));
             }
             case IMPORT_MENU_SLOT -> {
+                // RTS 模式门禁：转移操作属于 RTS 存储浏览器交互，与 QUICK_DROP 的校验保持一致。
+                if (!RtsCameraManager.isActive(p)) return;
                 // Shift-click a slot in the open container menu: import that slot's item into linked storage.
                 RtsServer.get().transfer().importMenuSlotToLinked(p, t.getInt("slot"));
+            }
+            case REMOVE_RECENT_ENTRY -> {
+                // 客户端删除“最近使用”条目：仅影响会话内 UI 记忆，不涉及物品操作，无需模式门禁。
+                RtsServer.get().page().removeRecentItem(p, t.getString("itemId"));
             }
             case UNDO -> { if (RtsCameraManager.isActive(p) && isBuildMode(p)) ServerHistoryManager.executeUndo(p); }
             case PAUSE_WORKFLOW -> {

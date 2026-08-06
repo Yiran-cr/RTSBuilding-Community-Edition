@@ -115,6 +115,7 @@ public final class BuildingModule implements FeatureModule {
     public String getSelectedFluidId() { return state.selectedFluidId; }
     public ItemStack getSelectedFluidPreview() { return state.selectedFluidPreview; }
     public int getPlaceRotateDegrees() { return state.placeRotateSteps * 90; }
+    public int getPlaceRotateSteps() { return state.placeRotateSteps; }
     public BuilderMode getMode() { return state.currentMode; }
     public void setMode(BuilderMode mode) {
         state.currentMode = mode;

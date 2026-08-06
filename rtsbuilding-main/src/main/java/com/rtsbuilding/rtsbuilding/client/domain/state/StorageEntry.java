@@ -15,7 +15,11 @@ public record StorageEntry(
     
     public static final byte MODE_EXTRACT_ONLY = 1;
 
-    
+    /**
+     * @deprecated 玩家背包与存储条目已在服务端合并显示（合并条目数量加总），
+     * 页面载荷中不再下发独立的背包条目；保留常量与判断方法仅作兼容。
+     */
+    @Deprecated
     public static final byte MODE_PLAYER_INVENTORY = 2;
 
     

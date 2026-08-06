@@ -4,9 +4,6 @@ import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 import com.rtsbuilding.rtsbuilding.server.storage.model.RecentEntry;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import com.rtsbuilding.rtsbuilding.util.RtsCountUtil;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
 
 /**
  * Maintains the player's recent item/fluid history for the RTS storage UI.
@@ -23,24 +20,10 @@ import net.minecraft.world.item.ItemStack;
  * and history is trimmed to the storage UI limit.
  */
 public final class RtsStorageRecentEntries {
-    public static final int RECENT_ENTRY_LIMIT = 24;
+    /** 与 S2C 页面向客户端广播的最近条目上限保持一致（双端共用同一常量）。 */
+    public static final int RECENT_ENTRY_LIMIT = S2CRtsStoragePagePayload.RECENT_ENTRY_LIMIT;
 
     private RtsStorageRecentEntries() {
-    }
-
-    /**
-     * Records an item by resolving its registry key. If the key cannot be resolved,
-     * the item is skipped; display names are never used as they change with language and resource packs.
-     */
-    static void recordRecentItem(RtsStorageSession session, ItemStack stack, byte kind, long amount) {
-        if (stack == null || stack.isEmpty()) {
-            return;
-        }
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        if (id == null) {
-            return;
-        }
-        recordRecentItem(session, id.toString(), kind, amount);
     }
 
     /**
@@ -65,6 +48,25 @@ public final class RtsStorageRecentEntries {
             return;
         }
         pushRecentEntry(session, new RecentEntry(fluidId, amount, Math.max(0L, capacity), kind));
+    }
+
+    /**
+     * Removes a recent entry from the session's history by registry ID (item or fluid).
+     * Called when the client deletes a "recently used" row, so the entry does not
+     * reappear after a relog or restart.
+     *
+     * @return {@code true} if an entry was removed
+     */
+    public static boolean removeRecentEntry(RtsStorageSession session, String itemId) {
+        if (session == null || itemId == null || itemId.isBlank()) {
+            return false;
+        }
+        var recentEntries = session.uiMemory.getRecentEntries();
+        boolean removed = recentEntries.removeIf(existing -> existing != null && itemId.equals(existing.id()));
+        if (removed) {
+            session.uiMemory.markRecentModified();
+        }
+        return removed;
     }
 
     /**
@@ -104,6 +106,7 @@ public final class RtsStorageRecentEntries {
         while (recentEntries.size() > RECENT_ENTRY_LIMIT) {
             recentEntries.removeLast();
         }
+        session.uiMemory.markRecentModified();
     }
 
     private static boolean sameRecentKey(RecentEntry a, RecentEntry b) {

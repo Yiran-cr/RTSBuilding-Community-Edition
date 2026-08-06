@@ -30,6 +30,11 @@ public final class RtsUiMemory {
     private final ItemStack[] quickSlotPreviews;
     private final GuiBinding[] guiBindings;
 
+    /** 最近条目修改计数（运行时自增），用于 requestPage 判定是否需要写盘。 */
+    private int recentModCount;
+    /** 上次成功写入 NBT 时的最近条目修改计数。 */
+    private int savedRecentModCount;
+
     public RtsUiMemory() {
         this.quickSlotItemIds = new String[RtsStorageBindings.QUICK_SLOT_COUNT];
         Arrays.fill(this.quickSlotItemIds, "");
@@ -46,16 +51,26 @@ public final class RtsUiMemory {
         return recentEntries;
     }
 
-    public void addRecentEntryFirst(RecentEntry entry) {
-        recentEntries.addFirst(entry);
-    }
-
     public void addRecentEntryLast(RecentEntry entry) {
         recentEntries.addLast(entry);
     }
 
-    public void clearRecentEntries() {
-        recentEntries.clear();
+    /** 标记最近条目被运行时修改（push/remove），requestPage 据此决定是否写盘。 */
+    public void markRecentModified() {
+        this.recentModCount++;
+    }
+
+    public int getRecentModCount() {
+        return this.recentModCount;
+    }
+
+    /** 记录最近条目已随本次写盘持久化。 */
+    public void markRecentSaved() {
+        this.savedRecentModCount = this.recentModCount;
+    }
+
+    public int getSavedRecentModCount() {
+        return this.savedRecentModCount;
     }
 
     // ======================================================================

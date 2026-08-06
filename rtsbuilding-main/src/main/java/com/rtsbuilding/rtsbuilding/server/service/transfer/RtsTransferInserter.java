@@ -44,7 +44,6 @@ import java.util.List;
  * <p><b>Refund/move helpers:</b>
  * <ul>
  *   <li>{@link #refundToLinked(List, ServerPlayer, ItemStack)} — Refunds to linked storage (with fallback)</li>
- *   <li>{@link #refundItem(IItemHandler, ServerPlayer, ItemStack)} — Refunds to a single handler</li>
  *   <li>{@link #moveToPlayerInventoryOnly(ServerPlayer, ItemStack)} — Moves only to player inventory</li>
  *   <li>{@link #moveLinkedStackIntoOpenMenu(ServerPlayer, ItemStack)} —
  *       Moves item into currently open menu slots (two passes: first fills existing stacks, then empty slots)</li>
@@ -126,39 +125,29 @@ public final class RtsTransferInserter {
 
     public static OverflowOutcome storeToLinkedWithFallback(
             List<IItemHandler> handlers, ServerPlayer player, ItemStack stack) {
-        ItemStack remain = stack.copy();
-        for (IItemHandler handler : handlers) {
-            if (remain.isEmpty()) {
-                break;
-            }
-            remain = insertToHandler(handler, remain);
-        }
-        int movedToInventory = 0;
-        if (!remain.isEmpty()) {
-            ItemStack invStack = remain.copy();
-            int before = invStack.getCount();
-            player.getInventory().add(invStack);
-            movedToInventory = before - invStack.getCount();
-            remain = invStack;
-        }
-        int dropped = 0;
-        if (!remain.isEmpty()) {
-            dropped = remain.getCount();
-            player.drop(remain, false);
-        }
-        // Refresh cache so subsequent page builds see the updated state immediately
-        refreshCache(player);
-        return new OverflowOutcome(movedToInventory, dropped);
+        return storeToLinkedWithFallback(handlers, player, stack, false);
     }
 
     public static OverflowOutcome storeToLinkedWithFallbackPreferExisting(
             List<IItemHandler> handlers, ServerPlayer player, ItemStack stack) {
+        return storeToLinkedWithFallback(handlers, player, stack, true);
+    }
+
+    /**
+     * 存储到链接存储，溢出先转入玩家背包、再掉落；仅插入策略不同，核心逻辑合并（R2 修复）。
+     *
+     * @param preferExisting true 时每个 handler 优先合并进已有同类堆叠，false 时任意槽插入
+     */
+    private static OverflowOutcome storeToLinkedWithFallback(
+            List<IItemHandler> handlers, ServerPlayer player, ItemStack stack, boolean preferExisting) {
         ItemStack remain = stack.copy();
         for (IItemHandler handler : handlers) {
             if (remain.isEmpty()) {
                 break;
             }
-            remain = insertToHandlerPreferExisting(handler, remain);
+            remain = preferExisting
+                    ? insertToHandlerPreferExisting(handler, remain)
+                    : insertToHandler(handler, remain);
         }
         int movedToInventory = 0;
         if (!remain.isEmpty()) {
@@ -182,13 +171,6 @@ public final class RtsTransferInserter {
 
     public static void refundToLinked(List<IItemHandler> handlers, ServerPlayer player, ItemStack stack) {
         storeToLinkedWithFallback(handlers, player, stack);
-    }
-
-    public static void refundItem(IItemHandler handler, ServerPlayer player, ItemStack stack) {
-        ItemStack remain = insertToHandler(handler, stack);
-        if (!remain.isEmpty()) {
-            player.drop(remain, false);
-        }
     }
 
     public static ItemStack moveToPlayerInventoryOnly(ServerPlayer player, ItemStack stack) {

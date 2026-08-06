@@ -1,9 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar;
-
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.ActionButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.BuildDestroyButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.SelectButtonGroup;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.ShapeButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.UltimineButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import net.minecraft.client.gui.GuiGraphics;
@@ -15,6 +15,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
     
 
     
+
     private static final int BTN_TOP_MARGIN = 32;
     
     private static final int CROSS_GAP = 16;
@@ -38,6 +39,12 @@ public final class LeftSidebarPanel implements RtsPanelApi {
     private final BuildDestroyButtonGroup buildDestroyGroup = new BuildDestroyButtonGroup();
     
     private final UltimineButtonGroup ultimineGroup = new UltimineButtonGroup();
+
+    /** 建造形状按钮组：绘制在世界画面右侧、右面板左侧边缘。 */
+    private final ShapeButtonGroup shapeGroup = new ShapeButtonGroup();
+
+    /** 形状按钮组与世界区域右边缘的间距。 */
+    private static final int SHAPE_GROUP_RIGHT_MARGIN = 8;
 
     
     public void setCurrentWidth(int width) {
@@ -108,6 +115,32 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         return ultimineGroup.isSelected(0);
     }
 
+    
+    public boolean isConstructionSelected() {
+        return buildDestroyGroup.isConstructionSelected();
+    }
+
+    
+    public boolean isDestructionSelected() {
+        return buildDestroyGroup.isDestructionSelected();
+    }
+
+    /**
+     * 形状按钮组"建造"侧是否选中"单方块"。
+     * 其余建造形状（线/墙/平面/体/圆面/球）尚未实现，选中时禁止单方块放置。
+     */
+    public boolean isSingleBlockBuildShapeSelected() {
+        return shapeGroup.isSingleBlockConstructionSelected();
+    }
+
+    /**
+     * 形状按钮组"破坏"侧是否选中"单方块"。
+     * 其余破坏形状（线/墙/平面/体/圆面/球）尚未实现，选中时禁止单方块破坏。
+     */
+    public boolean isSingleBlockBreakShapeSelected() {
+        return shapeGroup.isSingleBlockDestructionSelected();
+    }
+
 
     
 
@@ -126,6 +159,20 @@ public final class LeftSidebarPanel implements RtsPanelApi {
     
     private int groupBaseY() {
         return LeftSidebarLayoutHelper.SIDEBAR_TOP_Y + BTN_TOP_MARGIN;
+    }
+
+    // ── 形状按钮组（世界画面右侧、右面板左侧） ────────────────────────
+
+    
+    private int shapeGroupX() {
+        return screen.getRtsVirtualWidth() - screen.getRightSidebarWidth()
+                - ShapeButtonGroup.DEFAULT_BTN_SIZE - SHAPE_GROUP_RIGHT_MARGIN;
+    }
+
+    
+    private int shapeGroupY() {
+        // 与左面板顶部的点击/框选按钮组保持相同高度
+        return groupBaseY();
     }
 
     
@@ -156,8 +203,17 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         ultimineGroup.setShow(buildMode);
         // 建造模式 + 连锁挖掘启用 → 禁用选择（点击/框选）模式按钮，并显示覆盖层
         selectGroup.setDisabled(buildMode && ultimineGroup.isSelected(0));
-        // 连锁挖掘启用 → 直接禁用建造/破坏按钮组
-        buildDestroyGroup.setDisabled(ultimineGroup.isSelected(0));
+        // 建造模式 + 框选模式启用，或连锁挖掘启用 → 直接禁用建造/破坏按钮组
+        buildDestroyGroup.setDisabled(buildMode && (ultimineGroup.isSelected(0) || !isClickButtonSelected()));
+        // 形状按钮组：仅建造模式且启用了建造或破坏模式时显示（框选模式下建造/破坏被禁用，随之隐藏）；
+        // 激活模式跟随建造/破坏按钮选中态，启用某模式时另一模式形状强制回到单方块
+        boolean shapeVisible = buildMode
+                && (buildDestroyGroup.isConstructionSelected() || buildDestroyGroup.isDestructionSelected());
+        shapeGroup.setShow(shapeVisible);
+        if (shapeVisible) {
+            shapeGroup.setActiveMode(buildDestroyGroup.isConstructionSelected()
+                    ? ShapeButtonGroup.MODE_CONSTRUCTION : ShapeButtonGroup.MODE_DESTRUCTION);
+        }
 
         
         int actionY = baseY + selectGroup.totalHeight() + CROSS_GAP;
@@ -169,6 +225,14 @@ public final class LeftSidebarPanel implements RtsPanelApi {
 
         int ultimineY = buildDestroyY + buildDestroyGroup.visibleHeight() + CROSS_GAP;
         ultimineGroup.render(g, mouseX, mouseY, bx, ultimineY);
+
+        // 形状按钮组：绘制于世界画面右侧、右面板左侧边缘
+        if (screen != null) {
+            int sgx = shapeGroupX();
+            int sgy = shapeGroupY();
+            shapeGroup.render(g, mouseX, mouseY, sgx, sgy);
+            shapeGroup.tickTooltips(mouseX, mouseY, sgx, sgy);
+        }
 
         
         selectGroup.tickTooltips(mouseX, mouseY, bx, baseY);
@@ -218,6 +282,12 @@ public final class LeftSidebarPanel implements RtsPanelApi {
             return true;
         }
 
+        // 形状按钮组：世界画面右侧、右面板左侧
+        if (screen != null && shapeGroup.isShow()
+                && shapeGroup.mouseClicked(mouseX, mouseY, shapeGroupX(), shapeGroupY()) >= 0) {
+            return true;
+        }
+
         return false;
     }
 
@@ -241,5 +311,9 @@ public final class LeftSidebarPanel implements RtsPanelApi {
                 this.screen.width, this.screen.height);
         ultimineGroup.renderTooltipOverlay(g, bx, ultimineY,
                 this.screen.width, this.screen.height);
+        if (this.screen != null) {
+            shapeGroup.renderTooltipOverlay(g, shapeGroupX(), shapeGroupY(),
+                    this.screen.getRtsVirtualWidth(), this.screen.getRtsVirtualHeight());
+        }
     }
 }

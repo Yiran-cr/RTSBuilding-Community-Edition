@@ -181,6 +181,7 @@ public final class RtsCameraManager {
     public static void stop(ServerPlayer player) {
         Session session = SESSIONS.remove(player.getUUID());
         if (session != null) {
+            clearStaleTerminalLit(player);
             Entity entity = RtsCameraEntityHelper.findCameraEntity(player.getServer(), session.cameraUuid());
             if (entity != null) {
                 entity.discard();
@@ -199,6 +200,27 @@ public final class RtsCameraManager {
         PacketDistributor.sendToPlayer(player, new S2CRtsCameraStatePayload(false, -1, 0.0D, 0.0D, 0.0D,
                 DEFAULT_ACTION_RADIUS_BLOCKS, 18.0D, 0.0F, 70.0F, false, false, null));
         RtsServer.get().session().onRtsDisabled(player);
+    }
+
+    /**
+     * 清除该玩家所有终端的点亮标记（恢复 rts_terminal 模型）。
+     * <p>RTS 模式关闭或玩家登录时调用；由于单个玩家同一时间只会开启一把终端，
+     * 遍历主背包与副手清除所有终端的 lit 组件即可（同时防御异常退出后的残留标记）。</p>
+     *
+     * @param player 目标玩家
+     */
+    public static void clearStaleTerminalLit(ServerPlayer player) {
+        var inventory = player.getInventory();
+        for (ItemStack stack : inventory.items) {
+            if (stack.is(RtsItems.RTS_TERMINAL.get())) {
+                stack.remove(RtsItems.TERMINAL_LIT.get());
+            }
+        }
+        for (ItemStack stack : inventory.offhand) {
+            if (stack.is(RtsItems.RTS_TERMINAL.get())) {
+                stack.remove(RtsItems.TERMINAL_LIT.get());
+            }
+        }
     }
 
     /**

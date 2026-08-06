@@ -339,6 +339,16 @@ public class BuilderScreen extends Screen {
     }
 
     
+    public boolean isConstructionSelected() {
+        return leftSidebarPanel != null && leftSidebarPanel.isConstructionSelected();
+    }
+
+    
+    public boolean isDestructionSelected() {
+        return leftSidebarPanel != null && leftSidebarPanel.isDestructionSelected();
+    }
+
+    
     public boolean isBindModeActive() {
         return leftSidebarPanel != null && leftSidebarPanel.isBindModeActive();
     }

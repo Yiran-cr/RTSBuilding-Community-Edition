@@ -476,19 +476,43 @@ public final class RtsPageCore {
         }
         ItemStack prototype = stack.copy();
         prototype.setCount(1);
+        byte effectiveMode = normalizeEntryMode(linkedMode);
         for (int i = 0; i < entries.size(); i++) {
             Entry existing = entries.get(i);
-            if (existing.linkedMode() != linkedMode || !ItemStack.isSameItemSameComponents(existing.stack(), prototype)) {
+            // 玩家背包与储存条目合并：同一物品（含组件）无论来源只保留一条，数量加总
+            if (!ItemStack.isSameItemSameComponents(existing.stack(), prototype)) {
                 continue;
             }
             entries.set(i, new Entry(
                     existing.stack(), existing.itemId(), existing.namespace(),
                     existing.path(), existing.label(),
-                    saturatedAdd(existing.count(), count), existing.linkedMode()));
+                    saturatedAdd(existing.count(), count),
+                    mergeEntryMode(existing.linkedMode(), effectiveMode)));
             return;
         }
         entries.add(new Entry(prototype, id.toString(), id.getNamespace(), id.getPath(),
-                prototype.getHoverName().getString(), count, linkedMode));
+                prototype.getHoverName().getString(), count, effectiveMode));
+    }
+
+    /**
+     * 背包条目（MODE_PLAYER_INVENTORY）归一为双向：合并后不再出现独立背包条目，
+     * 背包天然可存可取，与"可存入"语义一致。
+     */
+    private static byte normalizeEntryMode(byte linkedMode) {
+        return linkedMode == NetworkConstants.MODE_PLAYER_INVENTORY
+                ? NetworkConstants.MODE_BIDIRECTIONAL
+                : linkedMode;
+    }
+
+    /**
+     * 合并条目的模式：任一来源允许双向（含背包）则整体视为双向，
+     * 只有全部来源均为仅提取时才保持仅提取。
+     */
+    private static byte mergeEntryMode(byte a, byte b) {
+        if (a == NetworkConstants.MODE_EXTRACT_ONLY && b == NetworkConstants.MODE_EXTRACT_ONLY) {
+            return NetworkConstants.MODE_EXTRACT_ONLY;
+        }
+        return NetworkConstants.MODE_BIDIRECTIONAL;
     }
 
     // ---- internal fluid check -------------------------------------------------

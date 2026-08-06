@@ -838,12 +838,11 @@ public final class GridRenderer {
                 if (obj instanceof StorageEntry se) {
                     if (se.stack() == null || se.stack().isEmpty()) continue;
 
-                    // 背包来源条目（MODE_PLAYER_INVENTORY）不受双向/只读过滤影响，始终显示；
-                    // 来源独立成条，与存储条目分开计数，转移变化可正确反映
+                    // 背包与存储条目已在服务端合并为一条（同一物品数量加总），
+                    // 不再存在独立背包条目，统一按双向/仅提取过滤
                     boolean matchesBidirectional = se.isBidirectional() && state.showBidirectional;
                     boolean matchesExtractOnly = se.isExtractOnly() && state.showExtractOnly;
-                    boolean matchesPlayerInventory = se.isPlayerInventory();
-                    if (!matchesBidirectional && !matchesExtractOnly && !matchesPlayerInventory) continue;
+                    if (!matchesBidirectional && !matchesExtractOnly) continue;
 
                     String sortName = se.stack().getHoverName().getString().toLowerCase();
                     String sortMod = se.namespace();
@@ -885,16 +884,8 @@ public final class GridRenderer {
                 }
                 default -> result = 0;
             }
-            // 同排位时存储条目优先，背包条目排后
-            if (result == 0) {
-                result = Integer.compare(sourceRank(entry1), sourceRank(entry2));
-            }
             return state.reverseSortOrder ? -result : result;
         });
-    }
-
-    private static int sourceRank(SlotEntry entry) {
-        return entry.originalEntry() instanceof StorageEntry se && se.isPlayerInventory() ? 1 : 0;
     }
 
     public static List<RecentEntry> getRecentItems(StorageModule sm) {

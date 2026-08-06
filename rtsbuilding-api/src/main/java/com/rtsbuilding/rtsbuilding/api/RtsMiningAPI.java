@@ -53,7 +53,7 @@ public interface RtsMiningAPI {
     void areaMine(ServerPlayer player,
                   int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
                   byte toolSlot, String toolItemId, ItemStack toolPrototype,
-                  byte shapeType, byte fillType, boolean toolProtectionEnabled);
+                  boolean toolProtectionEnabled);
 
     /**
      * Area destroy specified blocks.

@@ -1,4 +1,6 @@
 {
+  "itemGroup.rtsbuilding": "RTSbuilding",
+
   "item.rtsbuilding.rts_terminal": "RTS Terminal",
 
   "entity.rtsbuilding.rts_drone": "RTS Drone",
@@ -86,6 +88,21 @@
   "tooltip.rtsbuilding.left.construction.desc": "Place blocks",
   "tooltip.rtsbuilding.left.destruction": "Destruction",
   "tooltip.rtsbuilding.left.destruction.desc": "Remove blocks",
+
+  "tooltip.rtsbuilding.left.shape.single_block": "Single Block",
+  "tooltip.rtsbuilding.left.shape.single_block.desc": "Build/destroy block by block",
+  "tooltip.rtsbuilding.left.shape.line": "Line",
+  "tooltip.rtsbuilding.left.shape.line.desc": "Generate a row of blocks along a line",
+  "tooltip.rtsbuilding.left.shape.wall": "Wall",
+  "tooltip.rtsbuilding.left.shape.wall.desc": "Generate a wall",
+  "tooltip.rtsbuilding.left.shape.plane": "Plane",
+  "tooltip.rtsbuilding.left.shape.plane.desc": "Generate a flat plane",
+  "tooltip.rtsbuilding.left.shape.solid": "Solid",
+  "tooltip.rtsbuilding.left.shape.solid.desc": "Generate a solid cube",
+  "tooltip.rtsbuilding.left.shape.circle_face": "Circle Face",
+  "tooltip.rtsbuilding.left.shape.circle_face.desc": "Generate a circular plane",
+  "tooltip.rtsbuilding.left.shape.sphere": "Sphere",
+  "tooltip.rtsbuilding.left.shape.sphere.desc": "Generate a sphere",
 
   "screen.rtsbuilding.mode.interactive": "Interactive Mode",
   "screen.rtsbuilding.mode.build": "Build Mode",

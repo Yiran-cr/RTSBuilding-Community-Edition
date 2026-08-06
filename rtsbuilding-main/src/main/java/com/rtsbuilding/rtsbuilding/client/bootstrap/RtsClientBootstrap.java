@@ -17,7 +17,9 @@ import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.util.render.RtsShaders;
 import com.rtsbuilding.rtsbuilding.common.RtsEntities;
+import com.rtsbuilding.rtsbuilding.common.RtsItems;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -131,7 +133,14 @@ public final class RtsClientBootstrap {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
-            ;
+            // 终端点亮模型属性：RTS 模式开启时（TERMINAL_LIT 组件为 true）物品模型
+            // 切换为 rts_terminal_lit（由 rts_terminal.json 的 overrides 引用）。
+            ItemProperties.register(
+                    RtsItems.RTS_TERMINAL.get(),
+                    ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "lit"),
+                    (stack, level, entity, seed) ->
+                            Boolean.TRUE.equals(stack.get(RtsItems.TERMINAL_LIT.get())) ? 1.0F : 0.0F);
+
             RtsClientKernel kernel = RtsClientKernel.get();
 
             kernel.register(new CameraModule());

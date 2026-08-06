@@ -4,6 +4,7 @@ import com.rtsbuilding.rtsbuilding.compat.remote.RtsRemoteMenuCompat;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.server.service.page.RtsPageSharedHelpers;
 import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;
 import com.rtsbuilding.rtsbuilding.server.storage.model.OverflowOutcome;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
@@ -231,16 +232,12 @@ public final class RtsTransferPlayerIntegration {
         RtsServer.get().serviceOp().afterModification(player, session);
     }
 
-    public static void pickupLinkedToCarried(ServerPlayer player, RtsStorageSession session, ItemStack prototype, int amount) {
-        pickupLinkedToCarried(player, session, prototype, amount, false);
-    }
-
     public static void pickupLinkedToCarried(ServerPlayer player, RtsStorageSession session, ItemStack prototype, int amount, boolean fromInventory) {
         if (session == null) {
             return;
         }
         RtsLinkedStorageResolver.sanitizeSessionDimension(player, session);
-        boolean includePlayerMainInventory = RtsTransferUtils.shouldIncludePlayerMainInventoryInStorageView(player, session);
+        boolean includePlayerMainInventory = RtsPageSharedHelpers.shouldIncludePlayerMainInventoryInStorageView(player, session);
         if (!RtsLinkedStorageResolver.hasAnyStorage(player, session) && !includePlayerMainInventory) {
             return;
         }
@@ -266,10 +263,12 @@ public final class RtsTransferPlayerIntegration {
         }
         ItemStack extracted;
         if (fromInventory) {
-            // 背包来源条目：只从玩家背包提取（所见即所得，不影响存储条目）
+            // 仅从玩家背包提取（所见即所得，供 API 等显式指定背包来源的场景使用）
             extracted = RtsTransferExtractor.extractMatchingFromPlayerMainInventory(
                     player, prototype.getItem(), prototype, wanted);
         } else {
+            // 合并条目（背包与存储合并显示）：从网络（存储优先、背包兜底）提取，
+            // 与合并条目显示的网络总量一致。
             extracted = RtsTransferExtractor.extractMatchingFromNetwork(
                     extractHandlers, player, prototype.getItem(), prototype, wanted);
         }
@@ -284,10 +283,6 @@ public final class RtsTransferPlayerIntegration {
         }
         player.containerMenu.broadcastChanges();
         RtsServer.get().serviceOp().afterModification(player, session);
-    }
-
-    public static void quickMoveLinkedItem(ServerPlayer player, RtsStorageSession session, ItemStack prototype) {
-        quickMoveLinkedItem(player, session, prototype, false);
     }
 
     public static void quickMoveLinkedItem(ServerPlayer player, RtsStorageSession session, ItemStack prototype, boolean fromInventory) {

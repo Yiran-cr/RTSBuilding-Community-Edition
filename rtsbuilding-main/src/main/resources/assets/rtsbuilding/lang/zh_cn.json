@@ -1,4 +1,6 @@
 {
+  "itemGroup.rtsbuilding": "RTSbuilding",
+
   "item.rtsbuilding.rts_terminal": "RTS终端",
 
   "entity.rtsbuilding.rts_drone": "RTS无人机",
@@ -86,6 +88,21 @@
   "tooltip.rtsbuilding.left.construction.desc": "放置方块",
   "tooltip.rtsbuilding.left.destruction": "破坏",
   "tooltip.rtsbuilding.left.destruction.desc": "移除方块",
+
+  "tooltip.rtsbuilding.left.shape.single_block": "单方块",
+  "tooltip.rtsbuilding.left.shape.single_block.desc": "以单个方块为单位建造/破坏",
+  "tooltip.rtsbuilding.left.shape.line": "线",
+  "tooltip.rtsbuilding.left.shape.line.desc": "沿直线生成一排方块",
+  "tooltip.rtsbuilding.left.shape.wall": "墙",
+  "tooltip.rtsbuilding.left.shape.wall.desc": "生成一面墙",
+  "tooltip.rtsbuilding.left.shape.plane": "平面",
+  "tooltip.rtsbuilding.left.shape.plane.desc": "生成一个平面",
+  "tooltip.rtsbuilding.left.shape.solid": "体",
+  "tooltip.rtsbuilding.left.shape.solid.desc": "生成一个实心立方体",
+  "tooltip.rtsbuilding.left.shape.circle_face": "圆面",
+  "tooltip.rtsbuilding.left.shape.circle_face.desc": "生成一个圆形平面",
+  "tooltip.rtsbuilding.left.shape.sphere": "球",
+  "tooltip.rtsbuilding.left.shape.sphere.desc": "生成一个球体",
 
   "screen.rtsbuilding.mode.interactive": "交互模式",
   "screen.rtsbuilding.mode.build": "建造模式",

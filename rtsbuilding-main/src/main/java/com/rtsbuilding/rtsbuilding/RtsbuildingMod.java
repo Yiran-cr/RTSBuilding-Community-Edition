@@ -157,6 +157,8 @@ public class RtsbuildingMod {
             if (event.getEntity() instanceof ServerPlayer serverPlayer) {
                 // Clean up camera entities left over from old worlds / reconnections
                 RtsCameraManager.cleanupOrphanCameras(serverPlayer.getServer());
+                // Clear stale terminal "lit" markers left behind by a crash/shutdown during RTS mode
+                RtsCameraManager.clearStaleTerminalLit(serverPlayer);
                 // Register the damage feedback session for this player
                 RtsDamageFeedbackManager.remember(serverPlayer);
                 // Restore workflows from world save so previous blueprint placements etc. can continue

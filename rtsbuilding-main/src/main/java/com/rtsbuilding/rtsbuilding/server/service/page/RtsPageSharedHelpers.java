@@ -224,7 +224,7 @@ public final class RtsPageSharedHelpers {
     }
 
     public static boolean shouldIncludePlayerMainInventoryInStorageView(ServerPlayer player, RtsStorageSession session) {
-        // 背包始终计入存储视图：背包条目以 MODE_PLAYER_INVENTORY 独立标识显示
+        // 背包始终计入存储视图：背包物品与存储条目合并计数显示（合并条目，数量加总）
         return player != null;
     }
 }

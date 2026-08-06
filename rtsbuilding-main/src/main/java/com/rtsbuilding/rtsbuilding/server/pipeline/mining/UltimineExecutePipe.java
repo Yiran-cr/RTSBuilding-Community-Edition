@@ -48,8 +48,6 @@ import java.util.Objects;
  * <ul>
  *   <li>{@code "minX"}, {@code "maxX"}, {@code "minY"}, {@code "maxY"},
  *       {@code "minZ"}, {@code "maxZ"} —— {@code int} area bounds</li>
- *   <li>{@code "shapeType"} —— {@code byte} shape type</li>
- *   <li>{@code "fillType"} —— {@code byte} fill type</li>
  * </ul>
  *
  * <p><b>AREA_DESTROY:</b></p>
@@ -79,10 +77,6 @@ public record UltimineExecutePipe(RtsWorkflowType type) implements PipelinePipe<
             new TypedKey<>("minZ", Integer.class);
     public static final TypedKey<Integer> ARG_MAX_Z =
             new TypedKey<>("maxZ", Integer.class);
-    public static final TypedKey<Byte> ARG_SHAPE_TYPE =
-            new TypedKey<>("shapeType", Byte.class);
-    public static final TypedKey<Byte> ARG_FILL_TYPE =
-            new TypedKey<>("fillType", Byte.class);
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static final TypedKey<List<BlockPos>> ARG_POSITIONS =
             new TypedKey<>("positions", (Class) List.class);
@@ -183,14 +177,12 @@ public record UltimineExecutePipe(RtsWorkflowType type) implements PipelinePipe<
                 int maxY = Objects.requireNonNull(mctx.getArg(ARG_MAX_Y), "AREA_MINE missing required arg: maxY");
                 int minZ = Objects.requireNonNull(mctx.getArg(ARG_MIN_Z), "AREA_MINE missing required arg: minZ");
                 int maxZ = Objects.requireNonNull(mctx.getArg(ARG_MAX_Z), "AREA_MINE missing required arg: maxZ");
-                byte shapeType = mctx.hasArg(ARG_SHAPE_TYPE) ? Objects.requireNonNull(mctx.getArg(ARG_SHAPE_TYPE), "AREA_MINE missing required arg: shapeType") : (byte) 0;
-                byte fillType = mctx.hasArg(ARG_FILL_TYPE) ? Objects.requireNonNull(mctx.getArg(ARG_FILL_TYPE), "AREA_MINE missing required arg: fillType") : (byte) 0;
 
                 if (queueMode) {
                     int queuedCount = RtsUltimineProcessor.queueAreaMine(
                             mctx.player(), session,
                             minX, maxX, minY, maxY, minZ, maxZ,
-                            toolSlot, shapeType, fillType, toolProtectionEnabled,
+                            toolSlot, toolProtectionEnabled,
                             mctx.getWorkflowEntryId());
                     RtsbuildingMod.LOGGER.info("[UltimineExecutePipe] AREA_MINE queued {} blocks for {}",
                             queuedCount, mctx.player().getGameProfile().getName());
@@ -200,7 +192,7 @@ public record UltimineExecutePipe(RtsWorkflowType type) implements PipelinePipe<
 
                 RtsUltimineProcessor.areaMine(mctx.player(), session,
                         minX, maxX, minY, maxY, minZ, maxZ,
-                        toolSlot, shapeType, fillType, toolProtectionEnabled);
+                        toolSlot, toolProtectionEnabled);
                 break;
             }
             case AREA_DESTROY: {

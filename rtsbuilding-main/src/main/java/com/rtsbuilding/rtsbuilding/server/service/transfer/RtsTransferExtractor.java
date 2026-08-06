@@ -1,8 +1,7 @@
 package com.rtsbuilding.rtsbuilding.server.service.transfer;
 
 import com.rtsbuilding.rtsbuilding.api.compat.DirectExtractHandler;
-import com.rtsbuilding.rtsbuilding.server.service.RtsStorageTickService;
-import com.rtsbuilding.rtsbuilding.server.storage.cache.RtsAggregateStorage;
+import com.rtsbuilding.rtsbuilding.server.service.page.RtsPageSharedHelpers;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -35,15 +34,6 @@ import java.util.List;
  *   <li><b>Prototype matching extraction:</b> {@link #extractOneMatchingPrototypeFromLinked(List, ItemStack)}、
  *       {@link #extractOneMatchingPrototypeCombined(List, ServerPlayer, ItemStack)} —
  *       Strictly matches components by ItemStack prototype, used by crafting system</li>
- * </ul>
- *
- * <p><b>Cache integration (fast path):</b>
- * <ul>
- *   <li>{@link #extractOneCached(ServerPlayer, List, Item)} —
- *       Attempts cache extraction from {@link RtsAggregateStorage} first, falls back to scanning handlers</li>
- *   <li>{@link #extractMatchingCached(ServerPlayer, List, Item, ItemStack, int)} —
- *       Same as above, but supports multi-quantity extraction</li>
- *   <li>{@link #refreshCache(ServerPlayer)} — Forces refresh of player's storage slot cache</li>
  * </ul>
  *
  * <p><b>Helper methods:</b>
@@ -112,25 +102,26 @@ public final class RtsTransferExtractor {
             if (extracted.isEmpty()) {
                 continue;
             }
-            if (out.isEmpty()) {
-                if (!preferred.isEmpty() && !ItemStack.isSameItemSameComponents(extracted, preferred)) {
-                    ItemStack remain = RtsTransferInserter.insertToHandlerPreferExisting(handler, extracted);
-                    if (!remain.isEmpty()) {
-                        return ItemStack.EMPTY;
-                    }
-                    continue;
-                }
-                out = extracted;
-            } else if (ItemStack.isSameItemSameComponents(out, extracted)) {
-                out.grow(extracted.getCount());
-            } else {
-                ItemStack remain = RtsTransferInserter.insertToHandlerPreferExisting(handler, extracted);
-                if (!remain.isEmpty()) {
-                    return out;
+        if (out.isEmpty()) {
+            if (!preferred.isEmpty() && !ItemStack.isSameItemSameComponents(extracted, preferred)) {
+                // 变体不匹配：优先插回原槽位；插回失败则随结果返回，杜绝物品丢失（B6 修复）
+                if (!refundExtractedToSlot(handler, slot, extracted)) {
+                    return extracted;
                 }
                 continue;
             }
-            remaining -= extracted.getCount();
+            out = extracted;
+        } else if (ItemStack.isSameItemSameComponents(out, extracted)) {
+            out.grow(extracted.getCount());
+        } else {
+            // 变体不匹配：优先插回原槽位（该槽位刚被清空，插回几乎必然成功）；
+            // 插回失败时保留已提取的输出，避免部分丢失
+            if (!refundExtractedToSlot(handler, slot, extracted)) {
+                return out;
+            }
+            continue;
+        }
+        remaining -= extracted.getCount();
         }
         return out;
     }
@@ -151,8 +142,8 @@ public final class RtsTransferExtractor {
         if (player == null || targetItem == null) {
             return ItemStack.EMPTY;
         }
-        int start = RtsTransferUtils.getPlayerMainInventoryStart(player);
-        int end = RtsTransferUtils.getPlayerMainInventoryEndExclusive(player);
+        int start = RtsPageSharedHelpers.getPlayerMainInventoryStart(player);
+        int end = RtsPageSharedHelpers.getPlayerMainInventoryEndExclusive(player);
         for (int slot = start; slot < end; slot++) {
             ItemStack current = player.getInventory().getItem(slot);
             if (current.isEmpty() || current.getItem() != targetItem) {
@@ -222,8 +213,8 @@ public final class RtsTransferExtractor {
             return ItemStack.EMPTY;
         }
         ItemStack out = ItemStack.EMPTY;
-        int start = RtsTransferUtils.getPlayerMainInventoryStart(player);
-        int end = RtsTransferUtils.getPlayerMainInventoryEndExclusive(player);
+        int start = RtsPageSharedHelpers.getPlayerMainInventoryStart(player);
+        int end = RtsPageSharedHelpers.getPlayerMainInventoryEndExclusive(player);
         for (int slot = start; slot < end && remaining > 0; slot++) {
             ItemStack current = player.getInventory().getItem(slot);
             if (current.isEmpty() || current.getItem() != targetItem) {
@@ -408,8 +399,8 @@ public final class RtsTransferExtractor {
         if (player == null || prototype == null || prototype.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        int start = RtsTransferUtils.getPlayerMainInventoryStart(player);
-        int end = RtsTransferUtils.getPlayerMainInventoryEndExclusive(player);
+        int start = RtsPageSharedHelpers.getPlayerMainInventoryStart(player);
+        int end = RtsPageSharedHelpers.getPlayerMainInventoryEndExclusive(player);
         for (int i = start; i < end; i++) {
             ItemStack current = player.getInventory().getItem(i);
             if (current.isEmpty() || !ItemStack.isSameItemSameComponents(current, prototype)) {
@@ -428,62 +419,24 @@ public final class RtsTransferExtractor {
         return ItemStack.EMPTY;
     }
 
-    // ---- cache integration (fast path via aggregate storage) -------------------
-
-    /**
-     * Attempts to quickly extract a single item directly from the player's aggregate storage cache.
-     * If the cache is unavailable or empty, falls back to scanning the provided handlers.
-     *
-     * <p>This is safe because {@code LinkedItemHandlerView.extractItem}
-     * delegates to the same original handler that the cache operates on — extraction does not bypass permission checks.
-     *
-     * @return The extracted item stack, or {@link ItemStack#EMPTY}
-     */
-    public static ItemStack extractOneCached(ServerPlayer player, List<IItemHandler> fallbackHandlers, Item targetItem) {
-        if (player == null || targetItem == null) return ItemStack.EMPTY;
-        RtsAggregateStorage aggregate = RtsStorageTickService.INSTANCE.getStorage(player);
-        if (aggregate != null && !aggregate.isEmpty()) {
-            ItemStack extracted = aggregate.extract(targetItem, 1);
-            if (!extracted.isEmpty()) {
-                RtsStorageTickService.INSTANCE.alert(player.getUUID());
-                return extracted;
-            }
-        }
-        return fallbackHandlers == null ? ItemStack.EMPTY : extractOneFromLinked(fallbackHandlers, targetItem);
-    }
-
-    /**
-     * Attempts to quickly extract multiple items from the aggregate storage cache.
-     * Falls back to scanning the provided handlers if the cache is unavailable.
-     */
-    public static ItemStack extractMatchingCached(
-            ServerPlayer player, List<IItemHandler> fallbackHandlers,
-            Item targetItem, ItemStack preferred, int limit) {
-        if (player == null || targetItem == null || limit <= 0) return ItemStack.EMPTY;
-        RtsAggregateStorage aggregate = RtsStorageTickService.INSTANCE.getStorage(player);
-        if (aggregate != null && !aggregate.isEmpty()) {
-            ItemStack extracted = aggregate.extractMatching(targetItem, preferred, limit);
-            if (!extracted.isEmpty()) {
-                RtsStorageTickService.INSTANCE.alert(player.getUUID());
-                return extracted;
-            }
-        }
-        return fallbackHandlers == null
-                ? ItemStack.EMPTY
-                : extractMatchingFromLinked(fallbackHandlers, targetItem, preferred, limit);
-    }
-
-    /**
-     * Forces an immediate refresh of the player's storage slot cache, so that subsequent cache reads
-     * and fast-path extraction reflect the latest handler state.
-     */
-    public static void refreshCache(ServerPlayer player) {
-        if (player != null) {
-            RtsStorageTickService.INSTANCE.forceRefresh(player);
-        }
-    }
-
     // ---- helpers ----------------------------------------------------------------
+
+    /**
+     * 变体不匹配时把已提取的物品插回原槽位；原槽失败时再尝试全局插入，
+     * 尽量保证物品不丢失。
+     *
+     * @return true 表示物品已成功归还（调用方可继续），false 表示归还失败
+     */
+    private static boolean refundExtractedToSlot(IItemHandler handler, int slot, ItemStack extracted) {
+        if (handler == null || extracted == null || extracted.isEmpty()) {
+            return true;
+        }
+        ItemStack remain = handler.insertItem(slot, extracted, false);
+        if (remain.isEmpty()) {
+            return true;
+        }
+        return RtsTransferInserter.insertToHandlerPreferExisting(handler, remain).isEmpty();
+    }
 
     public static ItemStack mergeExtractedStacks(ItemStack into, ItemStack addition) {
         if (addition == null || addition.isEmpty()) {

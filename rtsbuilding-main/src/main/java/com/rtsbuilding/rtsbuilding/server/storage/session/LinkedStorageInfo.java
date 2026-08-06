@@ -84,10 +84,6 @@ public final class LinkedStorageInfo {
         return linkedNames.computeIfAbsent(ref, mappingFunction);
     }
 
-    public Set<LinkedStorageRef> getNameKeys() {
-        return linkedNames.keySet();
-    }
-
     // ======================================================================
     //  Mode (operation permission)
     // ======================================================================
@@ -100,10 +96,6 @@ public final class LinkedStorageInfo {
         linkedModes.put(ref, mode);
     }
 
-    public Set<LinkedStorageRef> getModeKeys() {
-        return linkedModes.keySet();
-    }
-
     // ======================================================================
     //  Priorities
     // ======================================================================
@@ -114,10 +106,6 @@ public final class LinkedStorageInfo {
 
     public void setPriority(LinkedStorageRef ref, int priority) {
         linkedPriorities.put(ref, priority);
-    }
-
-    public Set<LinkedStorageRef> getPriorityKeys() {
-        return linkedPriorities.keySet();
     }
 
     // ======================================================================
@@ -146,14 +134,6 @@ public final class LinkedStorageInfo {
         } else {
             linkedBackpackItemIds.put(ref, itemId);
         }
-    }
-
-    public Set<LinkedStorageRef> getBackpackUuidKeys() {
-        return linkedBackpackUuids.keySet();
-    }
-
-    public Set<LinkedStorageRef> getBackpackItemIdKeys() {
-        return linkedBackpackItemIds.keySet();
     }
 
     // ======================================================================

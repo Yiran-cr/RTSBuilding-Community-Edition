@@ -2,9 +2,9 @@
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"0": "rtsbuilding:item/rts_terminal/rts_terminal",
+		"0": "rtsbuilding:item/rts_terminal/rts_terminal_lit",
 		"1": "rtsbuilding:item/rts_terminal/rts_terminal_camera",
-		"particle": "rtsbuilding:item/rts_terminal/rts_terminal"
+		"particle": "rtsbuilding:item/rts_terminal/rts_terminal_lit"
 	},
 	"elements": [
 		{
@@ -179,10 +179,10 @@
 			"from": [1.95, 7.9, 4.05],
 			"to": [3.95, 7.9, 6.05],
 			"faces": {
-				"north": {"uv": [0, 0, 1, 0], "texture": "#0"},
-				"east": {"uv": [0, 0, 1, 0], "texture": "#0"},
-				"south": {"uv": [0, 0, 1, 0], "texture": "#0"},
-				"west": {"uv": [0, 0, 1, 0], "texture": "#0"},
+				"north": {"uv": [0, 0, 1, 0], "texture": "#missing"},
+				"east": {"uv": [0, 0, 1, 0], "texture": "#missing"},
+				"south": {"uv": [0, 0, 1, 0], "texture": "#missing"},
+				"west": {"uv": [0, 0, 1, 0], "texture": "#missing"},
 				"up": {"uv": [13.3125, 13.46875, 2.65625, 2.8125], "rotation": 180, "texture": "#1"},
 				"down": {"uv": [11.0625, 1.5625, 4.40625, 14.46875], "rotation": 180, "texture": "#1"}
 			}
@@ -245,14 +245,6 @@
 			"rotation": [-90, 0, 0]
 		}
 	},
-	"overrides": [
-		{
-			"predicate": {
-				"rtsbuilding:lit": 1
-			},
-			"model": "rtsbuilding:item/rts_terminal_lit"
-		}
-	],
 	"groups": [
 		{
 			"name": "group",

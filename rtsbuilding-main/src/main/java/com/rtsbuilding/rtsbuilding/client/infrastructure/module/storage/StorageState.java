@@ -69,7 +69,11 @@ public final class StorageState {
     private static final long AUTO_REFRESH_MS = 30_000L;
     
     private static final long SCAN_TIMEOUT_MS = 10_000L;
+    private static final long SEARCH_DEBOUNCE_MS = 200L;
     private boolean autoRefreshEnabled;
+    /** 搜索防抖（B8）：setStorageSearch 只记录待发查询，tick 里满防抖窗口后合并为一次请求。 */
+    private String pendingSearch;
+    private long pendingSearchSinceMs;
 
     StorageState() {
         storageCategories.add("all");
@@ -171,7 +175,7 @@ public final class StorageState {
         
         int recentSize = Math.min(payload.recentIds().size(),
                 Math.min(payload.recentAmounts().size(), payload.recentKinds().size()));
-        recentSize = Math.min(recentSize, 16);
+        recentSize = Math.min(recentSize, S2CRtsStoragePagePayload.RECENT_ENTRY_LIMIT);
         for (int i = 0; i < recentSize; i++) {
             String recentId = payload.recentIds().get(i);
             if (recentId == null || recentId.isBlank()) continue;
@@ -238,7 +242,11 @@ public final class StorageState {
     
 
     void tickAutoRefresh(long now) {
-        
+        // 搜索防抖：到达防抖窗口后发出合并请求
+        if (this.pendingSearch != null && now - this.pendingSearchSinceMs >= SEARCH_DEBOUNCE_MS) {
+            this.pendingSearch = null;
+            requestStoragePage(0);
+        }
         if (this.scanRunning && now - this.scanStartedMs > SCAN_TIMEOUT_MS) {
             this.scanRunning = false;
             this.viewDirty = true;
@@ -273,6 +281,7 @@ public final class StorageState {
         this.storageSearch = "";
         this.scanRunning = false;
         this.viewDirty = false;
+        this.pendingSearch = null;
     }
 
     
@@ -319,6 +328,8 @@ public final class StorageState {
 
     public void setStorageSearch(String search) {
         this.storageSearch = search == null ? "" : search;
-        requestStoragePage(0);
+        // 搜索防抖（B8）：连续按键合并为一次请求，避免每次按键都触发整页构建/序列化
+        this.pendingSearch = this.storageSearch;
+        this.pendingSearchSinceMs = System.currentTimeMillis();
     }
 }

@@ -38,9 +38,9 @@ public final class RtsMiningAPIImpl implements RtsMiningAPI {
     @Override
     public void areaMine(ServerPlayer player, int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
                          byte toolSlot, String toolItemId, ItemStack toolPrototype,
-                         byte shapeType, byte fillType, boolean toolProtectionEnabled) {
+                         boolean toolProtectionEnabled) {
         REGISTRY.mining().areaMine(player, minX, maxX, minY, maxY, minZ, maxZ,
-                toolSlot, toolItemId, toolPrototype, shapeType, fillType, toolProtectionEnabled);
+                toolSlot, toolItemId, toolPrototype, toolProtectionEnabled);
     }
 
     @Override

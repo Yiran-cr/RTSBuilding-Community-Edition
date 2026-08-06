@@ -271,12 +271,10 @@ public final class RtsHandlerCache {
             long count = (handler instanceof ReportedCountItemHandler rc)
                     ? Math.max(0L, rc.getReportedCount(slot))
                     : stack.getCount();
-            // ReportedCount handlers (e.g. AE2 network) return fresh copies of prototypes via getStackInSlot() —
-            // the reference can be retained directly. Vanilla handlers return live references to slot ItemStacks
-            // that may be modified externally — must snapshot to keep the cache consistent.
-            ItemStack stored = (handler instanceof ReportedCountItemHandler)
-                    ? stack
-                    : stack.copy();
+            // 统一浅拷贝：ItemStack.copy() 只复制引用+计数、不深拷贝 NBT，成本极低，
+            // 但能杜绝任何 handler（含 ReportedCountItemHandler）返回可变共享栈时
+            // 被外部修改导致缓存与真实槽位不一致（B7 修复）。
+            ItemStack stored = stack.copy();
             return new CachedSlot(id.toString(), stack.getItem(), count, stored);
         } catch (Exception e) {
             return CachedSlot.EMPTY;

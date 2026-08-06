@@ -101,7 +101,7 @@ dependencies {
     testImplementation "net.neoforged:neoforge:${neo_version}"
 
     // common/api 仅以 compileOnly 提供给 main；测试运行时需要它们的类
-    // （否则 AreaShapeTest/BlueprintFormatTest/RtsCountUtilTest 抛 NoClassDefFoundError）
+    // （否则 BlueprintFormatTest/RtsCountUtilTest 抛 NoClassDefFoundError）
     testImplementation project(':rtsbuilding-common')
     testImplementation project(':rtsbuilding-api')
 

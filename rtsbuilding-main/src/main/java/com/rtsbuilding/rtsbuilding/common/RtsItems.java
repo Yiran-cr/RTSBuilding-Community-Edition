@@ -44,6 +44,12 @@ public final class RtsItems {
             DATA_COMPONENTS.registerComponentType("terminal_uuid",
                     builder -> builder.persistent(Codec.STRING));
 
+    /** Terminal lit component — {@code true} while the terminal opened the player's active
+     *  RTS mode, switching its item model to {@code rts_terminal_lit} until the mode is closed. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Boolean>> TERMINAL_LIT =
+            DATA_COMPONENTS.registerComponentType("terminal_lit",
+                    builder -> builder.persistent(Codec.BOOL));
+
     /** Set of items that need to be automatically registered in the creative tab (ordered by registration order) */
     private static final Set<DeferredHolder<Item, ? extends Item>> CREATIVE_TAB_ITEMS = new LinkedHashSet<>();
 

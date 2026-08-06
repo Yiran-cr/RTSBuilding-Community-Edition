@@ -42,4 +42,10 @@ public enum ActionType {
      * 服务端据此允许/拒绝漏斗请求（客户端在服务端开启前不会真正吸物）。
      */
     SET_FUNNEL,
+    /**
+     * 客户端从“最近使用”栏删除一条条目时通知服务端，服务端从会话的
+     * recentEntries 中真正移除，避免条目在重进/重启后复活。
+     * 仅在枚举末尾追加（ordinal 编码协议，禁止插入到已有值之前）。
+     */
+    REMOVE_RECENT_ENTRY,
 }

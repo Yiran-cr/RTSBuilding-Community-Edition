@@ -1,7 +1,6 @@
 package com.rtsbuilding.rtsbuilding.server.service.mining;
 
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
-import com.rtsbuilding.rtsbuilding.common.AreaOperationExecutor;
 import com.rtsbuilding.rtsbuilding.server.history.HistoryBlockRecord;
 import com.rtsbuilding.rtsbuilding.server.history.ServerHistoryManager;
 import com.rtsbuilding.rtsbuilding.server.service.destruction.RtsDestructionBatch;
@@ -27,7 +26,7 @@ import java.util.*;
  * <ul>
  *   <li><b>连锁挖掘</b>（{@link #startUltimine}）— 从种子位置 BFS 收集同类型连通方块，
  *   创造模式立即破坏，生存模式进入每 tick 处理</li>
- *   <li><b>区域挖掘</b>（{@link #areaMine}）— 在限定 3D 体积内按形状/填充类型过滤破坏</li>
+ *   <li><b>区域挖掘</b>（{@link #areaMine}）— 在限定 3D 体积内破坏所有可破坏方块</li>
  *   <li><b>区域破坏</b>（{@link #areaDestroy}）— 破坏给定显式位置列表的方块（来自形状预览）</li>
  * </ul>
  *
@@ -97,8 +96,7 @@ public final class RtsUltimineProcessor {
     // =========================================================================
 
     /**
-     * 启动区域挖掘操作：破坏指定 3D 体积边界内所有可破坏的方块，
-     * 按形状/填充类型过滤。
+     * 启动区域挖掘操作：破坏指定 3D 体积边界内所有可破坏的方块。
      *
      * <p><b>前置条件（由 pipeline 保证）：</b>功能门已通过、会话已解析、维度已清理、
      * 之前的挖掘已停止、工具已借用（{@code session.mining.miningToolLease}）、
@@ -106,7 +104,7 @@ public final class RtsUltimineProcessor {
      */
     public static void areaMine(ServerPlayer player, RtsStorageSession session,
             int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
-            byte toolSlot, byte shapeType, byte fillType, boolean toolProtectionEnabled) {
+            byte toolSlot, boolean toolProtectionEnabled) {
         int slot = RtsMiningValidator.clampHotbarSlot(toolSlot);
 
         // 限定范围（min 侧规范化，防止客户端传入 min>max 导致反向空扫）。
@@ -126,14 +124,12 @@ public final class RtsUltimineProcessor {
             return;
         }
 
-        // 使用共享形状系统
-        List<BlockPos> candidatePositions = AreaOperationExecutor.scanAreaMineTargets(
+        List<BlockPos> candidatePositions = scanAreaMineTargets(
                 player.serverLevel(),
                 clampedMinX, clampedMaxX,
                 clampedMinY, clampedMaxY,
                 clampedMinZ, clampedMaxZ,
-                player,
-                shapeType, fillType);
+                player);
         Deque<BlockPos> targets = new ArrayDeque<>(candidatePositions);
 
         if (targets.isEmpty()) {
@@ -297,7 +293,7 @@ public final class RtsUltimineProcessor {
      */
     public static int queueAreaMine(ServerPlayer player, RtsStorageSession session,
             int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
-            byte toolSlot, byte shapeType, byte fillType, boolean toolProtectionEnabled, int workflowEntryId) {
+            byte toolSlot, boolean toolProtectionEnabled, int workflowEntryId) {
         int slot = RtsMiningValidator.clampHotbarSlot(toolSlot);
 
         // 限定范围（min 侧规范化，防止客户端传入 min>max 导致反向空扫）。
@@ -311,13 +307,12 @@ public final class RtsUltimineProcessor {
 
         // Creative mode: break immediately
         if (player.isCreative()) {
-            List<BlockPos> candidatePositions = AreaOperationExecutor.scanAreaMineTargets(
+            List<BlockPos> candidatePositions = scanAreaMineTargets(
                     player.serverLevel(),
                     clampedMinX, clampedMaxX,
                     clampedMinY, clampedMaxY,
                     clampedMinZ, clampedMaxZ,
-                    player,
-                    shapeType, fillType);
+                    player);
             Deque<BlockPos> targets = new ArrayDeque<>(candidatePositions);
             if (targets.isEmpty()) {
                 return 0;
@@ -332,13 +327,12 @@ public final class RtsUltimineProcessor {
             return 0;
         }
 
-        List<BlockPos> candidatePositions = AreaOperationExecutor.scanAreaMineTargets(
+        List<BlockPos> candidatePositions = scanAreaMineTargets(
                 player.serverLevel(),
                 clampedMinX, clampedMaxX,
                 clampedMinY, clampedMaxY,
                 clampedMinZ, clampedMaxZ,
-                player,
-                shapeType, fillType);
+                player);
         Deque<BlockPos> targets = new ArrayDeque<>(candidatePositions);
         if (targets.isEmpty()) {
             return 0;
@@ -347,6 +341,27 @@ public final class RtsUltimineProcessor {
         session.mining.ultimineJobQueue.addLast(
                 new RtsMiningStateMachine.MiningJob(workflowEntryId, targets, targets.size()));
         return targets.size();
+    }
+
+    /**
+     * 扫描 3D 边界框 [min, max]（各轴均含边界）并返回所有可破坏的方块位置。
+     * 区域挖掘固定为立方体全框扫描（实心填充）。
+     */
+    private static List<BlockPos> scanAreaMineTargets(ServerLevel level,
+            int minX, int maxX, int minY, int maxY, int minZ, int maxZ, ServerPlayer player) {
+        List<BlockPos> valid = new ArrayList<>();
+        for (int y = minY; y <= maxY; y++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int x = minX; x <= maxX; x++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    if (!level.mayInteract(player, pos)) continue;
+                    BlockState state = level.getBlockState(pos);
+                    if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F) continue;
+                    valid.add(pos.immutable());
+                }
+            }
+        }
+        return valid;
     }
 
     /**

@@ -243,8 +243,9 @@ public final class InteractionPanel extends RtsPanel {
         if (menu == null || menu.getCarried().isEmpty()) return;
         ItemStack carried = menu.getCarried();
         String itemId = BuiltInRegistries.ITEM.getKey(carried.getItem()).toString();
-        // amount=64：服务端取 min(amount, carried.getCount())，即全部退回；剩余由 S2C 同步
-        RtsClientPacketGateway.sendReturnCarried(itemId, 64);
+        // 传实际携带数量：服务端按 min(amount, carried.getCount()) 退回，
+        // 大堆叠（>64）时也能全部退回（B1 边界修复）
+        RtsClientPacketGateway.sendReturnCarried(itemId, carried.getCount());
         menu.setCarried(ItemStack.EMPTY); // 乐观清空，服务端权威状态经 S2C 同步
     }
 

@@ -127,10 +127,6 @@ public final class RtsLinkedStorageBindingService {
     //  Internal helpers
     // ======================================================================
 
-    private static void removeLinkedRef(RtsStorageSession session, LinkedStorageRef ref) {
-        session.linkedStorageInfo.remove(ref);
-    }
-
     private static void applyBackpackMetadata(RtsStorageSession session, LinkedStorageRef ref,
             UUID backpackUuid, String backpackItemId) {
         if (backpackUuid == null) {
@@ -162,31 +158,6 @@ public final class RtsLinkedStorageBindingService {
             if (id != null) return id;
         }
         return "";
-    }
-
-    /**
-     * Checks whether the given block position belongs to a double chest whose other half is already linked in the session.
-     */
-    private static boolean isDoubleChestHalfAlreadyLinked(ServerPlayer player, RtsStorageSession session, BlockPos pos) {
-        if (player == null || session == null || pos == null) {
-            return false;
-        }
-        ServerLevel level = player.serverLevel();
-        if (!level.hasChunkAt(pos)) {
-            return false;
-        }
-        BlockState state = level.getBlockState(pos);
-        if (!(state.getBlock() instanceof ChestBlock)) {
-            return false;
-        }
-        ChestType chestType = state.getValue(ChestBlock.TYPE);
-        if (chestType == ChestType.SINGLE) {
-            return false;
-        }
-        Direction connectedDirection = ChestBlock.getConnectedDirection(state);
-        BlockPos connectedPos = pos.relative(connectedDirection);
-        LinkedStorageRef connectedRef = new LinkedStorageRef(level.dimension(), connectedPos);
-        return session.linkedStorageInfo.contains(connectedRef);
     }
 
     /**

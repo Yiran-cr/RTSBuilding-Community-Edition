@@ -78,7 +78,7 @@ public final class RtsMiningServiceImpl implements RtsService {
 
     public void areaMine(ServerPlayer player, int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
                          byte toolSlot, String toolItemId, ItemStack toolPrototype,
-                         byte shapeType, byte fillType, boolean toolProtectionEnabled) {
+                         boolean toolProtectionEnabled) {
         PipelineRegistry.execute(RtsWorkflowType.AREA_MINE,
                 MiningContext.builder(player)
                         .toolSlot(toolSlot)
@@ -90,8 +90,6 @@ public final class RtsMiningServiceImpl implements RtsService {
                         .maxY(maxY)
                         .minZ(minZ)
                         .maxZ(maxZ)
-                        .shapeType(shapeType)
-                        .fillType(fillType)
                         .toolProtectionEnabled(toolProtectionEnabled)
                         .build());
     }

@@ -408,6 +408,60 @@ public final class SdfRenderer {
         drawRoundedRect(g, rightX, y, barW, barH, r, color);
     }
 
+    /**
+     * 用矢量线段绘制一个等距视角的正方体线框（12 条棱，正方形外接区域）。
+     * 投影采用 2:1 等距：顶面为菱形，左/右两棱的斜率为 1/2。
+     */
+    public static void drawCubeIcon(GuiGraphics g, int x, int y, int size, int color) {
+        if (size <= 0) return;
+        int half = Math.round(size / 2f);
+        int quarter = Math.round(size / 4f);
+        int cx = x + half;
+        int cy = y + half;
+
+        int[][] v = {
+                {cx, cy - half},
+                {cx + half, cy},
+                {cx, cy + quarter},
+                {cx - half, cy},
+                {cx, cy},
+                {cx + half, cy + quarter},
+                {cx, cy + half},
+                {cx - half, cy + quarter},
+        };
+
+        int[][] edges = {
+                {0, 1}, {1, 2}, {2, 3}, {3, 0},
+                {4, 5}, {5, 6}, {6, 7}, {7, 4},
+                {0, 4}, {1, 5}, {2, 6}, {3, 7},
+        };
+
+        for (int[] e : edges) {
+            drawLinePixels(g, v[e[0]][0], v[e[0]][1], v[e[1]][0], v[e[1]][1], color);
+        }
+    }
+
+    private static void drawLinePixels(GuiGraphics g, int x0, int y0, int x1, int y1, int color) {
+        int dx = Math.abs(x1 - x0);
+        int dy = -Math.abs(y1 - y0);
+        int sx = x0 < x1 ? 1 : -1;
+        int sy = y0 < y1 ? 1 : -1;
+        int err = dx + dy;
+        while (true) {
+            g.fill(x0, y0, x0 + 1, y0 + 1, color);
+            if (x0 == x1 && y0 == y1) break;
+            int e2 = 2 * err;
+            if (e2 >= dy) {
+                err += dy;
+                x0 += sx;
+            }
+            if (e2 <= dx) {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    }
+
     public static void drawProgressBar(GuiGraphics g, int x, int y, int w, int h,
                                         float progress, int trackColor,
                                         int fillColorStart, int fillColorEnd) {

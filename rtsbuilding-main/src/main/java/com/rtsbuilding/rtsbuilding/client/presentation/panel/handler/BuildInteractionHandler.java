@@ -101,7 +101,7 @@ public final class BuildInteractionHandler {
                 && !shouldSkipRightClickRelease(screen, leftSidebarPanel)) {
             
             if (!cameraInputLayer.wasDragged(button)) {
-                return runPrimaryActionAt(screen);
+                return runPrimaryActionAt(screen, leftSidebarPanel);
             }
         }
 
@@ -221,6 +221,20 @@ public final class BuildInteractionHandler {
         String toolItemId = buildingModule.getSelectedItemId();
         int toolSlot = mc.player != null ? mc.player.getInventory().selected : 0;
 
+        // 框选模式（非点击模式）：破坏机制与点击模式完全区分——
+        // 仅当框选完成后在框内左键才对整个框选区域批量破坏；
+        // 框选进行中或点击框外不执行单点挖掘。
+        BoxSelector boxSelector = kernel.renderPipeline().boxSelector;
+        if (!screen.isClickButtonSelected()) {
+            if (boxSelector.getPhase() == BoxSelector.Phase.COMPLETE
+                    && isPosInSelection(hit.getBlockPos(), boxSelector)) {
+                RtsClientPacketGateway.sendAreaBoxDestroy(
+                        boxSelector.getMinCorner(), boxSelector.getMaxCorner(),
+                        toolSlot, toolItemId, false);
+            }
+            return true;
+        }
+
         // 连锁挖掘按钮启用时：左键挖掘直接触发服务端连锁挖掘（一次点击一批，松开不中止）。
         // 服务端 ULTIMINE 流程（RtsUltimineProcessor）从种子位置 BFS 收集同类型连通方块处理。
         if (leftSidebarPanel != null && leftSidebarPanel.isUltimineActive()) {
@@ -232,6 +246,12 @@ public final class BuildInteractionHandler {
             miningModule.startUltimine(hit.getBlockPos(), hit.getDirection().get3DDataValue(),
                     toolSlot, RtsMiningValidator.ULTIMINE_MAX_BLOCKS, ULTIMINE_MODE,
                     toolItemId, false);
+            return true;
+        }
+
+        // 形状按钮组：仅"破坏"侧"单方块"形状允许单方块挖掘；其余破坏形状（线/墙/平面/体/圆面/球）尚未实现，
+        // 选中其他破坏形状时禁止单方块破坏（放置不受影响，走建造侧形状判断）。
+        if (leftSidebarPanel != null && !leftSidebarPanel.isSingleBlockBreakShapeSelected()) {
             return true;
         }
 
@@ -254,7 +274,7 @@ public final class BuildInteractionHandler {
     }
 
     
-    private EventResult runPrimaryActionAt(BuilderScreen screen) {
+    private EventResult runPrimaryActionAt(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return PASS;
 
@@ -270,7 +290,27 @@ public final class BuildInteractionHandler {
         boolean shiftDown = isShiftDown();
         boolean isBuildMode = buildingModule.getMode() == BuilderMode.BUILD;
 
-        
+        // 框选模式（非点击模式）：框选完成后，在框内右键 = 对整个框选区域批量放置，
+        // 与点击模式的单点放置机制区分开。流体暂不支持批量，仍走单点放置。
+        BoxSelector boxSelector = kernel.renderPipeline().boxSelector;
+        if (!screen.isClickButtonSelected()
+                && boxSelector.getPhase() == BoxSelector.Phase.COMPLETE
+                && isPosInSelection(hit.getBlockPos(), boxSelector)) {
+            if (!isBuildMode) return PASS;
+            if (buildingModule.hasSelectedFluid()) {
+                buildingModule.placeFluid(hit, shiftDown, ray.origin(), ray.direction());
+                return CONSUMED;
+            }
+            if (buildingModule.hasSelectedItem()) {
+                RtsClientPacketGateway.sendAreaBoxPlace(
+                        boxSelector.getMinCorner(), boxSelector.getMaxCorner(),
+                        (byte) buildingModule.getPlaceRotateSteps(), shiftDown, true,
+                        buildingModule.getSelectedItemId(), ray.origin(), ray.direction());
+                return CONSUMED;
+            }
+            return CONSUMED;
+        }
+
         if (buildingModule.hasSelectedFluid()) {
             if (!isBuildMode) return PASS;
             buildingModule.placeFluid(hit, shiftDown, ray.origin(), ray.direction());
@@ -280,6 +320,11 @@ public final class BuildInteractionHandler {
         
         if (buildingModule.hasSelectedItem()) {
             if (!isBuildMode) return PASS;
+            // 形状按钮组：仅"建造"侧"单方块"形状允许单方块放置；其余建造形状（线/墙/平面/体/圆面/球）尚未实现，
+            // 选中其他建造形状时禁止单方块放置（破坏不受影响，走破坏侧形状判断）。
+            if (leftSidebarPanel != null && !leftSidebarPanel.isSingleBlockBuildShapeSelected()) {
+                return CONSUMED;
+            }
             buildingModule.placeSelected(hit, shiftDown, ray.origin(), ray.direction());
             return CONSUMED;
         }
@@ -359,10 +404,29 @@ public final class BuildInteractionHandler {
     
     
     private boolean shouldSkipRightClickRelease(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
-        if (!screen.isInteractiveMode()) return false;
         if (leftSidebarPanel == null) return false;
+        // 框选模式（非点击模式）：必须等框选完全完毕后才判定右键放置。
+        // 最近一次右键点击若改变了框选状态（正在选点、或点击框外重置），释放一律跳过；
+        // 仅当点击前框选已 COMPLETE 且框内点击（未改变状态）时放行，由 runPrimaryActionAt 批量放置。
+        if (!screen.isClickButtonSelected()) {
+            var sel = kernel.renderPipeline().boxSelector;
+            return sel.lastRightClickChangedPhase()
+                    || sel.getPhase() != BoxSelector.Phase.COMPLETE;
+        }
+        if (!screen.isInteractiveMode()) return false;
         if (leftSidebarPanel.isClickButtonSelected()) return true;
         return kernel.renderPipeline().boxSelector.getPhase() == BoxSelector.Phase.COMPLETE;
+    }
+
+    /** 判断位置是否落在框选区域 [min, max) 内。 */
+    private static boolean isPosInSelection(BlockPos pos, BoxSelector sel) {
+        if (pos == null || sel == null) return false;
+        BlockPos min = sel.getMinCorner();
+        BlockPos max = sel.getMaxCorner();
+        if (min == null || max == null) return false;
+        return pos.getX() >= min.getX() && pos.getX() < max.getX()
+                && pos.getY() >= min.getY() && pos.getY() < max.getY()
+                && pos.getZ() >= min.getZ() && pos.getZ() < max.getZ();
     }
 
     private static boolean isWorldArea(double mouseX, double mouseY, BuilderScreen screen) {
