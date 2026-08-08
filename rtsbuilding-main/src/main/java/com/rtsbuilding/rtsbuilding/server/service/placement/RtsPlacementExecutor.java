@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.server.service.placement;
 
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsCarriedSyncPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
 import com.rtsbuilding.rtsbuilding.server.service.RtsRemoteMenuService;
@@ -29,7 +30,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -310,7 +310,7 @@ public final class RtsPlacementExecutor {
                 if (!remain.isEmpty()) {
                     RtsTransferInserter.refundToLinked(insertHandlers, player, remain);
                 }
-                PacketDistributor.sendToPlayer(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+                Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
             }
             RtsRemoteMenuService.markRemoteMenuOpen(player, session, menuAfterSelectedUse, clickedPos);
             return false;
@@ -334,7 +334,7 @@ public final class RtsPlacementExecutor {
                 if (!remain.isEmpty()) {
                     RtsTransferInserter.refundToLinked(insertHandlers, player, remain);
                 }
-                PacketDistributor.sendToPlayer(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+                Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
             } else {
                 RtsTransferInserter.refundToLinked(insertHandlers, player, finalOutcome.remainder());
             }
@@ -367,7 +367,7 @@ public final class RtsPlacementExecutor {
             // 点击一次网格即可持续放置；网络耗尽后自然停止补充
             RtsPlacementExtractor.replenishCarried(player, extractHandlers, item, preferredStack);
             // 同步权威 carried 状态（已被续货补充）给客户端
-            PacketDistributor.sendToPlayer(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+            Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
         }
         return true;
     }

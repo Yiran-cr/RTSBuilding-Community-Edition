@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.common.entity;
 
 import com.rtsbuilding.rtsbuilding.client.entity.rts_drone;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneAnimPayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -14,7 +15,6 @@ import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -291,7 +291,7 @@ public class RtsDroneEntity extends Entity {
                     || Math.abs(tiltZ - lastSentTiltZ) > ANIM_ANGLE_EPSILON_DEG;
             if (!changed) return;
 
-            PacketDistributor.sendToPlayer(owner, new S2CRtsDroneAnimPayload(
+            Platform.sendPacket(owner, new S2CRtsDroneAnimPayload(
                     this.getId(), x, y, z, yaw, pitch, tiltX, tiltZ));
             animStateSent = true;
             lastSentX = x; lastSentY = y; lastSentZ = z;

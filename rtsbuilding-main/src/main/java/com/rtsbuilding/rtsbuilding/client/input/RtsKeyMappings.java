@@ -147,6 +147,33 @@ public final class RtsKeyMappings {
     );
 
     /**
+     * 按住时：线模式画线强制平直（忽略高度差，线段保持水平，不产生斜度）。
+     */
+    public static final KeyMapping LINE_FLAT_KEY = new KeyMapping(
+            "key.rtsbuilding.line_flat",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_V,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 检查 {@link #LINE_FLAT_KEY} 绑定的按键当前是否按下。
+     * <p>直接读取绑定键的 GLFW 状态（键盘或鼠标），不依赖每 tick 的
+     * {@code KeyMappingState} 更新（后者在自定义 Screen 中不可靠），
+     * 同时跟随玩家在设置中的自定义绑定。</p>
+     */
+    public static boolean isLineFlatDown() {
+        InputConstants.Key bound = LINE_FLAT_KEY.getKey();
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        if (window == 0L) return false;
+        if (bound.getType() == InputConstants.Type.MOUSE) {
+            return GLFW.glfwGetMouseButton(window, bound.getValue()) == GLFW.GLFW_PRESS;
+        }
+        return GLFW.glfwGetKey(window, bound.getValue()) == GLFW.GLFW_PRESS;
+    }
+
+    /**
      * 检查 {@link #PLACE_OFFSET_KEY} 绑定的按键当前是否按下。
      * <p>直接读取绑定键的 GLFW 状态（键盘或鼠标），不依赖每 tick 的
      * {@code KeyMappingState} 更新（后者在自定义 Screen 中不可靠），

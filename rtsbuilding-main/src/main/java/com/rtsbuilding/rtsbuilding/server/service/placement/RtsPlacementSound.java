@@ -1,6 +1,7 @@
 package com.rtsbuilding.rtsbuilding.server.service.placement;
 
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsPlaceAnimationPayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
 import com.rtsbuilding.rtsbuilding.server.service.SoundService;
 import net.minecraft.core.BlockPos;
@@ -10,7 +11,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -59,7 +59,7 @@ public final class RtsPlacementSound {
             return;
         }
         BlockState state = player.serverLevel().getBlockState(pos);
-        PacketDistributor.sendToPlayer(player, new S2CRtsPlaceAnimationPayload(pos.immutable(), state));
+        Platform.sendPacket(player, new S2CRtsPlaceAnimationPayload(pos.immutable(), state));
     }
 
     /**

@@ -153,6 +153,11 @@ public final class ShapeButtonGroup extends AbstractButtonGroup {
         return modeShapes[MODE_CONSTRUCTION] == LINE;
     }
 
+    /** 建造模式（{@link #MODE_CONSTRUCTION}）下是否选中"墙"形状（画线并调整高度建造墙体）。 */
+    public boolean isWallConstructionSelected() {
+        return modeShapes[MODE_CONSTRUCTION] == WALL;
+    }
+
     @Override
     protected void onButtonClick(int index) {
         super.onButtonClick(index);

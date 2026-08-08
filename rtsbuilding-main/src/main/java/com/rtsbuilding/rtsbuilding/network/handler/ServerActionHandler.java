@@ -5,6 +5,7 @@ import com.rtsbuilding.rtsbuilding.common.RtsTerminalEnergy;
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.network.message.C2SAction;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsCarriedSyncPayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
 import com.rtsbuilding.rtsbuilding.server.history.ServerHistoryManager;
@@ -17,7 +18,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -165,14 +165,14 @@ public final class ServerActionHandler {
                 if (prototype.isEmpty()) return;
                 RtsServer.get().transfer().pickupLinkedToCarried(p, prototype, t.getInt("amount"), t.getBoolean("fromInventory"));
                 // Client carried field is not auto-synced; mirror the authoritative server state.
-                PacketDistributor.sendToPlayer(p, new S2CRtsCarriedSyncPayload(p.containerMenu.getCarried()));
+                Platform.sendPacket(p, new S2CRtsCarriedSyncPayload(p.containerMenu.getCarried()));
             }
             case RETURN_CARRIED -> {
                 // RTS 模式门禁：转移操作属于 RTS 存储浏览器交互，与 QUICK_DROP 的校验保持一致。
                 if (!RtsCameraManager.isActive(p)) return;
                 // Return the carried stack (or part of it) back to the linked storage.
                 RtsServer.get().transfer().returnCarriedToLinked(p, t.getString("itemId"), t.getInt("amount"));
-                PacketDistributor.sendToPlayer(p, new S2CRtsCarriedSyncPayload(p.containerMenu.getCarried()));
+                Platform.sendPacket(p, new S2CRtsCarriedSyncPayload(p.containerMenu.getCarried()));
             }
             case LINKED_QUICK_MOVE -> {
                 // RTS 模式门禁：转移操作属于 RTS 存储浏览器交互，与 QUICK_DROP 的校验保持一致。

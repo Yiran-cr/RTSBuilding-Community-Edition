@@ -555,9 +555,34 @@ public class BuilderScreen extends Screen {
             com.mojang.blaze3d.systems.RenderSystem.enableDepthTest();
         }
 
+        renderLineBrushHint(guiGraphics);
+
         if (Minecraft.getInstance().gui.getDebugOverlay().showDebugScreen()) {
             Minecraft.getInstance().gui.getDebugOverlay().render(guiGraphics);
         }
+    }
+
+    /** 线/墙画笔进行中时，在下面板上方正中央绘制当前步骤与操作提示。 */
+    private void renderLineBrushHint(GuiGraphics g) {
+        var brush = kernel.renderPipeline().lineBrush;
+        if (!brush.isActive()) return;
+        String hint;
+        if (brush.isPicking()) {
+            hint = "画线：右键选择终点  ·  滚轮调终点高度 / Ctrl+滚轮调起点高度  ·  ESC 取消";
+        } else if (brush.isHeightAdjusting()) {
+            hint = "墙高 ↑" + brush.getWallHeight() + " ↓" + brush.getWallDown()
+                    + "：滚轮调墙高（上下对称）  ·  右键建造  ·  ESC 返回";
+        } else {
+            hint = "确认：右键建造  ·  滚轮调终点高度 / Ctrl+滚轮调起点高度  ·  ESC 返回";
+        }
+        // 下面板范围：x=0 到 (width - 右栏宽)，顶部 y = height - 下面板高
+        int downBarW = this.width - getRightSidebarWidth();
+        int downBarY = this.height - getDownSidebarHeight();
+        int textW = Minecraft.getInstance().font.width(hint);
+        int x = downBarW / 2 - textW / 2;
+        int y = downBarY - 18;
+        g.fill(x - 8, y, x + textW + 8, y + 14, 0xAA000000);
+        g.drawString(Minecraft.getInstance().font, hint, x, y + 2, 0xFFFFFFFF);
     }
 
     

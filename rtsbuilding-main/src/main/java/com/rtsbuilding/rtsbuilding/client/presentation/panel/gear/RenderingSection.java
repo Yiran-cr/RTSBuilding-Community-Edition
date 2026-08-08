@@ -14,6 +14,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ToggleSwi
 import com.rtsbuilding.rtsbuilding.client.render.pass.BoundaryPass;
 import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelectionPass;
 import com.rtsbuilding.rtsbuilding.client.render.pass.InteractionTargetPass;
+import com.rtsbuilding.rtsbuilding.client.render.pass.LineBrushRenderPass;
 import com.rtsbuilding.rtsbuilding.client.render.pass.LinkedStoragePass;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
@@ -44,9 +45,15 @@ public class RenderingSection extends SettingsSection {
     private static final int ROW_TARGET_COLOR = 6;
     private static final int ROW_SELECTION_COLOR = 7;
     private static final int ROW_LINKED_STORAGE_COLOR = 8;
+    private static final int ROW_LINE_BRUSH_COLOR = 9;
     private static final int ALWAYS_VISIBLE_ROW_COUNT = 4;
-    private static final int MIN_CONTENT_H = 167;
-    private static final int EXTRA_ROWS_H = 20;
+    /** 颜色设置行数：屏障 / 目标 / 框选 / 绑定容器 / 线模式 */
+    private static final int COLOR_ROW_COUNT = 5;
+    private static final int ROW_HEIGHT = 20;
+    /** 基础内容区高度：始终可见行（开关 + 颜色行）按行数自动计算 */
+    private static final int MIN_CONTENT_H = (ALWAYS_VISIBLE_ROW_COUNT + COLOR_ROW_COUNT) * ROW_HEIGHT + 6;
+    /** 穿透层开启时额外增加的高度（alpha 滑块行） */
+    private static final int EXTRA_ROWS_H = ROW_HEIGHT;
 
     private final ToggleSwitch depthToggle = new ToggleSwitch();
     private final ToggleSwitch flowToggle = new ToggleSwitch();
@@ -91,6 +98,23 @@ public class RenderingSection extends SettingsSection {
     private final ResetButton targetResetBtn = new ResetButton();
     private final ResetButton selectionResetBtn = new ResetButton();
     private final ResetButton linkedResetBtn = new ResetButton();
+    private final ResetButton lineBrushResetBtn = new ResetButton();
+
+    private final ColorPickerButton lineBrushColorPickerButton = new ColorPickerButton();
+    private final ColorGroup lineBrushColorGroup = new ColorGroup("渲染设置", List.of(
+            new ColorSlot("线模式颜色", new ColorSource() {
+                @Override public int getColor() { return LineBrushRenderPass.lineBrushColor; }
+                @Override public void setColor(int color) { LineBrushRenderPass.lineBrushColor = color; }
+            }),
+            new ColorSlot("重叠颜色", new ColorSource() {
+                @Override public int getColor() { return LineBrushRenderPass.lineBrushOverlapColor; }
+                @Override public void setColor(int color) { LineBrushRenderPass.lineBrushOverlapColor = color; }
+            })
+    ));
+    private final ColorBlockComponent lineBrushColorBlock = new ColorBlockComponent();
+    private int lineBlockX, lineOverlapBlockX, lineBlockY;
+    private final TooltipController lineBrushTooltip = TooltipController.builder().build();
+    private final TooltipController lineBrushOverlapTooltip = TooltipController.builder().build();
 
     private final ColorGroup selectionColorGroup = new ColorGroup("渲染设置", List.of(
             new ColorSlot("框选线框颜色", new ColorSource() {
@@ -163,10 +187,14 @@ public class RenderingSection extends SettingsSection {
             LinkedStoragePass.bidirectionalColor = 0xFF4CAF50;
             LinkedStoragePass.extractOnlyColor = 0xFFFF4CD1;
         });
+        lineBrushResetBtn.setResetAction(() -> {
+            LineBrushRenderPass.lineBrushColor = 0xFF3388FF;
+            LineBrushRenderPass.lineBrushOverlapColor = 0xFFAA00FF;
+        });
     }
 
     @Override
-    protected int getContentRowCount() { return ALWAYS_VISIBLE_ROW_COUNT + 5; }
+    protected int getContentRowCount() { return ALWAYS_VISIBLE_ROW_COUNT + COLOR_ROW_COUNT + 1; }
 
     @Override
     protected int getEffectiveContentHeight() {
@@ -267,6 +295,14 @@ public class RenderingSection extends SettingsSection {
         cursorY = renderColorRow(g, mx, my, x, w, cursorY, t("screen.rtsbuilding.settings.linked_storage_color"),
                 linkedColorBlock, linkedColors, linkedPosX, linkedColorPickerButton, linkedResetBtn);
         this.linkedExtBlockX = linkedPosX.length > 1 ? linkedPosX[1] : this.linkedBiBlockX;
+
+        this.lineBlockX = x + LEFT_PAD + Minecraft.getInstance().font.width(t("screen.rtsbuilding.settings.line_brush_color")) + COLOR_BLOCK_GAP;
+        this.lineBlockY = cursorY + 2 + Minecraft.getInstance().font.lineHeight / 2 - ColorBlockComponent.DEFAULT_SIZE / 2;
+        int[] lineColors = {LineBrushRenderPass.lineBrushColor, LineBrushRenderPass.lineBrushOverlapColor};
+        int[] linePosX = new int[2];
+        cursorY = renderColorRow(g, mx, my, x, w, cursorY, t("screen.rtsbuilding.settings.line_brush_color"),
+                lineBrushColorBlock, lineColors, linePosX, lineBrushColorPickerButton, lineBrushResetBtn);
+        this.lineOverlapBlockX = linePosX.length > 1 ? linePosX[1] : this.lineBlockX;
     }
 
     @Override
@@ -281,12 +317,13 @@ public class RenderingSection extends SettingsSection {
                 || uiSmoothResetBtn.handleClick(mouseX, mouseY) || depthResetBtn.handleClick(mouseX, mouseY)
                 || alphaResetBtn.handleClick(mouseX, mouseY) || barrierResetBtn.handleClick(mouseX, mouseY)
                 || targetResetBtn.handleClick(mouseX, mouseY) || selectionResetBtn.handleClick(mouseX, mouseY)
-                || linkedResetBtn.handleClick(mouseX, mouseY)) return true;
+                || linkedResetBtn.handleClick(mouseX, mouseY) || lineBrushResetBtn.handleClick(mouseX, mouseY)) return true;
 
         if (lineIndex == ROW_BARRIER_COLOR && colorPickerButton.handleClick(mouseX, mouseY)) return true;
         if (lineIndex == ROW_TARGET_COLOR && targetColorPickerButton.handleClick(mouseX, mouseY)) return true;
         if (lineIndex == ROW_SELECTION_COLOR && selectionColorPickerButton.handleClick(mouseX, mouseY)) return true;
         if (lineIndex == ROW_LINKED_STORAGE_COLOR && linkedColorPickerButton.handleClick(mouseX, mouseY)) return true;
+        if (lineIndex == ROW_LINE_BRUSH_COLOR && lineBrushColorPickerButton.handleClick(mouseX, mouseY)) return true;
 
         if (BoxSelectionPass.depthTestEnabled) {
             Double newVal = alphaSlider.handleClick(mouseX, mouseY,
@@ -336,6 +373,10 @@ public class RenderingSection extends SettingsSection {
                 "绑定容器线框（双向）\n已绑定容器的双向模式（可存可取）角支架线框颜色", textColor, shortcutColor, screen);
         renderTooltipAt(g, mouseX, mouseY, linkedExtBlockX, linkedBlockY, bs, linkedExtTooltip,
                 "绑定容器线框（仅提取）\n已绑定容器的仅提取模式角支架线框颜色", textColor, shortcutColor, screen);
+        renderTooltipAt(g, mouseX, mouseY, lineBlockX, lineBlockY, bs, lineBrushTooltip,
+                "线模式颜色\n线模式建造拖拽时的线段方块角支架线框颜色", textColor, shortcutColor, screen);
+        renderTooltipAt(g, mouseX, mouseY, lineOverlapBlockX, lineBlockY, bs, lineBrushOverlapTooltip,
+                "重叠颜色\n线模式中与世界中已有方块重叠的角支架线框颜色", textColor, shortcutColor, screen);
     }
 
     private void renderTooltipAt(GuiGraphics g, int mx, int my, int bx, int by, int bs,
@@ -359,6 +400,8 @@ public class RenderingSection extends SettingsSection {
         this.selectionColorPickerButton.setColorGroup(selectionColorGroup);
         this.linkedColorPickerButton.setColorPickerPanel(panel);
         this.linkedColorPickerButton.setColorGroup(linkedColorGroup);
+        this.lineBrushColorPickerButton.setColorPickerPanel(panel);
+        this.lineBrushColorPickerButton.setColorGroup(lineBrushColorGroup);
     }
 
     public void setColorPickerButtonParent(RtsPanel parent) {
@@ -366,6 +409,7 @@ public class RenderingSection extends SettingsSection {
         this.targetColorPickerButton.setParentPanel(parent);
         this.selectionColorPickerButton.setParentPanel(parent);
         this.linkedColorPickerButton.setParentPanel(parent);
+        this.lineBrushColorPickerButton.setParentPanel(parent);
     }
 
     public boolean isSliderDragging() { return BoxSelectionPass.depthTestEnabled && alphaSlider.isDragging(); }

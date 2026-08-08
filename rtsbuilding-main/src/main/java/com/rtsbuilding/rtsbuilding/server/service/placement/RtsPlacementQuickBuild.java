@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.server.service.placement;
 
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsCarriedSyncPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.RtsStoragePageBuilder;
@@ -21,7 +22,6 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.items.IItemHandler;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
 
@@ -187,7 +187,7 @@ public final class RtsPlacementQuickBuild {
                     if (!remain.isEmpty()) {
                         RtsTransferInserter.refundToLinked(insertHandlers, player, remain);
                     }
-                    PacketDistributor.sendToPlayer(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+                    Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
                 } else if (refundExtractedOnFailure) {
                     RtsTransferInserter.refundToLinked(insertHandlers, player, extracted);
                 }
@@ -208,7 +208,7 @@ public final class RtsPlacementQuickBuild {
             // 方案2：自动续货——放置成功消耗后从网络补回差额，carried 始终保持满组
             RtsPlacementExtractor.replenishCarried(player, extractHandlers, plan.item(), plan.templateStack());
             // 同步权威 carried 状态（已被续货补充）给客户端
-            PacketDistributor.sendToPlayer(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+            Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
         }
         return true;
     }

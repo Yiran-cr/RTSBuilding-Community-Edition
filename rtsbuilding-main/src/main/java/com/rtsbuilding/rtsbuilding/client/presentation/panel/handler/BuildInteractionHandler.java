@@ -76,6 +76,11 @@ public final class BuildInteractionHandler {
     /** 当前按压周期内是否已放置过（区分"单击"与"长按"）。 */
     private boolean holdPlaceFired;
 
+    /** 本按压周期是否已进入自动持续破坏阶段（区分"单击"与"长按持续破坏"）。
+     *  单击后即使第一个方块很快被挖完，首次自动切换也必须等待一个 {@link #HOLD_MINE_INTERVAL}，
+     *  防止快速单击被误判为长按而连续破坏两个方块。 */
+    private boolean holdMineFired;
+
     /** 上次记录的框选阶段，用于检测框选确认（COMPLETE）沿以自动触发拾取。 */
     private BoxSelector.Phase lastBoxPhase = BoxSelector.Phase.IDLE;
 
@@ -133,18 +138,14 @@ public final class BuildInteractionHandler {
             stopMining();
             this.leftHoldActive = false;
             this.holdMineCooldown = 0;
+            this.holdMineFired = false;
             return CONSUMED;
         }
 
-        // 线模式建造：松开右键结束画线并沿线段批量放置。
-        // 独立于下方右键放置块（不受 Shift/相机拖拽状态影响），保证拖拽松开也能正常收尾。
+        // 线/墙画笔活跃阶段：松开右键不触发单点放置（点选交互由右键按下完成）
         if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT
-                && !screen.isMouseOverRtsPanelApi(event.x(), event.y())
-                && isWorldArea(event.x(), event.y(), screen)
-                && isInBuildOrInteractiveMode(topBarPanel)
-                && kernel.renderPipeline().lineBrush.isDragging()
-                && isLineBuildActive(screen, leftSidebarPanel)) {
-            return finishLinePlace(screen, leftSidebarPanel);
+                && kernel.renderPipeline().lineBrush.isActive()) {
+            return CONSUMED;
         }
 
         if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && !isAltDown() && !isShiftDown()
@@ -195,9 +196,9 @@ public final class BuildInteractionHandler {
     public void handleTick(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
         // 线模式建造：画线激活时实时更新预览（右键拖拽方向由鼠标位置决定，无需 mouseDragged 事件）；
         // 画线激活状态消失时清除遗留的拖拽状态（切换形状/选择/模式等）
-        if (isLineBuildActive(screen, leftSidebarPanel)) {
+        if (isLineBuildActive(screen, leftSidebarPanel) || isWallBuildActive(screen, leftSidebarPanel)) {
             updateLineBrushHover(screen);
-        } else if (kernel.renderPipeline().lineBrush.isDragging()) {
+        } else if (kernel.renderPipeline().lineBrush.isActive()) {
             kernel.renderPipeline().lineBrush.reset();
         }
 
@@ -224,6 +225,7 @@ public final class BuildInteractionHandler {
                     || !isMouseButtonDown(GLFW.GLFW_MOUSE_BUTTON_LEFT)) {
                 this.leftHoldActive = false;
                 this.holdMineCooldown = 0;
+                this.holdMineFired = false;
             } else {
                 MiningModule holdMining = kernel.module(MiningModule.class);
                 Minecraft holdMc = Minecraft.getInstance();
@@ -234,7 +236,12 @@ public final class BuildInteractionHandler {
                         cur = null;
                     }
                     if (cur == null) {
-                        if (this.holdMineCooldown > 0) {
+                        // 单击保护：首次点击的方块挖完后，进入自动持续破坏前必须等待一个完整间隔，
+                        // 避免快速单击被误判为长按而连续破坏两个方块。
+                        if (!this.holdMineFired) {
+                            this.holdMineFired = true;
+                            this.holdMineCooldown = HOLD_MINE_INTERVAL;
+                        } else if (this.holdMineCooldown > 0) {
                             this.holdMineCooldown--;
                         } else {
                             mineAtCursor(screen, leftSidebarPanel);
@@ -324,6 +331,8 @@ public final class BuildInteractionHandler {
         BuildingModule buildingModule = kernel.module(BuildingModule.class);
         if (buildingModule == null) return false;
         if (buildingModule.getMode() != BuilderMode.BUILD) return false;
+        // 线/墙画笔活跃阶段（画线/确认/高度/最终确认）：左键不触发挖掘
+        if (kernel.renderPipeline().lineBrush.isActive()) return true;
 
         var ray = CursorRaycaster.computeCursorRay(mc, screen);
         if (ray == null) return false;
@@ -378,6 +387,7 @@ public final class BuildInteractionHandler {
         // 长按左键持续破坏：当前方块挖完后由 handleTick 自动切换到下一个目标
         this.leftHoldActive = true;
         this.holdMineCooldown = 0;
+        this.holdMineFired = false;
         return true;
     }
 
@@ -403,17 +413,39 @@ public final class BuildInteractionHandler {
                 && bm.hasSelectedItem();
     }
 
-    /** 右键按下：记录画线起点并进入拖拽状态。 */
+    /** 右键单击：起点选择/终点选择/确认建造的逐级推进（点选式画线）。 */
     private boolean tryStartLineBrush(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
-        if (!isLineBuildActive(screen, leftSidebarPanel)) return false;
+        var lineBrush = kernel.renderPipeline().lineBrush;
+        // 阶段一/阶段二（已选终点）：右键确认建造
+        if (lineBrush.isAdjusting() || lineBrush.isHeightAdjusting()) {
+            confirmLinePlace(screen, leftSidebarPanel);
+            return true;
+        }
+        // 起点已选：右键选择终点
+        if (lineBrush.isPicking()) {
+            lineBrush.pickEnd();
+            return true;
+        }
+        // 空闲：右键选择起点
+        if (!isLineBuildActive(screen, leftSidebarPanel)
+                && !isWallBuildActive(screen, leftSidebarPanel)) return false;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return false;
         var ray = CursorRaycaster.computeCursorRay(mc, screen);
         if (ray == null) return false;
         BlockHitResult hit = resolveBuildHit(mc, screen, ray);
         if (hit == null) return false;
-        kernel.renderPipeline().lineBrush.start(hit.getBlockPos());
+        lineBrush.start(hit.getBlockPos(), isWallBuildActive(screen, leftSidebarPanel));
         return true;
+    }
+
+    /** 墙模式建造是否激活：点击模式 + 建造模式 + 建造侧墙形状 + 已选中方块物品。 */
+    private boolean isWallBuildActive(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        if (leftSidebarPanel == null || screen == null || !screen.isClickButtonSelected()) return false;
+        BuildingModule bm = kernel.module(BuildingModule.class);
+        return bm != null && bm.getMode() == BuilderMode.BUILD
+                && leftSidebarPanel.isWallBuildShapeSelected()
+                && bm.hasSelectedItem();
     }
 
     /** 每 tick 更新画线悬停位置（起点→当前指针的线段预览）。 */
@@ -484,13 +516,16 @@ public final class BuildInteractionHandler {
         }
     }
 
-    /** 右键松开：沿起点→终点线段批量放置并复位画笔。 */
-    private EventResult finishLinePlace(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+    /** 右键确认：沿已画线段/墙体批量放置并复位画笔（最终确认阶段）。 */
+    private EventResult confirmLinePlace(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
         BuildingModule bm = kernel.module(BuildingModule.class);
         if (bm == null) return CONSUMED;
         Minecraft mc = Minecraft.getInstance();
         var lineBrush = kernel.renderPipeline().lineBrush;
-        List<BlockPos> positions = lineBrush.computeLinePositions();
+        // 墙模式按墙高生成墙体方块，线模式生成走向线段
+        List<BlockPos> positions = lineBrush.isWallActive()
+                ? lineBrush.computeWallPositions()
+                : lineBrush.computeLinePositions();
         lineBrush.reset();
         if (positions.isEmpty()) return CONSUMED;
         Vec3 rayOrigin = Vec3.ZERO;

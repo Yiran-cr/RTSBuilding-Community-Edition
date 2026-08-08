@@ -5,6 +5,7 @@ import com.rtsbuilding.rtsbuilding.common.entity.RtsCameraEntity;
 import com.rtsbuilding.rtsbuilding.common.entity.RtsDroneEntity;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraAnchorPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -14,7 +15,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import javax.annotation.Nullable;
 import java.util.HashSet;
@@ -128,7 +128,7 @@ public final class RtsCameraManager {
         long t4 = System.nanoTime();
 
         // 向客户端发送相机状态同步包
-        PacketDistributor.sendToPlayer(player, new S2CRtsCameraStatePayload(
+        Platform.sendPacket(player, new S2CRtsCameraStatePayload(
                 true,
                 camera.getId(),
                 anchor.x,
@@ -197,7 +197,7 @@ public final class RtsCameraManager {
         RtsCameraEntityHelper.discardOwnedCameras(player);
         RtsCameraEntityHelper.discardOwnedDrones(player);
 
-        PacketDistributor.sendToPlayer(player, new S2CRtsCameraStatePayload(false, -1, 0.0D, 0.0D, 0.0D,
+        Platform.sendPacket(player, new S2CRtsCameraStatePayload(false, -1, 0.0D, 0.0D, 0.0D,
                 DEFAULT_ACTION_RADIUS_BLOCKS, 18.0D, 0.0F, 70.0F, false, false, null));
         RtsServer.get().session().onRtsDisabled(player);
     }
@@ -458,7 +458,7 @@ public final class RtsCameraManager {
                 session.terminalUuid(), session.droneUuid()));
 
         // 通知客户端更新后的锚点位置，使可视边界保持同步
-        PacketDistributor.sendToPlayer(player, new S2CRtsCameraAnchorPayload(
+        Platform.sendPacket(player, new S2CRtsCameraAnchorPayload(
                 newAnchor.x, newAnchor.y, newAnchor.z, maxRadius(player, session)));
     }
 
@@ -486,7 +486,7 @@ public final class RtsCameraManager {
                 session.maxRadius(), session.closeRangeAllowed(),
                 session.terminalUuid(), session.droneUuid()));
 
-        PacketDistributor.sendToPlayer(player, new S2CRtsCameraAnchorPayload(
+        Platform.sendPacket(player, new S2CRtsCameraAnchorPayload(
                 newAnchor.x, newAnchor.y, newAnchor.z, maxRadius(player, session)));
     }
 
@@ -536,7 +536,7 @@ public final class RtsCameraManager {
                 session.terminalUuid(),
                 droneUuid));
 
-        PacketDistributor.sendToPlayer(player, new S2CRtsCameraStatePayload(
+        Platform.sendPacket(player, new S2CRtsCameraStatePayload(
                 true,
                 restored.getId(),
                 session.anchor().x,

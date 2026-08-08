@@ -1,9 +1,9 @@
 package com.rtsbuilding.rtsbuilding.server.feedback;
 
 import com.rtsbuilding.rtsbuilding.network.feedback.S2CRtsDamageFeedbackPayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.Map;
 import java.util.UUID;
@@ -74,6 +74,6 @@ public final class RtsDamageFeedbackManager {
         }
 
         // 发送伤害反馈数据包，同时附带「是否处于低血量（≤50%）」的标志
-        PacketDistributor.sendToPlayer(player, new S2CRtsDamageFeedbackPayload(lostHealth, currentHealth <= player.getMaxHealth() * 0.5F));
+        Platform.sendPacket(player, new S2CRtsDamageFeedbackPayload(lostHealth, currentHealth <= player.getMaxHealth() * 0.5F));
     }
 }

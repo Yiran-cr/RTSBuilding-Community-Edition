@@ -56,6 +56,7 @@ public final class RtsKeybinds {
         add("undo", RtsKeyMappings.UNDO_KEY);
         add("cycle_mode", RtsKeyMappings.CYCLE_MODE_KEY);
         add("place_offset", RtsKeyMappings.PLACE_OFFSET_KEY);
+        add("line_flat", RtsKeyMappings.LINE_FLAT_KEY);
     }
 
     public static List<Entry> entries() {

@@ -23,6 +23,7 @@
 
   "key.rtsbuilding.cycle_mode": "循环切换模式",
   "key.rtsbuilding.place_offset": "偏移选中位置（命中面外侧一格）",
+  "key.rtsbuilding.line_flat": "线模式平直（按住）",
 
   "button.rtsbuilding.fluid_occlusion": "流体遮挡",
 
@@ -59,6 +60,7 @@
   "screen.rtsbuilding.settings.barrier_color": "屏障颜色",
   "screen.rtsbuilding.settings.target_color": "点击模式线框颜色",
   "screen.rtsbuilding.settings.selection_color": "框选模式线框颜色",
+  "screen.rtsbuilding.settings.line_brush_color": "线模式颜色",
   "screen.rtsbuilding.color_picker.title": "调色盘",
   "screen.rtsbuilding.color_picker.input_label": "颜色编码",
   "screen.rtsbuilding.color_picker.mode.hex": "十六进制",

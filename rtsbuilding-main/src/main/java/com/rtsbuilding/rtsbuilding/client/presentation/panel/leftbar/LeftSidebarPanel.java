@@ -146,6 +146,11 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         return shapeGroup.isLineConstructionSelected();
     }
 
+    /** 形状按钮组"建造"侧是否选中"墙"形状（画线并调整高度建造墙体）。 */
+    public boolean isWallBuildShapeSelected() {
+        return shapeGroup.isWallConstructionSelected();
+    }
+
 
     
 

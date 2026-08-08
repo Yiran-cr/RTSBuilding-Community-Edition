@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.server.service.impl;
 
 import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStorageDirtyPayload;
+import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.RtsService;
 import com.rtsbuilding.rtsbuilding.server.service.resolver.RtsLinkedHandlerResolutionService;
@@ -13,7 +14,6 @@ import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
 
@@ -94,7 +94,7 @@ public final class RtsPageServiceImpl implements RtsService {
                 player, session, page, session.browser.pageSize,
                 activeHandlers, activeFluidHandlers);
         long perfBuildMs = (System.nanoTime() - perfStartNanos) / 1_000_000L;
-        PacketDistributor.sendToPlayer(player, result.payload());
+        Platform.sendPacket(player, result.payload());
         session.transfer.storageViewDirty = false;
         session.browser.page = result.safePage();
         // 浏览器状态、翻页或最近条目任一变化才写盘（B8 优化）。
@@ -118,7 +118,7 @@ public final class RtsPageServiceImpl implements RtsService {
         if (player == null || session == null) return;
         if (session.transfer.storageViewDirty) return;
         session.transfer.storageViewDirty = true;
-        PacketDistributor.sendToPlayer(player, new S2CRtsStorageDirtyPayload(true));
+        Platform.sendPacket(player, new S2CRtsStorageDirtyPayload(true));
     }
 
     public void recordRecentItem(RtsStorageSession session, String itemId, byte kind, long amount) {

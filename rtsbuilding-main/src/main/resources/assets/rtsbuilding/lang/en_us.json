@@ -23,6 +23,7 @@
 
   "key.rtsbuilding.cycle_mode": "Cycle Mode",
   "key.rtsbuilding.place_offset": "Offset Target (Face-Outside Block)",
+  "key.rtsbuilding.line_flat": "Flat Line Mode (Hold)",
 
   "button.rtsbuilding.fluid_occlusion": "Fluid Occlusion",
 
@@ -59,6 +60,7 @@
   "screen.rtsbuilding.settings.barrier_color": "Barrier Color",
   "screen.rtsbuilding.settings.target_color": "Click Mode Wireframe Color",
   "screen.rtsbuilding.settings.selection_color": "Selection Color",
+  "screen.rtsbuilding.settings.line_brush_color": "Line Mode Color",
   "screen.rtsbuilding.color_picker.title": "Color Picker",
   "screen.rtsbuilding.color_picker.input_label": "Color Code",
   "screen.rtsbuilding.color_picker.mode.hex": "HEX",

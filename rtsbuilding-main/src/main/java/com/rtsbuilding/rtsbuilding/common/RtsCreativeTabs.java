@@ -1,7 +1,6 @@
 package com.rtsbuilding.rtsbuilding.common;
 
 import com.rtsbuilding.rtsbuilding.platform.Platform;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.IEventBus;
@@ -20,21 +19,17 @@ public final class RtsCreativeTabs {
     public static final DeferredRegister<CreativeModeTab> CREATIVE_TABS = Platform.creativeTabRegister();
 
     /** RTSbuilding main tab — contains all mod items and blocks */
-    @SuppressWarnings("unused")
-    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> RTSBUILDING_TAB = CREATIVE_TABS.register(
-            "rtsbuilding",
-            () -> CreativeModeTab.builder()
-                    .title(Component.translatable("itemGroup.rtsbuilding"))
-                    .icon(() -> new ItemStack(RtsItems.RTS_TERMINAL.get()))
-                    .displayItems((parameters, output) -> {
-                        for (var holder : RtsItems.getCreativeTabItems()) {
-                            output.accept(holder.get());
-                        }
-                        for (var holder : RtsBlocks.getCreativeTabBlocks()) {
-                            output.accept(holder.get());
-                        }
-                    })
-                    .build());
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> RTSBUILDING_TAB = Platform.registerCreativeTab(
+            CREATIVE_TABS, "rtsbuilding",
+            () -> new ItemStack(RtsItems.RTS_TERMINAL.get()),
+            (parameters, output) -> {
+                for (var holder : RtsItems.getCreativeTabItems()) {
+                    output.accept(holder.get());
+                }
+                for (var holder : RtsBlocks.getCreativeTabBlocks()) {
+                    output.accept(holder.get());
+                }
+            });
 
     // ============================================================
     //  Registration entry point

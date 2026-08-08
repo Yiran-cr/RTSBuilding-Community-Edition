@@ -172,6 +172,22 @@ public final class BuilderScreenEventRouter {
 
         d.onMouseScroll(event -> {
             if (fw.mouseScrolled(event.x(), event.y(), event.scrollX(), event.scrollY())) return CONSUMED;
+            var lineBrush = kernel.renderPipeline().lineBrush;
+            // 选终点/线确认阶段：Ctrl+滚轮调整起始点高度，直接滚轮调整终止点高度
+            if (lineBrush.isPicking() || lineBrush.isAdjusting()) {
+                int dir = event.scrollY() > 0.0D ? 1 : -1;
+                if (isCtrlDown()) {
+                    lineBrush.adjustStartHeight(dir);
+                } else {
+                    lineBrush.adjustEndHeight(dir);
+                }
+                return CONSUMED;
+            }
+            // 墙模式墙高调整（阶段二）：滚轮调整墙高
+            if (lineBrush.isHeightAdjusting()) {
+                lineBrush.adjustWallHeight(event.scrollY() > 0.0D ? 1 : -1);
+                return CONSUMED;
+            }
             if (!lb.isClickButtonSelected()
                     && kernel.renderPipeline().boxSelector.handleScroll(event.scrollY())) return CONSUMED;
             if (screen.isMouseOverRtsPanelApi(event.x(), event.y())) return CONSUMED;
@@ -191,6 +207,14 @@ public final class BuilderScreenEventRouter {
             if (fw.keyPressed(event.keyCode(), event.scanCode(), event.modifiers())) return CONSUMED;
             if (event.keyCode() == GLFW.GLFW_KEY_ESCAPE && eih.isInteractionPanelOpen()) {
                 eih.closeInteractionPanel();
+                return CONSUMED;
+            }
+            // 线/墙画笔活跃阶段按 ESC：逐级取消当前阶段（READY→HEIGHT→CONFIRM→全部），
+            // 每按一次只回退一个阶段，不退出 RTS 模式；全部取消后再按 ESC 才走下方
+            // P_FALLBACK 的关闭逻辑退出 RTS。
+            if (event.keyCode() == GLFW.GLFW_KEY_ESCAPE
+                    && kernel.renderPipeline().lineBrush.isActive()) {
+                kernel.renderPipeline().lineBrush.cancelStage();
                 return CONSUMED;
             }
             return PASS;
@@ -321,5 +345,11 @@ public final class BuilderScreenEventRouter {
         long window = Minecraft.getInstance().getWindow().getWindow();
         return GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS
                 || GLFW.glfwGetKey(window, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+    }
+
+    private static boolean isCtrlDown() {
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        return GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS
+                || GLFW.glfwGetKey(window, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
     }
 }

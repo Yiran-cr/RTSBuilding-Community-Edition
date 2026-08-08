@@ -15,8 +15,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.config.IConfigSpec;
 import net.neoforged.fml.config.ModConfig;
@@ -50,23 +48,12 @@ public final class Platform {
         return DeferredRegister.create(Registries.ITEM, RtsbuildingMod.MODID);
     }
 
-    @SuppressWarnings("unchecked")
     public static DeferredRegister<EntityType<?>> entityRegister() {
-        return (DeferredRegister<EntityType<?>>) (DeferredRegister<?>)
-                DeferredRegister.create(Registries.ENTITY_TYPE, RtsbuildingMod.MODID);
-    }
-
-    public static DeferredRegister<BlockEntityType<?>> blockEntityRegister() {
-        return (DeferredRegister<BlockEntityType<?>>) (DeferredRegister<?>)
-                DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, RtsbuildingMod.MODID);
+        return DeferredRegister.create(Registries.ENTITY_TYPE, RtsbuildingMod.MODID);
     }
 
     public static DeferredRegister<CreativeModeTab> creativeTabRegister() {
         return DeferredRegister.create(Registries.CREATIVE_MODE_TAB, RtsbuildingMod.MODID);
-    }
-
-    public static void registerModBus(IEventBus modBus, DeferredRegister<?>... registers) {
-        for (var r : registers) r.register(modBus);
     }
 
     // ======================================================================
@@ -74,8 +61,9 @@ public final class Platform {
     // ======================================================================
 
     public static DeferredHolder<CreativeModeTab, CreativeModeTab> registerCreativeTab(
-            String id, Supplier<ItemStack> icon, CreativeModeTab.DisplayItemsGenerator items) {
-        return creativeTabRegister().register(id, () -> CreativeModeTab.builder()
+            DeferredRegister<CreativeModeTab> tabRegister, String id,
+            Supplier<ItemStack> icon, CreativeModeTab.DisplayItemsGenerator items) {
+        return tabRegister.register(id, () -> CreativeModeTab.builder()
                 .title(Component.translatable("itemGroup." + id))
                 .icon(() -> icon.get())
                 .displayItems(items)
