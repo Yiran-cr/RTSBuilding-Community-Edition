@@ -40,7 +40,8 @@ public final class LineBrushRenderPass implements RenderPass {
         return mc.screen instanceof com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen
                 && brush.isActive()
                 && brush.getStart() != null
-                && brush.getHover() != null;
+                // 球形状几何只依赖球心+半径，不要求 hover 非空；其余形状需要悬停点作端点/半径
+                && (brush.isSphereActive() || brush.getHover() != null);
     }
 
     @Override
@@ -49,13 +50,14 @@ public final class LineBrushRenderPass implements RenderPass {
         if (mc.level == null || mc.getCameraEntity() == null) return;
         Vec3 cameraPos = mc.getCameraEntity().getEyePosition(partialTick);
 
-        // 墙模式墙高调整（阶段二）渲染墙体（含高度扩展），其余阶段渲染走向线
-        boolean showWall = brush.isWallActive() && brush.isHeightAdjusting();
-        List<BlockPos> line = showWall ? brush.computeWallPositions() : brush.computeLinePositions();
+        // 当前「形状 × 阶段」应渲染的方块列表（圆/球在选点阶段即渲染完整形状，
+        // 墙/面/体仅在扩展阶段渲染扩展结果，其余阶段渲染走向线）
+        List<BlockPos> line = brush.computePositions();
 
-        // 确认阶段（线微调 / 墙高调整）：线框闪烁提示玩家再次右键确认
+        // 任一确认阶段（线微调 / 宽度 / 高度 / 球半径）：线框闪烁提示玩家再次右键确认
         float flicker;
-        if (brush.isAdjusting() || brush.isHeightAdjusting()) {
+        if (brush.isAdjusting() || brush.isWidthAdjusting() || brush.isHeightAdjusting()
+                || brush.isRadiusAdjusting()) {
             double phase = Math.sin(System.currentTimeMillis() / 160.0D);
             flicker = 0.30F + 0.70F * (float) (0.5D + 0.5D * phase);
         } else {

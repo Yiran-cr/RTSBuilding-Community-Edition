@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RTS Building — 方块放置/破坏链路检查报告</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a212b;
+    --panel-2: #222c38;
+    --border: #2e3a48;
+    --text: #d5dde6;
+    --muted: #8b98a7;
+    --accent: #4da3ff;
+    --green: #3ddc84;
+    --red: #ff5d6c;
+    --yellow: #ffc94d;
+    --purple: #b184ff;
+    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
+    padding: 40px 20px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { margin-bottom: 40px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: .5px; }
+  h1 .dot { color: var(--accent); }
+  .sub { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .tags { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag {
+    font-size: 12px; padding: 3px 10px; border-radius: 20px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  }
+  .tag b { color: var(--text); font-weight: 600; }
+
+  section { margin-bottom: 36px; }
+  h2 {
+    font-size: 19px; margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h2 .num {
+    display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center;
+    border-radius: 6px; background: var(--panel-2); color: var(--accent);
+    font-size: 13px; margin-right: 10px; border: 1px solid var(--border);
+  }
+  h3 { font-size: 15px; color: var(--accent); margin: 16px 0 10px; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 14px;
+  }
+  .card h4 { font-size: 14px; margin-bottom: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; }
+  td code, .code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--purple);
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px;
+  }
+  tr:hover td { background: var(--panel-2); }
+
+  .flow { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; }
+  .step { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .step .box {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 12px; flex: 1;
+  }
+  .step .box b { color: var(--text); }
+  .step .box.srv { border-left: 3px solid var(--accent); }
+  .step .box.cli { border-left: 3px solid var(--green); }
+  .step .arrow { color: var(--muted); font-size: 14px; padding-left: 8px; }
+  .step:last-child .arrow { display: none; }
+
+  .badge {
+    display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 4px; margin-left: 6px;
+    vertical-align: middle; font-weight: 600;
+  }
+  .b-srv { background: #12355e; color: var(--accent); }
+  .b-cli { background: #0f3d2a; color: var(--green); }
+  .b-block { background: #3d2a0f; color: var(--yellow); }
+  .b-fix { background: #4a1420; color: var(--red); }
+
+  .issue { border-left: 3px solid var(--red); }
+  .issue.fixed { border-left-color: var(--green); }
+  .issue .why { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .issue .why code { color: var(--purple); }
+
+  .note { font-size: 13px; color: var(--muted); background: var(--panel-2); border-radius: 8px; padding: 10px 14px; }
+  .note code { color: var(--purple); }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+  .path { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>RTS Building <span class="dot">·</span> 方块放置 / 破坏链路检查报告</h1>
+  <div class="sub">NeoForge 1.21.1 · 客户端 → 网络 → 服务端放置与挖掘链路深度审查</div>
+  <div class="tags">
+    <span class="tag">模块：<b>rtsbuilding-main / rtsbuilding-common</b></span>
+    <span class="tag">状态：<b>已走查并修复</b></span>
+    <span class="tag">边界 <b>5</b> · 断点 <b>5</b> · 无效 <b>6</b> · 冗余 <b>5</b> · 保留 <b>3</b></span>
+    <span class="tag">结果：<b>BUILD SUCCESSFUL</b></span>
+  </div>
+</header>
+
+<!-- ================= 类职责 ================= -->
+<section>
+  <h2><span class="num">1</span>核心类职责</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>类</th><th>位置</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td><code>BuildInteractionHandler</code></td><td class="path">client/presentation/panel/handler/</td><td>左键挖掘 / 右键放置交互入口。</td></tr>
+        <tr><td><code>BuildingModule</code></td><td class="path">client/infrastructure/module/building/</td><td>放置请求组装（quickBuild 语义）。</td></tr>
+        <tr><td><code>RtsPlacementExecutor</code></td><td class="path">server/service/placement/</td><td>交互式放置（useItemOn）执行与结果记录。</td></tr>
+        <tr><td><code>RtsPlacementQuickBuild</code></td><td class="path">server/service/placement/</td><td>快速建造（预解析状态计划 + 直接 setBlock）。</td></tr>
+        <tr><td><code>RtsPlacementBatch</code></td><td class="path">server/service/placement/</td><td>批放置作业队列与每 tick 节流执行。</td></tr>
+        <tr><td><code>RtsMiningStateMachine</code></td><td class="path">server/service/mining/</td><td>单方块/批次挖掘状态机与破坏执行。</td></tr>
+        <tr><td><code>RtsDestructionBatch</code></td><td class="path">server/service/destruction/</td><td>区域破坏批次作业。</td></tr>
+        <tr><td><code>AreaOperationExecutor</code></td><td class="path">rtsbuilding-common/common/</td><td>区域位置生成与目标过滤（放置侧已弃用）。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 链路 ================= -->
+<section>
+  <h2><span class="num">2</span>方块放置 / 破坏链路</h2>
+
+  <h3>2.1 放置链（PLACE_BLOCK）</h3>
+  <div class="card">
+    <div class="flow">
+      <div class="step"><div class="box cli"><b>客户端</b> — BuilderScreen 右键 → BuildInteractionHandler → BuildingModule.placeSelected</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box cli"><b>客户端</b> — RtsClientPacketGateway.sendPlace → C2SAction</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — ServerActionHandler（isBuildMode 守卫）</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — PLACE_SINGLE Pipeline → RtsPlacementBatch 队列</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — 每 tick 执行：useItemOn / setBlock 真放块</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box cli"><b>客户端</b> — S2CRtsPlaceAnimationPayload 动画 + 工作流进度</div></div>
+    </div>
+  </div>
+
+  <h3>2.2 破坏链（MINE / ULTIMINE / AREA_MINE / AREA_DESTROY）</h3>
+  <div class="card">
+    <div class="flow">
+      <div class="step"><div class="box cli"><b>客户端</b> — 左键 → BuildInteractionHandler → MiningModule</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box cli"><b>客户端</b> — RtsClientPacketGateway（sendMineStart / sendUltimineStart）</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — ServerActionHandler（isBuildMode 守卫）</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — Mining Pipeline → ToolBorrow → 每 tick 驱动</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — destroyBlock 真破坏 → 吸掉落 → finalize</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box cli"><b>客户端</b> — 裂纹 / 批次进度 / 破坏动画 S2C 反馈</div></div>
+    </div>
+  </div>
+
+  <h3>2.3 关键机制</h3>
+  <div class="card">
+    <div class="note">
+      <b>交互式放置</b>（<code>RtsPlacementExecutor</code>）用 face + hitOffset 构造 BlockPlaceContext，按命中面偏移放置；<br>
+      <b>快速建造</b>（<code>RtsPlacementQuickBuild</code>）预解析状态计划 + <code>BlockPlacer.setBlock</code> 精确放置，走 <code>quickBuild=true</code> 路径。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 问题与修复 ================= -->
+<section>
+  <h2><span class="num">3</span>走查发现的问题与修复</h2>
+
+  <h3>3.1 边界问题（B，5 项已修复）</h3>
+
+  <div class="card issue fixed">
+    <h4>B1 · 破坏作业挂起时 token 为 null 导致 NPE <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：<code>RtsBatchJobTickOps.checkPausedOrCancelled</code> 对 <code>workflowEntryId=-1</code> 返回 <code>WorkflowTokenHolder(null)</code>，<code>tickDestroyJobs</code> 直接 <code>.get().suspend()</code> 抛 NoSuchElementException。<br>修复：两处改用 <code>tokenOpt.ifPresent(...)</code>，null token 安全跳过。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B2 · 区域挖掘坐标 clamp 整数溢出 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：<code>clampedMinX + AREA_MINE_MAX_SIZE - 1</code> 用 int 运算，min 逼近 Integer.MAX_VALUE 时溢出为负。<br>修复：新增 <code>clampMaxAxis</code> 用 long 中间量计算并 clamp 到 Integer.MAX_VALUE。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B3 · 放置打开远程菜单后缺少终止分支 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：<code>placeWithStorageItem</code> 检测到菜单变化后调 <code>markRemoteMenuOpen</code> 但没 return，继续执行 fallback 放置；且已从 carried 扣减物品。<br>修复：打开菜单分支补 <code>return false</code>，并先将 carried 扣减物归还再同步权威状态。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B4 · 工具原型断链：isSelectedMiningToolRequested 恒为 false <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：网络入口对 MINE/ULTIMINE/AREA 硬编码 <code>toolPrototype=EMPTY</code>，而该判断要求原型非空 → 恒 false，工具借用退化为使用主手。<br>修复：支持空原型，按 <code>toolItemId</code> 解析物品并以"不可堆叠=工具"启发式判断；<code>borrowMiningTool</code> 按 itemId 构造最小原型。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B5 · 命中偏移 hitOffset 未归一化 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：<code>hitOffset = hitX - clickedPos.getX()</code> 直接使用客户端上报 double，有限值任意大小都放行。<br>修复：<code>sanitizeHitOffset</code> 有限值 clamp 到 [0,1]，非有限值回退基于面的默认偏移。</p>
+  </div>
+
+  <h3>3.2 断点问题（C，4 项已修复 · 1 项保留）</h3>
+
+  <div class="card issue fixed">
+    <h4>C1 · QUICK_BUILD 形状放置客户端无入口 + 死 UI 状态 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：<code>BuildingModule.placeSelected</code> 恒传 <code>quickBuild=false</code>，且 quickBuildOpen 三件套与 buildShapeOrdinal 无调用方。<br>修复：删除死 UI 状态；保留服务端 QUICK_BUILD 能力供 API 使用。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>C2 · AreaOperationExecutor 放置侧方法全部无调用方 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：generatePositions 等 5 个方法全仓库无调用，与 RtsPlacementQuickBuild 形成两套并存实现。<br>修复：删除 5 个死方法，保留 scanAreaMineTargets 与 filterBreakableTargets。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>C3 · StatePlacementPlan.selectedStorageItem 死字段 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：record 组件从未被读取，Javadoc 声称"false=使用主手堆叠"与实际"恒从储存提取"不符。<br>修复：删除该组件及构造参数。</p>
+  </div>
+  <div class="card issue">
+    <h4>C4 · allowPlacedBlockRecovery 网络链路恒 false <span class="status badge b-block">保留（合理）</span></h4>
+    <p class="why">取回功能由独立 BREAK 动作（<code>RtsPlacedRecoveryService.breakPlaced</code>）承担，属产品行为；服务端恢复分支保留给 API 调用方。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>C5 · startUltimine 未设置 toolPrototype <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：与 mine/areaMine 不同，startUltimine 构建 MiningContext 时未调 <code>.toolPrototype(...)</code>。<br>修复：随 B4 一并修复——ToolBorrowPipe / borrowMiningTool 空原型时按 toolItemId 解析。</p>
+  </div>
+
+  <h3>3.3 无效代码（D，5 项已修复 · 1 项保留）</h3>
+
+  <div class="card issue fixed">
+    <h4>D1 · 静态 RtsPlacementService 整个类无调用方 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">约 274 行与 RtsPlacementServiceImpl 逐行重复且无调用。删除整个文件，统一走 <code>RtsServer.get().placement()</code> 实例服务。</p>
+  </div>
+  <div class="card issue">
+    <h4>D2 · ActionType 中 4 个 @Deprecated 占位枚举值 <span class="status badge b-block">保留（协议）</span></h4>
+    <p class="why">C2SAction 按 ordinal 编解码，删除枚举值使后续序号前移导致新旧端协议错位，属协议稳定性护栏，标注保留。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>D3 · RtsPlacementBatch 重复 Javadoc <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">enqueuePlaceBatch 前叠两段 Javadoc，第一段引用已删除类（编译断链）。合并为一段并改引 NetworkConstants#MAX_POSITIONS。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>D4 · placeSelectedInternal 死参数 quickBuild <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">方法体内从不读取 quickBuild（快速建造走独立路径）。删除参数并同步更新 RtsPlacementBatch 调用点。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>D5 · TopBarPanel 空方法与死字段 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">空方法 createButtons()；字段 guideOpen 与其访问器无调用。全部删除。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>D6 · StatePlacementPlan.selectedStorageItem <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">与 C3 同一缺陷，归入 C3 删除。</p>
+  </div>
+
+  <h3>3.4 冗余代码（E，4 项已修复 · 1 项保留）</h3>
+
+  <div class="card issue fixed">
+    <h4>E1 · 静态 RtsPlacementService 与 RtsPlacementServiceImpl 逐行重复 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">约 220 行逻辑完全复制。同 D1，删除静态版。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>E2 · generateDestroyPositions 纯转发 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">仅转发 generatePositions 且本身无调用方。归入 C2 删除。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>E3 · sendPlace 8 参数重载冗余 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">8 参重载仅转发 9 参版（quickBuild=false）。删除重载，调用点直调 9 参版显式传 false。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>E4 · extractSelectedFromNetwork 纯转发 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">仅转发 Cached 版且参数顺序不同，极易误用。删除转发方法，调用点改走 Cached 版。</p>
+  </div>
+  <div class="card issue">
+    <h4>E5 · 两套形状放置实现并存 <span class="status badge b-block">保留（架构）</span></h4>
+    <p class="why">AreaShapeGenerator 体系（放置侧无人接线）与 RtsPlacementQuickBuild（实际使用）功能重叠。统一属架构级重构、风险高，留作后续独立任务。</p>
+  </div>
+</section>
+
+<!-- ================= 边界与设计 ================= -->
+<section>
+  <h2><span class="num">4</span>边界与设计说明</h2>
+  <div class="card">
+    <ul style="margin-left:18px; font-size:13.5px">
+      <li style="margin-bottom:8px"><b>工具借用语义</b>：空原型时按 itemId + "不可堆叠=工具"启发式判定，避免把红石/种子误判为工具。</li>
+      <li style="margin-bottom:8px"><b>命中偏移归一化</b>：客户端 hitOffset clamp 到 [0,1]，非有限值按面回退，纵深防御。</li>
+      <li style="margin-bottom:8px"><b>快速建造 vs 交互式放置</b>：形状放置走快速路径（精确 setBlock），单点/交互走 useItemOn（按面偏移），两套语义需注意边界。</li>
+      <li style="margin-bottom:8px"><b>协议 ordinal 护栏</b>：已移除 action 用 @Deprecated 占位而非删除，防新旧端错位。</li>
+      <li><b>建议后续</b>：统一 AreaShapeGenerator 与 RtsPlacementQuickBuild 两套形状放置实现（架构重构，单独评估）。</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  RTS Building 方块放置 / 破坏链路检查报告 · 生成于 NeoForge 1.21.1 / Java 21 · 16 源文件 + 1 build.gradle，删除 1 源文件
+</footer>
+
+</div>
+</body>
+</html>

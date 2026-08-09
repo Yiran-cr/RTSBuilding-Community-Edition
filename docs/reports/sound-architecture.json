@@ -1,0 +1,129 @@
+{
+  "id": "sound-architecture",
+  "title": "放置 / 破坏音效链路",
+  "subtitle": "NeoForge 1.21.1 · 远程建造模式下音效链路、限流、原版拦截与边界分析",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 5 · 修复 4 · 保留 1",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "RtsPlacementSound", "path": "server/service/placement/", "desc": "放置音效与动画统一出口：动画包发送 + 放置音（限流 1/tick）。" },
+    { "name": "SoundService", "path": "server/service/", "desc": "底层发包（<code>ClientboundSoundPacket</code>）与工具/消耗品交互音。" },
+    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "客户端收包：<code>handleBreakAnimation</code> 在本地主相机位置播放破坏音（限流 1/tick）。" },
+    { "name": "ClientPacketListenerMixin", "path": "mixin/", "desc": "拦截服务端广播的 2001 破坏事件（原版音+粒子）。" },
+    { "name": "ClientLevelMixin", "path": "mixin/", "desc": "拦截 <code>addDestroyBlockEffect</code> 破坏粒子渲染入口，双兜底。" },
+    { "name": "RtsMiningNetworkHelper", "path": "server/service/mining/", "desc": "发 <code>S2CRtsBreakAnimationPayload</code> 驱动客户端本地破坏音。" },
+    { "name": "S2CRtsBreakAnimationPayload", "path": "network/builder/", "desc": "破坏确认包：<code>pos</code> + 破坏前 <code>state</code>。" },
+    { "name": "S2CRtsPlaceAnimationPayload", "path": "network/builder/", "desc": "放置确认包：写入 <code>RingBufferHolder</code> 做放置动画。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 放置音效链路",
+      "type": "note",
+      "note": "所有放置路径统一为 <strong>动画 + 声音</strong> 双发，声音经服务端 <code>sendDirectSound</code> 在<strong>相机坐标</strong>播放，每 tick 每玩家限流 1 次。"
+    },
+    {
+      "title": "2.2 触发路径",
+      "type": "table",
+      "headers": ["路径", "调用点", "音效", "动画"],
+      "rows": [
+        ["存储物品放置", "<span class='path'>RtsPlacementExecutor:352-354</span>", "✅ 放置音", "✅"],
+        ["主手物品放置", "<span class='path'>RtsPlacementExecutor:382-383</span>", "✅ 放置音", "✅"],
+        ["快捷建造 QuickBuild", "<span class='path'>RtsPlacementQuickBuild:204-205</span>", "✅ 放置音", "✅"],
+        ["远程交互放方块", "<span class='path'>RtsInteractionServiceImpl:134-135</span>", "✅ 放置音", "✅"],
+        ["蓝图放置", "<span class='path'>RtsBlueprintServiceImpl:129</span>", "✅ 放置音", "❌ 批量静默（刻意）"]
+      ]
+    },
+    {
+      "title": "2.3 时序",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "放置成功，<code>detectPlacedPos</code> 定位方块" },
+        { "side": "srv", "text": "发 <code>S2CRtsPlaceAnimationPayload</code> 动画包" },
+        { "side": "srv", "text": "<code>playRemotePlacedBlockSound</code> 限流通过后在相机坐标发声音包" },
+        { "side": "cli", "text": "<code>handlePlaceAnimation</code> → <code>RingBufferHolder</code> 放置动画" },
+        { "side": "cli", "text": "<code>handleSoundEvent</code> 播放，音源=相机=听者 → 无衰减" }
+      ]
+    },
+    {
+      "title": "2.4 放置音关键机制",
+      "type": "note",
+      "note": "<b>放置音限流</b>（服务端）：<code>MAX_SOUNDS_PER_TICK = 1</code>，静态 Map 按玩家计数、按 tick 重置。音源=相机坐标（回落玩家眼睛位置）。"
+    },
+    {
+      "title": "2.5 破坏音效链路",
+      "type": "note",
+      "note": "破坏音统一由<strong>客户端本地播放</strong>：音源固定为主相机位置（=听者），消除跨端相机坐标不同步导致的“听不到”问题。"
+    },
+    {
+      "title": "2.6 挖掘路径",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "<code>destroyMinedBlock</code> 破坏成功" },
+        { "side": "srv", "text": "广播 <code>levelEvent(2001)</code>（原版破坏音+粒子）" },
+        { "side": "cli", "text": "<code>ClientPacketListenerMixin</code> 拦截 2001" },
+        { "side": "srv", "text": "<code>sendBreakAnimation</code> 发破坏确认包" },
+        { "side": "cli", "text": "<code>handleBreakAnimation</code>：清裂纹 + 本地播放破坏音（主相机，限流 1/tick）" }
+      ]
+    },
+    {
+      "title": "2.7 放置回收路径",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "<code>RtsPlacedRecoveryService</code> 破坏自建方块，广播 2001" },
+        { "side": "cli", "text": "<code>ClientPacketListenerMixin</code> 拦截 2001" },
+        { "side": "srv", "text": "补发 <code>sendBreakAnimation</code>" },
+        { "side": "cli", "text": "<code>handleBreakAnimation</code> 本地播放破坏音" }
+      ]
+    },
+    {
+      "title": "2.8 破坏音关键机制",
+      "type": "note",
+      "note": "<b>破坏音限流</b>（客户端）：<code>MAX_BREAK_SOUNDS_PER_TICK = 1</code>。音源=客户端主相机 <code>getMainCamera()</code>，音效取自被破坏方块 <code>getSoundType().getBreakSound()</code>。"
+    },
+    {
+      "title": "2.9 原版音效拦截（双 mixin 兜底）",
+      "type": "cards",
+      "cards": [
+        { "title": "ClientPacketListenerMixin · 网络层", "text": "拦截 <code>handleLevelEvent</code>，RTS 激活且事件类型 2001 时 <code>ci.cancel()</code>。阻断服务端广播的原版破坏音与粒子。" },
+        { "title": "ClientLevelMixin · 渲染层", "text": "拦截 <code>addDestroyBlockEffect</code>（2001 粒子渲染入口），RTS 激活时跳过。兜底阻断本地触发的破坏粒子。" }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 破坏音“需靠近方块才能听见”",
+      "status": "fixed",
+      "why": "根因：<code>handleBreakAnimation</code> 曾触发 <code>levelEvent(2001, pos, ...)</code>，音源在<strong>被破坏方块位置</strong>，相机远离时衰减到无声。修复：改为客户端本地 <code>playLocalSound</code> 在主相机位置播放。"
+    },
+    {
+      "title": "② 完全听不到破坏音",
+      "status": "fixed",
+      "why": "根因：服务端 <code>sendDirectSound</code> 依赖服务端相机坐标（客户端上报有延迟/变化检测停发/可能回退本体位置），音源与客户端听者距离大 → 衰减为 0。修复：破坏音完全改为客户端本地播放。"
+    },
+    {
+      "title": "③ 放置回收破坏音断点",
+      "status": "fixed",
+      "why": "根因：<code>RtsPlacedRecoveryService</code> 走服务端 <code>playRemoteBlockBreakSound</code>，与挖掘路径不一致。修复：补发 <code>sendBreakAnimation</code> 走客户端本地播放。"
+    },
+    {
+      "title": "④ 死代码 <code>playRemoteBlockBreakSound</code>",
+      "status": "fixed",
+      "why": "修复 ③ 后无调用方，已删除并同步更新类注释。"
+    },
+    {
+      "title": "⑤ 工具使用音位置",
+      "status": "kept",
+      "why": "<code>SoundService.playRemoteUseSound</code>（锄头耕地等）音源在方块位置。这类操作反馈音语义上应贴近操作目标，且不在放置/破坏音范围内，暂不调整。"
+    }
+  ],
+  "boundaries": [
+    "<b>放置音与破坏音限流独立</b>：放置走服务端桶，破坏走客户端桶，互不挤占。",
+    "<b>蓝图放置只播音不播动画</b>：批量蓝图逐个发动画包会网络过载，静默动画是刻意取舍。",
+    "<b>破坏音限流防噪音</b>：连锁挖掘每 tick 破坏 8 格，每 tick 仅 1 次。",
+    "<b>相机位置回退</b>：<code>cameraOrEyePos</code> 在相机未激活时回退玩家眼睛位置。",
+    "<b>其他玩家音效保留</b>：原版 2001 仅对 RTS 玩家自身拦截，其他玩家在方块附近仍能听到真实破坏音。"
+  ]
+}

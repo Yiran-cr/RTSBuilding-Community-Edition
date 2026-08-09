@@ -1,0 +1,76 @@
+{
+  "id": "storage-io",
+  "title": "储存空间输入输出链路",
+  "subtitle": "NeoForge 1.21.1 · 客户端交互 → 网络层 → 服务端业务 → 存储 handler 边界的完整 I/O 链路",
+  "tags": {
+    "module": "rtsbuilding-main / rtsbuilding-common",
+    "status": "已走查并修复",
+    "counts": "边界 8 · 断点 5 · 无效 10 · 冗杂 4",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "GridInputHandler", "path": "client/presentation/plugin/", "desc": "网格点击拿起/放回/Shift 转移。" },
+    { "name": "RtsClientPacketGateway", "path": "client/network/", "desc": "组装 NBT → C2SAction → 发送到服务端。" },
+    { "name": "ServerActionHandler", "path": "network/handler/", "desc": "服务端分发入口（转移/页面请求等）。" },
+    { "name": "RtsTransferServiceImpl", "path": "server/service/impl/", "desc": "转移门面 → RtsTransferPlayerIntegration。" },
+    { "name": "RtsTransferInserter / Extractor", "path": "server/service/transfer/", "desc": "存/取核心逻辑（含兜底与归还）。" },
+    { "name": "RtsLinkedHandlerViews", "path": "server/storage/", "desc": "linked handler 视图（allowStore 门禁）。" },
+    { "name": "RtsPageServiceImpl", "path": "server/service/impl/", "desc": "页面构建、搜索、最近条目、持久化。" },
+    { "name": "RtsPageCore / RtsPageSharedHelpers", "path": "server/service/page/", "desc": "页面条目构建与背包边界工具。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 输入 / 输出链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "GridInputHandler（点击拿起/放回/Shift 转移）、InteractionPanel、Funnel" },
+        { "side": "cli", "text": "RtsClientPacketGateway 组装 NBT → C2SAction" },
+        { "side": "srv", "text": "ServerActionHandler.dispatch" },
+        { "side": "srv", "text": "RtsTransferServiceImpl → RtsTransferPlayerIntegration → Inserter/Extractor" },
+        { "side": "srv", "text": "RtsLinkedHandlerViews（allowStore 门禁）→ 原始 handler（AE2 / BD / RS / 原版容器）" },
+        { "side": "cli", "text": "S2CRtsStoragePagePayload / CarriedSync / StorageDirty 回执" }
+      ]
+    },
+    {
+      "title": "2.2 读取 / 页面刷新链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "StorageState.requestStoragePage / setSearch → REQUEST_PAGE" },
+        { "side": "srv", "text": "RtsPageServiceImpl.requestPage → resolveLinkedHandlers → RtsPageCore.build" },
+        { "side": "cli", "text": "S2CRtsStoragePagePayload → StorageModule.applyStoragePage → GridRenderer" }
+      ]
+    },
+    {
+      "title": "2.3 关键机制",
+      "type": "note",
+      "note": "<b>背包与存储条目合并</b>：同一物品只保留一条，数量 = 存储 + 背包加总；点击拿起从网络提取。<br><b>carried 权威回写</b>：carried 一律以服务端 S2CRtsCarriedSyncPayload 权威状态为准，不做乐观 setCarried。"
+    }
+  ],
+  "issues": [
+    { "title": "B1 · 放回储存的携带数量固定为 64", "status": "fixed", "why": "根因：sendReturnCarried 固定传 64，大堆叠 mod 时只存回 64 个。修复：三处改为传实际数量 carried.getCount()。" },
+    { "title": "B2 · 点击存储条目兜底抽取玩家背包", "status": "fixed", "why": "根因：存储不足时兜底从玩家背包抽取，显示与操作不一致。修复：条目合并后 pickup 恢复网络提取（存储优先、背包兜底）。" },
+    { "title": "B3 · 转移操作缺少 RTS 模式门禁", "status": "fixed", "why": "根因：四个转移 case 不校验相机激活。修复：统一增加 if(!RtsCameraManager.isActive(p)) return。" },
+    { "title": "B4 · S2C 页面载荷中 linked 详情列表长度不齐", "status": "fixed", "why": "根因：编码器用 Math.min 截断列表而 positions 单独全写。修复：按 linkedPositions.size() 统一等长写入，缺失用默认值补齐。" },
+    { "title": "B5 · 最近条目数量两端不一致", "status": "fixed", "why": "根因：服务端上限 24、客户端硬编码 16。修复：共享 RECENT_ENTRY_LIMIT = 24 常量。" },
+    { "title": "B6 · NBT 变体不匹配时物品丢失风险", "status": "fixed", "why": "根因：提取是真实执行，归还失败即物品永久丢失。修复：新增 refundExtractedToSlot，优先插回刚清空的槽位，保证数据安全优先。" },
+    { "title": "B7 · 缓存直接保留 handler 返回的可变栈引用", "status": "fixed", "why": "根因：对 ReportedCountItemHandler 直接保留引用，缓存可被污染。修复：统一 stack.copy() 浅拷贝。" },
+    { "title": "B8 · 每次 REQUEST_PAGE 触发全量构建 + 全量写盘", "status": "fixed", "why": "根因：每次搜索按键全量构建+序列化+写盘。修复：客户端 200ms 防抖；服务端条件写盘。" },
+    { "title": "C1 · 放回失败时 carried 不同步（原怀疑）", "status": "kept", "why": "RETURN_CARRIED 无条件发送 S2CRtsCarriedSyncPayload，客户端得以恢复，链路已被总是同步逻辑覆盖。" },
+    { "title": "C2 · 乐观 carried 数量与实际提取量脱节", "status": "fixed", "why": "根因：客户端乐观 setCarried，服务端实际提取量可能更少。修复：移除乐观 setCarried，以服务端权威回写为准。" },
+    { "title": "C3 · 最近使用条目由双管线维护，删除不生效", "status": "fixed", "why": "根因：客户端删除只做本地屏蔽，服务端数据从未删除。修复：打通服务端权威删除链路 REMOVE_RECENT_ENTRY。" },
+    { "title": "C4 · C2SAction 非法 ordinal 解码为 null 触发空指针", "status": "fixed", "why": "根因：decode 对越界 ordinal 返回 null，handle 直接访问。修复：handle 入口先判空。" },
+    { "title": "C5 · StorageModule.requestPage 断头路径", "status": "fixed", "why": "无人调用，删除该方法。" },
+    { "title": "D1-D10 · 无效代码 17 处删除", "status": "fixed", "why": "removeLinkedRef / refundItem / 缓存提取路径 / 3 参重载 / keySet getter / sessionPageSize / 栈重载等全部零调用，逐一删除。" },
+    { "title": "R1 · 背包边界工具双份实现", "status": "fixed", "why": "RtsPageSharedHelpers 与 RtsTransferUtils 重复，常量 36 双份。修复：统一改用 RtsPageSharedHelpers。" },
+    { "title": "R2 · 两个 fallback 存储方法逐行重复", "status": "fixed", "why": "约 50 行几乎逐行相同。修复：合并为带 preferExisting 布尔参数的私有核心方法。" },
+    { "title": "R3 · 转移服务双层转发", "status": "kept", "why": "RtsTransferServiceImpl 是公开 API 门面，合并变更签名回归风险高；结构性分层保留。" },
+    { "title": "R4 · RtsStoragePageBuilder 纯转发门面", "status": "kept", "why": "大量调用点（10+ 处）且文档注明为兼容门面，删除需大范围改动。" }
+  ],
+  "boundaries": [
+    "<b>背包与存储条目合并</b>：同一物品只保留一条，数量加总；模式取任一双向则双向。",
+    "<b>carried 权威</b>：一律以服务端回写为准，移除乐观更新。",
+    "<b>数据安全优先</b>：提取变体不匹配时优先归还，失败随输出返回，不丢物品。",
+    "<b>搜索防抖</b>：客户端 200ms 合并请求 + 服务端条件写盘，缓解大网络性能。",
+    "<b>验证</b>：全模块 compileJava BUILD SUCCESSFUL。"
+  ]
+}

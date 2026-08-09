@@ -138,24 +138,24 @@ public final class ShapeButtonGroup extends AbstractButtonGroup {
         return modeShapes[activeMode];
     }
 
+    /** 建造模式（{@link #MODE_CONSTRUCTION}）下选中的形状索引，见 {@link #SINGLE_BLOCK} 等常量。 */
+    public int getConstructionSelectedShape() {
+        return modeShapes[MODE_CONSTRUCTION];
+    }
+
     /** 建造模式（{@link #MODE_CONSTRUCTION}）下是否选中单方块形状。 */
     public boolean isSingleBlockConstructionSelected() {
         return modeShapes[MODE_CONSTRUCTION] == SINGLE_BLOCK;
     }
 
+    /** 破坏模式（{@link #MODE_DESTRUCTION}）下选中的形状索引，见 {@link #SINGLE_BLOCK} 等常量。 */
+    public int getDestructionSelectedShape() {
+        return modeShapes[MODE_DESTRUCTION];
+    }
+
     /** 破坏模式（{@link #MODE_DESTRUCTION}）下是否选中单方块形状。 */
     public boolean isSingleBlockDestructionSelected() {
         return modeShapes[MODE_DESTRUCTION] == SINGLE_BLOCK;
-    }
-
-    /** 建造模式（{@link #MODE_CONSTRUCTION}）下是否选中"线"形状（画笔画线建造）。 */
-    public boolean isLineConstructionSelected() {
-        return modeShapes[MODE_CONSTRUCTION] == LINE;
-    }
-
-    /** 建造模式（{@link #MODE_CONSTRUCTION}）下是否选中"墙"形状（画线并调整高度建造墙体）。 */
-    public boolean isWallConstructionSelected() {
-        return modeShapes[MODE_CONSTRUCTION] == WALL;
     }
 
     @Override

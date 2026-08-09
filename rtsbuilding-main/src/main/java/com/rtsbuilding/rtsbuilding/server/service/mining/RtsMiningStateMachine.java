@@ -11,9 +11,7 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.execution.SyncPipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.tool.ToolReturnPipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.validation.SessionValidatePipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.workflow.WorkflowCompletePipe;
-import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementSound;
-import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
-import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
+import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import com.rtsbuilding.rtsbuilding.server.util.TemporaryContextSwitcher;
 import com.rtsbuilding.rtsbuilding.server.workflow.core.RtsWorkflowEngine;
 import net.minecraft.core.BlockPos;
@@ -410,7 +408,8 @@ public final class RtsMiningStateMachine {
         if (broken) {
             BlockState resultState = player.serverLevel().getBlockState(pos);
             RtsMiningNetworkHelper.sendBreakAnimation(player, pos, beforeState, resultState);
-            RtsPlacementSound.playRemoteBlockBreakSound(player, player.serverLevel(), pos);
+            // 破坏音由客户端 handleBreakAnimation 在本地主相机位置播放（音源=听者，无衰减且不限跨端坐标）。
+            // 此处不再调用 playRemoteBlockBreakSound，避免对 RTS 玩家自身造成双份声音。
         }
         return new MiningBreakResult(broken, remainder);
     }

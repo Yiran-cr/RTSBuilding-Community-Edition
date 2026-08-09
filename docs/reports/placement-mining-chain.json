@@ -1,0 +1,82 @@
+{
+  "id": "placement-mining-chain",
+  "title": "方块放置 / 破坏链路",
+  "subtitle": "NeoForge 1.21.1 · 客户端 → 网络 → 服务端放置与挖掘链路深度审查",
+  "tags": {
+    "module": "rtsbuilding-main / rtsbuilding-common",
+    "status": "已走查并修复",
+    "counts": "边界 5 · 断点 5 · 无效 6 · 冗余 5 · 保留 3",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "BuildInteractionHandler", "path": "client/presentation/panel/handler/", "desc": "左键挖掘 / 右键放置交互入口。" },
+    { "name": "BuildingModule", "path": "client/infrastructure/module/building/", "desc": "放置请求组装（quickBuild 语义）。" },
+    { "name": "RtsPlacementExecutor", "path": "server/service/placement/", "desc": "交互式放置（useItemOn）执行与结果记录。" },
+    { "name": "RtsPlacementQuickBuild", "path": "server/service/placement/", "desc": "快速建造（预解析状态计划 + 直接 setBlock）。" },
+    { "name": "RtsPlacementBatch", "path": "server/service/placement/", "desc": "批放置作业队列与每 tick 节流执行。" },
+    { "name": "RtsMiningStateMachine", "path": "server/service/mining/", "desc": "单方块/批次挖掘状态机与破坏执行。" },
+    { "name": "RtsDestructionBatch", "path": "server/service/destruction/", "desc": "区域破坏批次作业。" },
+    { "name": "AreaOperationExecutor", "path": "rtsbuilding-common/common/", "desc": "区域位置生成与目标过滤（放置侧已弃用）。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 放置链（PLACE_BLOCK）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "BuilderScreen 右键 → BuildInteractionHandler → BuildingModule.placeSelected" },
+        { "side": "cli", "text": "RtsClientPacketGateway.sendPlace → C2SAction" },
+        { "side": "srv", "text": "ServerActionHandler（isBuildMode 守卫）" },
+        { "side": "srv", "text": "PLACE_SINGLE Pipeline → RtsPlacementBatch 队列" },
+        { "side": "srv", "text": "每 tick 执行：useItemOn / setBlock 真放块" },
+        { "side": "cli", "text": "S2CRtsPlaceAnimationPayload 动画 + 工作流进度" }
+      ]
+    },
+    {
+      "title": "2.2 破坏链（MINE / ULTIMINE / AREA_MINE / AREA_DESTROY）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "左键 → BuildInteractionHandler → MiningModule" },
+        { "side": "cli", "text": "RtsClientPacketGateway（sendMineStart / sendUltimineStart）" },
+        { "side": "srv", "text": "ServerActionHandler（isBuildMode 守卫）" },
+        { "side": "srv", "text": "Mining Pipeline → ToolBorrow → 每 tick 驱动" },
+        { "side": "srv", "text": "destroyBlock 真破坏 → 吸掉落 → finalize" },
+        { "side": "cli", "text": "裂纹 / 批次进度 / 破坏动画 S2C 反馈" }
+      ]
+    },
+    {
+      "title": "2.3 关键机制",
+      "type": "note",
+      "note": "<b>交互式放置</b>（RtsPlacementExecutor）用 face + hitOffset 构造 BlockPlaceContext，按命中面偏移放置；<br><b>快速建造</b>（RtsPlacementQuickBuild）预解析状态计划 + BlockPlacer.setBlock 精确放置，走 quickBuild=true 路径。"
+    }
+  ],
+  "issues": [
+    { "title": "B1 · 破坏作业挂起时 token 为 null 导致 NPE", "status": "fixed", "why": "根因：checkPausedOrCancelled 对 workflowEntryId=-1 返回 WorkflowTokenHolder(null)，tickDestroyJobs 直接 .get().suspend() 抛 NoSuchElementException。修复：两处改用 tokenOpt.ifPresent(...)，null token 安全跳过。" },
+    { "title": "B2 · 区域挖掘坐标 clamp 整数溢出", "status": "fixed", "why": "根因：clampedMinX + AREA_MINE_MAX_SIZE - 1 用 int 运算，min 逼近 Integer.MAX_VALUE 时溢出为负。修复：新增 clampMaxAxis 用 long 中间量计算并 clamp。" },
+    { "title": "B3 · 放置打开远程菜单后缺少终止分支", "status": "fixed", "why": "根因：placeWithStorageItem 检测到菜单变化后没 return，继续执行 fallback 放置。修复：补 return false，并先归还 carried 扣减物再同步权威状态。" },
+    { "title": "B4 · 工具原型断链：isSelectedMiningToolRequested 恒 false", "status": "fixed", "why": "根因：网络入口硬编码 toolPrototype=EMPTY，该判断恒 false，工具借用退化为使用主手。修复：支持空原型，按 toolItemId 解析物品并以不可堆叠=工具启发式判断。" },
+    { "title": "B5 · 命中偏移 hitOffset 未归一化", "status": "fixed", "why": "根因：hitOffset 直接使用客户端上报 double，有限值任意大小都放行。修复：sanitizeHitOffset 有限值 clamp 到 [0,1]，非有限值按面回退。" },
+    { "title": "C1 · QUICK_BUILD 形状放置客户端无入口", "status": "fixed", "why": "根因：BuildingModule.placeSelected 恒传 quickBuild=false，且 quickBuildOpen 三件套无调用方。修复：删除死 UI 状态；保留服务端 QUICK_BUILD 能力。" },
+    { "title": "C2 · AreaOperationExecutor 放置侧方法全部无调用方", "status": "fixed", "why": "根因：generatePositions 等 5 个方法全仓库无调用，与 RtsPlacementQuickBuild 形成两套并存实现。修复：删除 5 个死方法。" },
+    { "title": "C3 · StatePlacementPlan.selectedStorageItem 死字段", "status": "fixed", "why": "根因：record 组件从未被读取，Javadoc 与实际实现不符。修复：删除该组件及构造参数。" },
+    { "title": "C4 · allowPlacedBlockRecovery 网络链路恒 false", "status": "kept", "why": "取回功能由独立 BREAK 动作承担，属产品行为；服务端恢复分支保留给 API 调用方。" },
+    { "title": "C5 · startUltimine 未设置 toolPrototype", "status": "fixed", "why": "根因：与 mine/areaMine 不同，startUltimine 构建 MiningContext 时未调 toolPrototype()。修复：随 B4 一并修复——空原型时按 toolItemId 解析。" },
+    { "title": "D1 · 静态 RtsPlacementService 整个类无调用方", "status": "fixed", "why": "约 274 行与 RtsPlacementServiceImpl 逐行重复且无调用。删除整个文件，统一走实例服务。" },
+    { "title": "D2 · ActionType 中 4 个 @Deprecated 占位枚举值", "status": "kept", "why": "按 ordinal 编解码，删除枚举值使序号前移导致协议错位，属协议稳定性护栏。" },
+    { "title": "D3 · RtsPlacementBatch 重复 Javadoc", "status": "fixed", "why": "enqueuePlaceBatch 前叠两段 Javadoc，第一段引用已删除类。合并为一段并改引 NetworkConstants#MAX_POSITIONS。" },
+    { "title": "D4 · placeSelectedInternal 死参数 quickBuild", "status": "fixed", "why": "方法体内从不读取 quickBuild。删除参数并同步更新 RtsPlacementBatch 调用点。" },
+    { "title": "D5 · TopBarPanel 空方法与死字段", "status": "fixed", "why": "空方法 createButtons()；字段 guideOpen 与其访问器无调用。全部删除。" },
+    { "title": "D6 · StatePlacementPlan.selectedStorageItem", "status": "fixed", "why": "与 C3 同一缺陷，归入 C3 删除。" },
+    { "title": "E1 · 静态 RtsPlacementService 逐行重复", "status": "fixed", "why": "约 220 行逻辑完全复制。同 D1，删除静态版。" },
+    { "title": "E2 · generateDestroyPositions 纯转发", "status": "fixed", "why": "仅转发 generatePositions 且本身无调用方。归入 C2 删除。" },
+    { "title": "E3 · sendPlace 8 参数重载冗余", "status": "fixed", "why": "8 参重载仅转发 9 参版。删除重载，调用点直调 9 参版显式传 false。" },
+    { "title": "E4 · extractSelectedFromNetwork 纯转发", "status": "fixed", "why": "仅转发 Cached 版且参数顺序不同。删除转发方法，调用点改走 Cached 版。" },
+    { "title": "E5 · 两套形状放置实现并存", "status": "kept", "why": "AreaShapeGenerator 体系与 RtsPlacementQuickBuild 功能重叠。统一属架构级重构、风险高，留作后续独立任务。" }
+  ],
+  "boundaries": [
+    "<b>工具借用语义</b>：空原型时按 itemId + 不可堆叠=工具启发式判定，避免把红石/种子误判为工具。",
+    "<b>命中偏移归一化</b>：客户端 hitOffset clamp 到 [0,1]，非有限值按面回退，纵深防御。",
+    "<b>快速建造 vs 交互式放置</b>：形状放置走快速路径（精确 setBlock），单点/交互走 useItemOn（按面偏移）。",
+    "<b>协议 ordinal 护栏</b>：已移除 action 用 @Deprecated 占位而非删除，防新旧端错位。",
+    "<b>建议后续</b>：统一 AreaShapeGenerator 与 RtsPlacementQuickBuild 两套形状放置实现。"
+  ]
+}

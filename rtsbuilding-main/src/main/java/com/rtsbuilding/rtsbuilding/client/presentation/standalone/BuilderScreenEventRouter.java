@@ -173,21 +173,41 @@ public final class BuilderScreenEventRouter {
         d.onMouseScroll(event -> {
             if (fw.mouseScrolled(event.x(), event.y(), event.scrollX(), event.scrollY())) return CONSUMED;
             var lineBrush = kernel.renderPipeline().lineBrush;
-            // 选终点/线确认阶段：Ctrl+滚轮调整起始点高度，直接滚轮调整终止点高度
-            if (lineBrush.isPicking() || lineBrush.isAdjusting()) {
+            boolean shift = isShiftDown();
+            boolean alt = isAltDown();
+            // 画线/线确认阶段：Shift+滚轮调起点高度，Shift+Alt+滚轮调终点高度（裸滚轮留给相机缩放）
+            if (shift && (lineBrush.isPicking() || lineBrush.isAdjusting())) {
                 int dir = event.scrollY() > 0.0D ? 1 : -1;
-                if (isCtrlDown()) {
-                    lineBrush.adjustStartHeight(dir);
-                } else {
+                if (alt) {
                     lineBrush.adjustEndHeight(dir);
+                } else {
+                    lineBrush.adjustStartHeight(dir);
                 }
                 return CONSUMED;
             }
-            // 墙模式墙高调整（阶段二）：滚轮调整墙高
-            if (lineBrush.isHeightAdjusting()) {
-                lineBrush.adjustWallHeight(event.scrollY() > 0.0D ? 1 : -1);
+            // 宽度阶段（面/体）：Shift+滚轮调宽度，Shift+Alt+滚轮双边延展
+            if (shift && lineBrush.isWidthAdjusting()) {
+                int dir = event.scrollY() > 0.0D ? 1 : -1;
+                if (alt) {
+                    lineBrush.adjustFaceBothSides(dir);
+                } else {
+                    lineBrush.adjustWidthExtend(dir);
+                }
                 return CONSUMED;
             }
+            // 高度阶段（墙/体）：Shift+滚轮调高度（裸滚轮留给相机缩放）
+            if (shift && lineBrush.isHeightAdjusting()) {
+                int dir = event.scrollY() > 0.0D ? 1 : -1;
+                lineBrush.adjustHeightExtend(dir);
+                return CONSUMED;
+            }
+            // 球半径阶段：Shift+滚轮调半径（裸滚轮留给相机缩放）
+            if (shift && lineBrush.isRadiusAdjusting()) {
+                int dir = event.scrollY() > 0.0D ? 1 : -1;
+                lineBrush.adjustSphereRadius(dir);
+                return CONSUMED;
+            }
+            // 裸滚轮：不消费，交由下方框选/相机（inputPipeline）处理相机远近缩放
             if (!lb.isClickButtonSelected()
                     && kernel.renderPipeline().boxSelector.handleScroll(event.scrollY())) return CONSUMED;
             if (screen.isMouseOverRtsPanelApi(event.x(), event.y())) return CONSUMED;
@@ -209,9 +229,8 @@ public final class BuilderScreenEventRouter {
                 eih.closeInteractionPanel();
                 return CONSUMED;
             }
-            // 线/墙画笔活跃阶段按 ESC：逐级取消当前阶段（READY→HEIGHT→CONFIRM→全部），
-            // 每按一次只回退一个阶段，不退出 RTS 模式；全部取消后再按 ESC 才走下方
-            // P_FALLBACK 的关闭逻辑退出 RTS。
+            // 线/墙/面画笔活跃阶段按 ESC：逐级取消当前阶段，每按一次只回退一个阶段，
+            // 不退出 RTS 模式；全部取消后再按 ESC 才走下方 P_FALLBACK 的关闭逻辑退出 RTS。
             if (event.keyCode() == GLFW.GLFW_KEY_ESCAPE
                     && kernel.renderPipeline().lineBrush.isActive()) {
                 kernel.renderPipeline().lineBrush.cancelStage();

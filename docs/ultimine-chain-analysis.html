@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RTS Building — 连锁挖掘链路检查报告</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a212b;
+    --panel-2: #222c38;
+    --border: #2e3a48;
+    --text: #d5dde6;
+    --muted: #8b98a7;
+    --accent: #4da3ff;
+    --green: #3ddc84;
+    --red: #ff5d6c;
+    --yellow: #ffc94d;
+    --purple: #b184ff;
+    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
+    padding: 40px 20px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { margin-bottom: 40px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: .5px; }
+  h1 .dot { color: var(--accent); }
+  .sub { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .tags { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag {
+    font-size: 12px; padding: 3px 10px; border-radius: 20px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  }
+  .tag b { color: var(--text); font-weight: 600; }
+
+  section { margin-bottom: 36px; }
+  h2 {
+    font-size: 19px; margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h2 .num {
+    display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center;
+    border-radius: 6px; background: var(--panel-2); color: var(--accent);
+    font-size: 13px; margin-right: 10px; border: 1px solid var(--border);
+  }
+  h3 { font-size: 15px; color: var(--accent); margin: 16px 0 10px; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 14px;
+  }
+  .card h4 { font-size: 14px; margin-bottom: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; }
+  td code, .code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--purple);
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px;
+  }
+  tr:hover td { background: var(--panel-2); }
+
+  .flow { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; }
+  .step { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .step .box {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 12px; flex: 1;
+  }
+  .step .box b { color: var(--text); }
+  .step .box.srv { border-left: 3px solid var(--accent); }
+  .step .box.cli { border-left: 3px solid var(--green); }
+  .step .arrow { color: var(--muted); font-size: 14px; padding-left: 8px; }
+  .step:last-child .arrow { display: none; }
+
+  .badge {
+    display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 4px; margin-left: 6px;
+    vertical-align: middle; font-weight: 600;
+  }
+  .b-srv { background: #12355e; color: var(--accent); }
+  .b-cli { background: #0f3d2a; color: var(--green); }
+  .b-block { background: #3d2a0f; color: var(--yellow); }
+  .b-fix { background: #4a1420; color: var(--red); }
+
+  .issue { border-left: 3px solid var(--red); }
+  .issue.fixed { border-left-color: var(--green); }
+  .issue .why { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .issue .why code { color: var(--purple); }
+
+  .note { font-size: 13px; color: var(--muted); background: var(--panel-2); border-radius: 8px; padding: 10px 14px; }
+  .note code { color: var(--purple); }
+
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+  .path { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>RTS Building <span class="dot">·</span> 连锁挖掘链路检查报告</h1>
+  <div class="sub">NeoForge 1.21.1 · 连锁挖掘（Ultimine）客户端预览 → 服务端收集 → 每 tick 处理的完整链路</div>
+  <div class="tags">
+    <span class="tag">模块：<b>rtsbuilding-main</b></span>
+    <span class="tag">状态：<b>已走查并修复</b></span>
+    <span class="tag">边界 <b>8</b> · 断点 <b>4</b> · 无效 <b>8</b> · 冗余 <b>7</b></span>
+    <span class="tag">结果：<b>BUILD SUCCESSFUL</b></span>
+  </div>
+</header>
+
+<!-- ================= 类职责 ================= -->
+<section>
+  <h2><span class="num">1</span>核心类职责</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>类</th><th>位置</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td><code>UltiminePreviewPass</code></td><td class="path">client/render/pass/</td><td>客户端预览：BFS 收集 → 外周过滤 → 边提取 → 角括号边框。</td></tr>
+        <tr><td><code>UltimineBlockMerger</code></td><td class="path">client/render/util/</td><td>VoxelShape 外轮廓合并，生成边框线段。</td></tr>
+        <tr><td><code>BuildInteractionHandler</code></td><td class="path">client/presentation/panel/handler/</td><td>左键触发连锁、批次中点击取消。</td></tr>
+        <tr><td><code>MiningModule / MiningState</code></td><td class="path">client/infrastructure/module/mining/</td><td>客户端挖掘状态机（activePos / 进度）。</td></tr>
+        <tr><td><code>RtsUltimineProcessor</code></td><td class="path">server/service/mining/</td><td>批次收集、每 tick 处理、创造模式批量破坏。</td></tr>
+        <tr><td><code>RtsMiningStateMachine</code></td><td class="path">server/service/mining/</td><td>单块/批次切换、破坏执行、批字段初始化。</td></tr>
+        <tr><td><code>RtsMiningValidator</code></td><td class="path">server/service/mining/</td><td>目标校验（isTargetMineable / isUltimineCandidate）。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 链路 ================= -->
+<section>
+  <h2><span class="num">2</span>连锁挖掘链路</h2>
+  <p class="note" style="margin-bottom:12px">客户端 BFS 预览 → 左键触发 → 服务端收集同类型连通方块 → 每 tick 节流破坏 → S2C 进度/完成信号。</p>
+
+  <h3>2.1 触发路径</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>路径</th><th>调用点</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>客户端预览</td><td class="path">UltiminePreviewPass → RtsUltimineCollector.collect</td><td>与方块 BFS 同类型收集，硬度比 ≤1.5x 过滤。</td></tr>
+        <tr><td>左键触发</td><td class="path">BuildInteractionHandler → MiningModule.startUltimine</td><td>批次进行中再次点击 = 取消。</td></tr>
+        <tr><td>服务端收集</td><td class="path">RtsUltimineProcessor.startUltimine / queueStartUltimine</td><td>collectUltimineTargets BFS 收集，限制 ULTIMINE_MAX_BLOCKS。</td></tr>
+        <tr><td>每 tick 处理</td><td class="path">tickActiveMining → processUltimineTargets</td><td>每 tick ≤8 块 removeFirst 破坏。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>2.2 时序</h3>
+  <div class="card">
+    <div class="flow">
+      <div class="step"><div class="box cli"><b>客户端</b> — 预览 BFS 收集 → 外周过滤 → 边框渲染</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box cli"><b>客户端</b> — 左键 → <code>MiningModule.startUltimine</code> 发包</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — <code>ServerActionHandler</code> → Mining Pipeline → ToolBorrow</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — <code>collectUltimineTargets</code> BFS 收集（限制上限）</div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box srv"><b>服务端</b> — 每 tick <code>processUltimineTargets</code>（≤8 块）→ <code>finishUltimineBatch</code></div><div class="arrow">▼</div></div>
+      <div class="step"><div class="box cli"><b>客户端</b> — 裂纹进度 / 完成信号（-1, 0）清除 activePos</div></div>
+    </div>
+  </div>
+
+  <h3>2.3 关键机制</h3>
+  <div class="card">
+    <div class="note">
+      <b>批字段初始化</b>：<code>initBatchFields(session, targets, face, slot)</code> 统一初始化 targets/progressPos/total/processed/broken。<br>
+      <b>目标校验</b>：<code>isTargetMineable(player, session, target)</code> 抽为公共谓词，两处共用。<br>
+      <b>完成信号</b>：<code>finishUltimineBatch</code> 结束发送 <code>sendUltimineProgress(-1, 0)</code>，客户端据此清除 activePos。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 问题与修复 ================= -->
+<section>
+  <h2><span class="num">3</span>走查发现的问题与修复</h2>
+
+  <h3>3.1 边界问题（B，8 项已修复）</h3>
+
+  <div class="card issue fixed">
+    <h4>B1 · 预览过滤条件与服务端不一致 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：预览仅做"同类型 + destroySpeed≥0"，服务端额外要求硬度比 ≤1.5x 和动作半径校验。<br>修复：预览过滤器补充硬度比与动作半径过滤，使高亮与实际连锁范围一致。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B2 · ultimineProgressPos 从不随目标推进更新 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：批处理循环只 removeFirst 逐个破坏，从不更新 progressPos，裂纹始终钉在首个目标。<br>修复：每次取出目标后立即更新 progressPos，使裂纹动画跟随推进。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B3 · 校验失败目标仍占用 processed 计数 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：循环顶部无条件 processed++，即使随后 continue 跳过。<br>修复：校验通过（真正尝试破坏）后才 processed++，抽为 <code>isTargetMineable</code>。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B4 · 预览不含工具 / 半径预检 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：预览 BFS 不含动作半径校验，超半径种子服务端静默返回空。<br>修复：预览过滤增加相机锚点 X/Z 半边长（maxRadius）判定。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B5 · 首目标破坏失败 → 丢弃整个批次 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：单块完成路径 <code>if (result.broken() &amp;&amp; !ultimineTargets.isEmpty())</code>，首目标失败落入单方块分支直接 finalize。<br>修复：改为 <code>if (!ultimineTargets.isEmpty())</code> 无论成败都 removeUltimineTarget 并继续批次。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B6 · 单块 / 批处理两种计数方式不一致 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：首目标单块路径用 Math.max(processed,1)，批处理用 processed++。<br>修复：统一为"已尝试处理即 processed++"。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B7 · ultimine mode 硬编码 0 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：客户端发送 (byte) 0 的 mode，预览固定按同类型过滤。<br>修复：抽取 <code>ULTIMINE_MODE = 0</code> 常量，为后续 mode 扩展留统一入口。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>B8 · isBuildMode 在相机未激活时直接放行 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：原实现 <code>if (!isActive(p)) return true</code>，相机未激活反而放行。<br>修复：收紧为相机未激活 return false，并要求会话模式为 BUILD。</p>
+  </div>
+
+  <h3>3.2 断点问题（D，4 项已修复）</h3>
+
+  <div class="card issue fixed">
+    <h4>D1 · 破坏动画处理器为空实现 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：handleBreakAnimation 空方法，每块发包全浪费。<br>修复：实现处理器——清除残留裂纹并触发破坏粒子（后续演进为客户端本地播放破坏音）。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>D2 · ultimine 进度链路无消费 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：服务端仅在中止时发 (-1,0)，客户端写入后无渲染消费。<br>修复：改为批次完成信号——finishUltimineBatch 结束发送 (-1,0)，客户端清除 activePos，删除无消费字段与 getter。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>D3 · 连锁批次无取消入口 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：批次点击即发、无取消；服务端 mine(start=false) 对已提交批次拒绝停止。<br>修复：① 客户端批次进行中（activePos!=null）再次左键 = 取消；② 服务端对任一活跃挖掘均执行 STOP_MINING。</p>
+  </div>
+  <div class="card issue fixed">
+    <h4>D4 · 预览高亮但服务端静默拒绝 <span class="status badge b-fix">已修复</span></h4>
+    <p class="why">根因：种子不可挖时 collectUltimineTargets 静默返回空。<br>修复：预览侧先做半径约束过滤（B4），让不可达目标不出现在高亮中。</p>
+  </div>
+
+  <h3>3.3 无效代码（I，8 项已清理）</h3>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>编号</th><th>删除项</th><th>位置</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>I1</td><td><code>mergeAabbs()</code></td><td class="path">UltimineBlockMerger.java</td><td>改用 getEdgeLines 后无人调用</td></tr>
+        <tr><td>I2</td><td>整个类</td><td class="path">RtsMiningTargetQueue.java</td><td>三个方法全项目零调用</td></tr>
+        <tr><td>I3</td><td><code>computeRemoteDestroyStep</code></td><td class="path">RtsMiningStateMachine.java</td><td>@Deprecated 包装器，已被 MiningSpeedCalculator 替代</td></tr>
+        <tr><td>I4</td><td><code>ultimineAbsorbedDrops</code></td><td class="path">RtsMiningState.java 等</td><td>只写不读</td></tr>
+        <tr><td>I5</td><td>进度/render getter</td><td class="path">MiningModule.java</td><td>无消费方</td></tr>
+        <tr><td>I6</td><td>areaMine 字段</td><td class="path">MiningState.java</td><td>无 area-mine UI 的遗留字段</td></tr>
+        <tr><td>I7</td><td><code>handleRemoteMenuHint</code></td><td class="path">RtsClientNetworkHandlers + dispatcher</td><td>空实现，连带移除 case 与 import</td></tr>
+        <tr><td>I8</td><td>重复的 <code>SyncPipe()</code></td><td class="path">RtsPipelineRegistration.java</td><td>ULTIMINE/AREA_MINE 管线各删一个</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>3.4 冗余代码（R，7 项已重构）</h3>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>编号</th><th>抽取目标</th><th>消除的重复</th></tr></thead>
+      <tbody>
+        <tr><td>R1</td><td><code>initBatchFields</code></td><td>activateNextJob / startUltimine / areaMine / areaDestroy 中 4 份批字段初始化</td></tr>
+        <tr><td>R2</td><td><code>breakCreativeBatch</code></td><td>3 份"保存恢复 lease + 创造批量破坏 + 完成 token"</td></tr>
+        <tr><td>R3</td><td><code>isTargetMineable</code></td><td>processUltimineTargets 与单块路径重复的目标验证</td></tr>
+        <tr><td>R4</td><td>删除死参数 <code>toolPrototype</code></td><td>网关 → 模块 → Handler → 服务端全链路（API 层保留签名兼容）</td></tr>
+        <tr><td>R5</td><td>删除冗余写入</td><td>startUltimine 中对 renderPos/renderStage 的赋值（无实际裂纹效果）</td></tr>
+        <tr><td>R6</td><td><code>FACE_OFFSETS</code> 常量</td><td>filterOuterBlocks 每帧新建的 6 元 BlockPos 数组</td></tr>
+        <tr><td>R7</td><td><code>setQueueTotalBlocks</code></td><td>ULTIMINE / AREA_MINE 队列分支重复的 token.setTotalBlocks</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 边界与设计 ================= -->
+<section>
+  <h2><span class="num">4</span>边界与设计说明</h2>
+  <div class="card">
+    <ul style="margin-left:18px; font-size:13.5px">
+      <li style="margin-bottom:8px"><b>预览与实际一致性</b>：预览过滤（硬度比 ≤1.5x + 动作半径）与服务端 isUltimineCandidate 对齐，避免"高亮但挖不到"。</li>
+      <li style="margin-bottom:8px"><b>批次取消</b>：activePos 非空时再次左键 = 取消，服务端对任一活跃挖掘均支持 STOP_MINING。</li>
+      <li style="margin-bottom:8px"><b>完成信号</b>：批次结束必发 (-1,0)，保证客户端 activePos 被清除（否则下一次点击被误判为取消，需点两次）。</li>
+      <li style="margin-bottom:8px"><b>已知近似</b>：预览无法精确模拟服务端 MiningSpeedCalculator 的完整工具速度判定（借用工具/附魔/药水/水下惩罚），"无合适工具时点击无反应"仍可能发生——玩家可见手上物品，属可接受近似。</li>
+      <li><b>建议后续</b>：若需完全对齐工具速度，可考虑服务端下发最近一次 ULTIMINE 收集结果给客户端复用。</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  RTS Building 连锁挖掘链路检查报告 · 生成于 NeoForge 1.21.1 / Java 21 · 27 项问题处理，涉及 17 文件编辑 + 1 文件删除
+</footer>
+
+</div>
+</body>
+</html>

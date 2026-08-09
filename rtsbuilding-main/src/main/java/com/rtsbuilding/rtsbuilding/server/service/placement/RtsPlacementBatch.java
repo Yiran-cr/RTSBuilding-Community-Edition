@@ -153,6 +153,13 @@ public final class RtsPlacementBatch {
                 BlockPos clickedPos = job.next();
                 RtsPlacementQuickBuild.StatePlacementPlan statePlan = job.quickBuild()
                         ? job.statePlacementPlan(player) : null;
+                if (job.quickBuild() && statePlan == null) {
+                    // 快速建造计划解析失败（itemId 无效/非方块物品/chunk 未加载等）：
+                    // 跳过该位置，不回退到交互式路径（交互式路径按 face 放置会偏移一格）
+                    job.skippedWhileProcessing++;
+                    remaining--;
+                    continue;
+                }
                 boolean keepGoing;
                 if (statePlan != null) {
                     // 快速建造路径：记录放置前的状态，用于批撤回
@@ -516,7 +523,11 @@ public final class RtsPlacementBatch {
         private RtsPlacementQuickBuild.StatePlacementPlan statePlacementPlan(ServerPlayer player) {
             if (!this.statePlanResolved) {
                 this.statePlan = RtsPlacementQuickBuild.resolveStatePlacementPlan(player, this);
-                this.statePlanResolved = true;
+                // 解析失败（itemId 无效/非方块物品/chunk 未加载等）不缓存：
+                // 后续 tick 重新尝试解析，避免永久卡在失败状态
+                if (this.statePlan != null) {
+                    this.statePlanResolved = true;
+                }
             }
             return this.statePlan;
         }

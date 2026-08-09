@@ -43,7 +43,8 @@ public final class RtsPlacementAPIImpl implements RtsPlacementAPI {
         REGISTRY.placement().enqueuePlaceBatch(player, positions, face,
                 hitOffsetX, hitOffsetY, hitOffsetZ, rotateSteps,
                 forcePlace, skipIfOccupied, itemId, itemPrototype,
-                rayOriginX, rayOriginY, rayOriginZ, rayDirX, rayDirY, rayDirZ);
+                rayOriginX, rayOriginY, rayOriginZ, rayDirX, rayDirY, rayDirZ,
+                false);
     }
 
     // ======================================================================

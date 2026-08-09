@@ -1,57 +1,58 @@
 package com.rtsbuilding.rtsbuilding.client.render.pass;
 
+import com.rtsbuilding.rtsbuilding.client.build.shape.AdjustKind;
+import com.rtsbuilding.rtsbuilding.client.build.shape.BuildShape;
+import com.rtsbuilding.rtsbuilding.client.build.shape.Phase;
+import com.rtsbuilding.rtsbuilding.client.build.shape.PhaseAdvance;
+import com.rtsbuilding.rtsbuilding.client.build.shape.ShapeInput;
+import com.rtsbuilding.rtsbuilding.client.build.shape.ShapeParams;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import net.minecraft.core.BlockPos;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 线/墙模式建造的画笔状态机（点选式）。
+ * 画笔建造的通用状态机（点选式）。
  *
  * <p>右键单击选择起点进入 {@link Phase#PICK_START}，移动鼠标实时预览线段，
- * 再次右键单击选择终点：线模式进入 {@link Phase#ADJUST}（可微调两端高度后确认建造），
- * 墙模式进入 {@link Phase#HEIGHT}（滚轮调整墙高后确认建造）。</p>
+ * 再次右键单击选择终点/球心：各形状由自身声明进入的调整阶段
+ * （{@link BuildShape#pickEndPhase()}）。调整阶段内 Shift+滚轮调整参数
+ * （{@link BuildShape#supportsAdjust} + {@link ShapeParams#adjust}），
+ * 右键推进/确认（{@link BuildShape#advance}），ESC 逐级回退
+ * （{@link BuildShape#cancel}）。</p>
  *
- * <p>高度调整：画线/确认阶段滚轮调终止点高度、Ctrl+滚轮调起始点高度；
- * 墙模式阶段二滚轮上下对称调整墙高。ESC 逐级取消：ADJUST/HEIGHT→PICK_START→完全取消。</p>
+ * <p>本类<b>不感知具体形状</b>：所有形状特判都收敛在 {@link BuildShape} 内部，
+ * 本类只做通用驱动——持有 {@link ShapeParams} 参数容器与各阶段状态。</p>
  */
 public final class LineBrushSelector {
 
-    public enum Phase {
-        IDLE,
-        /** 起点已选择，移动鼠标实时预览，右键选择终点 */
-        PICK_START,
-        /** 阶段一（线）：终点已选择，滚轮微调两端高度，右键确认建造 */
-        ADJUST,
-        /** 阶段二（墙）：终点已选择，滚轮调整墙高，右键确认建造 */
-        HEIGHT
-    }
+    /** 扩展量上限（格，向上/向下、两侧分别限制）。 */
+    public static final int MAX_EXTEND = BuildShape.MAX_EXTEND;
 
-    /** 墙高上限（格，向上/向下分别限制）。 */
-    public static final int MAX_WALL_HEIGHT = 64;
+    /** 圆面/圆柱半径上限（格）。 */
+    public static final int MAX_RADIUS = BuildShape.MAX_RADIUS;
 
-    /** 向上墙高（格），默认 1。 */
-    private int wallHeight = 1;
+    private BuildShape shape = BuildShape.LINE;
 
-    /** 向下墙高（格），默认 0（墙高阶段滚轮向下滚动时向下延伸）。 */
-    private int wallDown;
-
-    /** 起始点高度偏移（Ctrl+滚轮调整，格）。 */
-    private int startDy;
-    /** 终止点高度偏移（滚轮直接调整，格）。 */
-    private int endDy;
+    /** 各形状共享的可变几何参数。 */
+    private final ShapeParams params = new ShapeParams();
 
     private Phase phase = Phase.IDLE;
     private BlockPos start;
     private BlockPos hover;
 
-    /** 当前是否为墙模式（选择起点时确定，影响后续状态流转与方块生成）。 */
-    private boolean wallActive;
+    /** 画笔归属：{@code true} 表示当前画笔用于破坏（确认时发 AREA_DESTROY），
+     *  {@code false} 表示用于建造（确认时发 PLACE_BATCH）。由调用方启动画笔时设置。 */
+    private boolean breakActive;
 
     public Phase getPhase() {
         return phase;
+    }
+
+    /** 当前建造形状。 */
+    public BuildShape getShape() {
+        return shape;
     }
 
     /** 是否处于起点选择/画线预览阶段。 */
@@ -64,30 +65,31 @@ public final class LineBrushSelector {
         return phase == Phase.ADJUST;
     }
 
-    /** 是否处于阶段二（墙：调整墙高待确认）。 */
+    /** 是否处于宽度调整阶段（面/体阶段二）。 */
+    public boolean isWidthAdjusting() {
+        return phase == Phase.WIDTH;
+    }
+
+    /** 是否处于高度调整阶段（墙阶段二 / 体阶段三）。 */
     public boolean isHeightAdjusting() {
         return phase == Phase.HEIGHT;
     }
 
-    /** 是否为墙模式。 */
-    public boolean isWallActive() {
-        return wallActive;
+    /** 是否处于球半径调节阶段。 */
+    public boolean isRadiusAdjusting() {
+        return phase == Phase.RADIUS;
     }
 
-    /** 当前向上墙高（格）。 */
-    public int getWallHeight() {
-        return wallHeight;
+    /** 当前形状是否为球。 */
+    public boolean isSphereActive() {
+        return shape == BuildShape.SPHERE;
     }
 
-    /** 当前向下墙高（格）。 */
-    public int getWallDown() {
-        return wallDown;
-    }
-
-    /** 是否处于点选/任一确认的活跃阶段（用于渲染预览与状态清理）。 */
+    /** 当前形状是否处于任一确认阶段（用于渲染预览与状态清理）。 */
     public boolean isActive() {
         return phase == Phase.PICK_START || phase == Phase.ADJUST
-                || phase == Phase.HEIGHT;
+                || phase == Phase.WIDTH || phase == Phase.HEIGHT
+                || phase == Phase.RADIUS;
     }
 
     @Nullable
@@ -100,17 +102,50 @@ public final class LineBrushSelector {
         return hover;
     }
 
-    /** 右键单击选择起点并进入画线预览（wall 为 true 表示墙模式）。 */
-    public boolean start(BlockPos pos, boolean wall) {
-        if (pos == null) return false;
+    /** 球半径（格）。 */
+    public int getSphereRadius() {
+        return params.getSphereRadius();
+    }
+
+    /** 当前向上墙高（格）。 */
+    public int getWallHeight() {
+        return params.getWallHeight();
+    }
+
+    /** 当前向下墙高（格）。 */
+    public int getWallDown() {
+        return params.getWallDown();
+    }
+
+    /** 当前面宽度（一侧，格）。 */
+    public int getFaceWidth() {
+        return params.getFaceWidth();
+    }
+
+    /** 当前面另一侧宽度（格）。 */
+    public int getFaceDown() {
+        return params.getFaceDown();
+    }
+
+    /** 右键单击选择起点并进入画线预览（shape 决定后续扩展方向与阶段流转）。 */
+    public boolean start(BlockPos pos, BuildShape shape) {
+        return start(pos, shape, false);
+    }
+
+    /** 右键单击选择起点并进入画线预览，指定画笔归属（建造/破坏）。 */
+    public boolean start(BlockPos pos, BuildShape shape, boolean breakActive) {
+        if (pos == null || shape == null) return false;
         this.start = pos.immutable();
-        this.wallActive = wall;
-        this.wallHeight = 1;
-        this.wallDown = 0;
-        this.startDy = 0;
-        this.endDy = 0;
+        this.shape = shape;
+        this.breakActive = breakActive;
+        this.params.reset();
         this.phase = Phase.PICK_START;
         return true;
+    }
+
+    /** 当前画笔是否用于破坏。 */
+    public boolean isBreakActive() {
+        return breakActive;
     }
 
     /** 移动鼠标更新预览终点（仅起点选择阶段跟随）。 */
@@ -122,132 +157,122 @@ public final class LineBrushSelector {
         this.hover = pos == null ? null : pos.immutable();
     }
 
-    /** 右键单击选择终点：线模式进入微调确认，墙模式进入墙高调整。 */
+    /**
+     * 右键单击选择终点/球心：由形状声明进入的调整阶段。
+     * 球无需第二点（{@code hover} 可为 null），其余形状需已选终点。
+     */
     public boolean pickEnd() {
-        if (phase != Phase.PICK_START || start == null || hover == null) {
+        if (phase != Phase.PICK_START || start == null) {
             return false;
         }
-        phase = wallActive ? Phase.HEIGHT : Phase.ADJUST;
+        if (shape != BuildShape.SPHERE && hover == null) {
+            return false;
+        }
+        phase = shape.pickEndPhase();
         return true;
     }
 
-    /** 计算起点到当前悬停位置的连续线段方块列表（含两端高度偏移，不含墙高扩展）。 */
-    public List<BlockPos> computeLinePositions() {
-        if (start == null || hover == null) return List.of();
-        // 应用起始点高度偏移（Ctrl+滚轮）
-        int sy = start.getY() + startDy;
-        BlockPos s = new BlockPos(start.getX(), sy, start.getZ());
-        BlockPos e;
-        if (RtsKeyMappings.isLineFlatDown()) {
-            // 按住 V 键：强制平直，终点高度锁定到起点实际高度
-            e = new BlockPos(hover.getX(), sy, hover.getZ());
-        } else {
-            // 应用终止点高度偏移（滚轮）
-            e = new BlockPos(hover.getX(), hover.getY() + endDy, hover.getZ());
+    /**
+     * 右键推进确认阶段：由形状声明下一步（进入下一阶段或直接建造）。
+     *
+     * @return {@code true} 表示可以建造，{@code false} 表示进入下一阶段或当前阶段无操作
+     */
+    public boolean advancePhase() {
+        PhaseAdvance adv = shape.advance(phase);
+        if (adv == null) {
+            return false;
         }
-        return lineBetween(s, e);
+        if (adv instanceof PhaseAdvance.ToPhase to) {
+            phase = to.phase();
+            return false;
+        }
+        return true;
     }
 
     /**
-     * 计算墙体方块列表：走向线上的每个方块，从向下 {@link #wallDown} 格到向上
-     * {@link #wallHeight} 格（含上下限），即以走向线为中心可向上/向下双向建造。
+     * 计算当前应建造/预览的方块列表（含扩展与两端高度偏移）。
+     * 根据「形状 × 阶段」确定当前生效的形态（{@link BuildShape#renderShape}）。
+     * 渲染预览与确认提交共用本方法，避免两套派发逻辑。
      */
-    public List<BlockPos> computeWallPositions() {
-        List<BlockPos> line = computeLinePositions();
-        if (line.isEmpty()) return List.of();
-        List<BlockPos> result = new ArrayList<>(line.size() * (wallHeight + wallDown));
-        for (BlockPos p : line) {
-            for (int dy = -wallDown; dy < wallHeight; dy++) {
-                result.add(new BlockPos(p.getX(), p.getY() + dy, p.getZ()));
-            }
-        }
-        return result;
+    public List<BlockPos> computePositions() {
+        return shape.renderShape(phase).compute(toShapeInput());
     }
 
-    /** Ctrl+滚轮调整起始点高度（仅画线/微调阶段，方向 +1/-1）。 */
+    /** 将当前状态快照为形状计算的不可变输入。 */
+    private ShapeInput toShapeInput() {
+        return new ShapeInput(start, hover, params.getStartDy(), params.getEndDy(),
+                params.getWallHeight(), params.getWallDown(),
+                params.getFaceWidth(), params.getFaceDown(),
+                params.getSphereRadius(), RtsKeyMappings.isLineFlatDown());
+    }
+
+    /**
+     * 滚轮调整参数：由形状声明当前阶段是否支持该调整，参数增减统一由 {@link ShapeParams} 执行。
+     */
+    private void adjust(AdjustKind kind, int delta) {
+        if (shape.supportsAdjust(phase, kind)) {
+            params.adjust(kind, delta);
+        }
+    }
+
+    /** 调整起始点高度（画线/微调阶段，方向 +1/-1）。 */
     public void adjustStartHeight(int delta) {
-        if (phase != Phase.PICK_START && phase != Phase.ADJUST) return;
-        this.startDy += delta;
+        adjust(AdjustKind.START_HEIGHT, delta);
     }
 
-    /** 滚轮调整终止点高度（仅画线/微调阶段，方向 +1/-1）。 */
+    /** 调整终止点高度（画线/微调阶段，方向 +1/-1）。 */
     public void adjustEndHeight(int delta) {
-        if (phase != Phase.PICK_START && phase != Phase.ADJUST) return;
-        this.endDy += delta;
+        adjust(AdjustKind.END_HEIGHT, delta);
+    }
+
+    /** 高度阶段（墙/体/圆）调整竖直扩展量，对称逻辑：先回收反侧再延伸正侧。 */
+    public void adjustHeightExtend(int delta) {
+        adjust(AdjustKind.HEIGHT_EXTEND, delta);
+    }
+
+    /** 宽度阶段（面/体）调整水平扩展量，对称逻辑：先回收反侧再延伸正侧。 */
+    public void adjustWidthExtend(int delta) {
+        adjust(AdjustKind.WIDTH_EXTEND, delta);
+    }
+
+    /** 宽度阶段按住 Shift+Alt 滚轮：两侧同时延展（左右对称加宽/收窄），走向线始终保持居中。 */
+    public void adjustFaceBothSides(int delta) {
+        adjust(AdjustKind.FACE_BOTH_SIDES, delta);
+    }
+
+    /** 球半径阶段 Shift+滚轮：调节球半径（方向 +1/-1）。 */
+    public void adjustSphereRadius(int delta) {
+        adjust(AdjustKind.SPHERE_RADIUS, delta);
     }
 
     /**
-     * 滚轮调整墙高度（仅阶段二生效），向上/向下使用同一套对称逻辑：
-     * 向上滚时优先回收向下的延伸量，回收完再向上延伸；向下滚时优先回收向上的
-     * 延伸量，回收完再向下延伸。
-     */
-    public void adjustWallHeight(int delta) {
-        if (phase != Phase.HEIGHT) return;
-        if (delta > 0) {
-            if (wallDown > 0) {
-                this.wallDown--;
-            } else if (wallHeight < MAX_WALL_HEIGHT) {
-                this.wallHeight++;
-            }
-        } else {
-            if (wallHeight > 1) {
-                this.wallHeight--;
-            } else if (wallDown < MAX_WALL_HEIGHT) {
-                this.wallDown++;
-            }
-        }
-    }
-
-    /**
-     * ESC 逐级取消：ADJUST/HEIGHT→PICK_START→完全取消。
-     * 每按一次 ESC 只回退一个阶段，不会一次性取消整个流程。
+     * ESC 逐级取消：由形状声明回退目标。每按一次 ESC 只回退一个阶段，不会一次性取消整个流程；
+     * 已退到最前时完全取消（reset）。
      */
     public void cancelStage() {
-        switch (phase) {
-            case ADJUST, HEIGHT -> phase = Phase.PICK_START;
-            default -> reset();
+        Phase target = shape.cancel(phase);
+        if (target != null) {
+            phase = target;
+        } else {
+            reset();
         }
+    }
+
+    /** 当前阶段的交互提示文案；非交互阶段返回 {@code null}。破坏侧将"建造"替换为"破坏"。 */
+    @Nullable
+    public String currentHint() {
+        if (!isActive()) return null;
+        String hint = shape.hint(phase, params);
+        if (hint == null || !breakActive) return hint;
+        return hint.replace("建造", "破坏");
     }
 
     public void reset() {
         phase = Phase.IDLE;
+        shape = BuildShape.LINE;
         start = null;
         hover = null;
-        wallActive = false;
-        wallHeight = 1;
-        wallDown = 0;
-        startDy = 0;
-        endDy = 0;
-    }
-
-    /** 3D DDA 插值线段：返回从 a 到 b 沿最长轴均匀分布的连续方块（含两端）。 */
-    public static List<BlockPos> lineBetween(BlockPos a, BlockPos b) {
-        List<BlockPos> result = new ArrayList<>();
-        if (a == null || b == null) return result;
-        int x0 = a.getX(), y0 = a.getY(), z0 = a.getZ();
-        int x1 = b.getX(), y1 = b.getY(), z1 = b.getZ();
-        int dx = Math.abs(x1 - x0);
-        int dy = Math.abs(y1 - y0);
-        int dz = Math.abs(z1 - z0);
-        int steps = Math.max(dx, Math.max(dy, dz));
-        if (steps == 0) {
-            result.add(a.immutable());
-            return result;
-        }
-        int sx = x0 < x1 ? 1 : -1;
-        int sy = y0 < y1 ? 1 : -1;
-        int sz = z0 < z1 ? 1 : -1;
-        double stepX = (double) dx / steps * sx;
-        double stepY = (double) dy / steps * sy;
-        double stepZ = (double) dz / steps * sz;
-        double x = x0, y = y0, z = z0;
-        result.add(a.immutable());
-        for (int i = 1; i <= steps; i++) {
-            x += stepX;
-            y += stepY;
-            z += stepZ;
-            result.add(new BlockPos((int) Math.round(x), (int) Math.round(y), (int) Math.round(z)));
-        }
-        return result;
+        breakActive = false;
+        params.reset();
     }
 }

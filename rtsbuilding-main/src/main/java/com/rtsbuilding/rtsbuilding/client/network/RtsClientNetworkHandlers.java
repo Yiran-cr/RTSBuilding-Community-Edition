@@ -21,6 +21,13 @@ public final class RtsClientNetworkHandlers {
 
     private RtsClientNetworkHandlers() {}
 
+    /** 客户端本地破坏音每 tick 最多播放次数（与服务端 RtsPlacementSound 限流一致）。 */
+    private static final int MAX_BREAK_SOUNDS_PER_TICK = 1;
+
+    /** 客户端破坏音限流计数与当前 tick。 */
+    private static int breakSoundsThisTick;
+    private static long breakSoundResetTick = -1L;
+
     private static RtsClientKernel kernel() {
         return RtsClientKernel.get();
     }
@@ -177,11 +184,36 @@ public final class RtsClientNetworkHandlers {
         ctx.enqueueWork(() -> {
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.level == null) return;
-            // 清除该位置残留裂纹，并触发方块破坏粒子反馈（2001 = 破坏粒子事件）
+            // 清除该位置残留裂纹
             mc.level.destroyBlockProgress(0x525453, payload.pos(), -1);
-            mc.level.levelEvent(2001, payload.pos(),
-                    net.minecraft.world.level.block.Block.getId(payload.state()));
+            // 在客户端本地播放破坏音，音源固定为主相机位置（= 听者位置，无距离衰减）。
+            // 不能用 levelEvent(2001, pos, ...)（音源在被破坏方块位置，RTS 相机远离时听不见），
+            // 也不依赖服务端上报的相机坐标（有上报延迟，可能回退到玩家本体位置）。
+            playRemoteBreakSound(mc, payload.state());
         });
+    }
+
+    /** 在客户端主相机位置播放方块破坏音（音源 = 听者，RTS 模式下任何位置都能清晰听到）。 */
+    private static void playRemoteBreakSound(net.minecraft.client.Minecraft mc, net.minecraft.world.level.block.state.BlockState state) {
+        if (state == null || state.isAir()) return;
+        // 每 tick 限流：连锁挖掘/批量破坏一次会产生大量 break 动画包，避免噪音爆炸
+        long tick = mc.level.getGameTime();
+        if (tick != breakSoundResetTick) {
+            breakSoundResetTick = tick;
+            breakSoundsThisTick = 0;
+        }
+        if (breakSoundsThisTick >= MAX_BREAK_SOUNDS_PER_TICK) return;
+        breakSoundsThisTick++;
+        net.minecraft.client.Camera camera = mc.gameRenderer.getMainCamera();
+        net.minecraft.world.phys.Vec3 pos = camera.getPosition();
+        net.minecraft.world.level.block.SoundType soundType = state.getSoundType(mc.level, net.minecraft.core.BlockPos.containing(pos), null);
+        mc.level.playLocalSound(
+                pos.x, pos.y, pos.z,
+                soundType.getBreakSound(),
+                net.minecraft.sounds.SoundSource.BLOCKS,
+                (soundType.getVolume() + 1.0F) / 2.0F,
+                soundType.getPitch() * 0.8F,
+                false);
     }
 
     public static void handleHistorySync(S2CRtsHistorySyncPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext ctx) {

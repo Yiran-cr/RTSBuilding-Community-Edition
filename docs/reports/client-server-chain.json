@@ -1,0 +1,85 @@
+{
+  "id": "client-server-chain",
+  "title": "客户端 → 服务端链路",
+  "subtitle": "NeoForge 1.21.1 · 网络链路深度审查：边界问题 · 断点问题 · 无效代码 · 冗余代码",
+  "tags": {
+    "module": "rtsbuilding-main / rtsbuilding-common",
+    "status": "已走查并修复",
+    "counts": "边界 8 · 断点 6 · 无效 9 · 冗余 4 · 保留 6",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "RtsClientPacketGateway", "path": "client/network/", "desc": "客户端 C2S 收口：组装 NBT 载荷，唯一发包入口。" },
+    { "name": "C2SAction", "path": "network/message/", "desc": "统一动作通道（NBT），按 ordinal 编解码 ActionType。" },
+    { "name": "ServerActionHandler", "path": "network/handler/", "desc": "服务端唯一 C2S 分发入口，按 ActionType switch 分发。" },
+    { "name": "ClientPayloadDispatcher", "path": "network/", "desc": "服务端 → 客户端 S2C 收口，按域 switch 分发。" },
+    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "客户端 S2C 载荷处理，驱动客户端模块。" },
+    { "name": "PipelineRegistry", "path": "server/pipeline/core/", "desc": "工作流管道注册与执行（*Pipe 链 + 每 tick 推进）。" },
+    { "name": "RtsCameraManager", "path": "server/camera/", "desc": "相机会话、动作半径、姿态权威记录。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 触发路径",
+      "type": "table",
+      "headers": ["路径", "调用点", "说明"],
+      "rows": [
+        ["放置 / 挖掘 / 交互 / 转移", "<span class='path'>RtsClientPacketGateway → C2SAction → ServerActionHandler</span>", "统一动作通道，NBT 载荷，携带 ActionType ordinal。"],
+        ["相机姿态上报", "<span class='path'>C2SCameraPosePayload → ServerActionHandler</span>", "高频专用通道（裸字段，10Hz + 变化检测）。"],
+        ["S2C 回发", "<span class='path'>ClientPayloadDispatcher → RtsClientNetworkHandlers</span>", "按域 switch 分发，服务端不直接引用客户端类。"]
+      ]
+    },
+    {
+      "title": "2.2 时序",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "输入 / UI（鼠标、键盘、面板交互）" },
+        { "side": "cli", "text": "<code>RtsClientPacketGateway</code> 组装 NBT → <code>C2SAction</code>" },
+        { "side": "srv", "text": "<code>ServerActionHandler</code> 按 ActionType switch 分发" },
+        { "side": "srv", "text": "<code>RtsServer.xxx()</code> 服务 → <code>PipelineRegistry</code> *Pipe 链" },
+        { "side": "srv", "text": "状态 / 存储 / 历史（会话、工作流、撤销栈）" },
+        { "side": "cli", "text": "<code>ClientPayloadDispatcher</code> 回发 → <code>RtsClientNetworkHandlers</code>" }
+      ]
+    },
+    {
+      "title": "2.3 关键机制",
+      "type": "note",
+      "note": "<b>协议安全护栏</b>：<code>ActionType</code> 按 ordinal 编解码，删除枚举值会使后续序号前移导致新旧端协议错位——故已移除的 action 以 <code>@Deprecated</code> 占位保留。<br><b>C2S 收口</b>：客户端全部经 <code>RtsClientPacketGateway</code>；服务端全部经 <code>ServerActionHandler</code>。"
+    }
+  ],
+  "issues": [
+    { "title": "B1 · C2S 解码 ordinal 越界可抛 AIOOBE", "status": "fixed", "why": "根因：<code>ActionType.values()[buf.readVarInt()]</code> 无下标保护，恶意包携带超大 ordinal 在 decode 阶段抛 <code>ArrayIndexOutOfBoundsException</code>。修复：decode 校验 <code>0 &lt;= ordinal &lt; values().length</code>，非法值返回 null 丢弃包。" },
+    { "title": "B3 · face（方向）越界未 clamp", "status": "fixed", "why": "根因：<code>Direction.from3DDataValue(t.getByte(\"face\"))</code> 直接使用客户端字节，MC 内部 <code>BY_3D_DATA[index &amp; 3]</code> 对部分越界值错位映射。修复：新增 <code>safeFace(t)</code> 校验 0..5，越界回退 DOWN，替换 6 处调用。" },
+    { "title": "B4 · INTERACT_BLOCK 无模式守卫", "status": "fixed", "why": "根因：其它动作均有模式守卫，唯独 INTERACT_BLOCK 无任何模式/相机校验。修复：增加 <code>RtsCameraManager.isActive(p)</code> 守卫。" },
+    { "title": "B5/B6 · 相机姿态坐标无校验", "status": "fixed", "why": "根因：<code>updateCameraPose</code> 对客户端上报坐标/角度无数值校验，恶意坐标可 spawn 无人机到任意位置。修复：非有限坐标回退锚点，x/z/y 按范围 clamp，yaw wrap，pitch clamp。" },
+    { "title": "B8 · areaMine 范围反向空扫", "status": "fixed", "why": "根因：clamp 只压缩 max，min &gt; max 时范围反向。修复：每个维度先做 min/max 规范化再 clamp。" },
+    { "title": "B14 · FUNNEL_BOX_PICKUP 实体列表无上限", "status": "fixed", "why": "根因：<code>sendFunnelBoxPickup</code> 对实体 ID 列表无大小限制。修复：客户端发送前截断至 ≤256。" },
+    { "title": "B16 · requestPage 重载参数覆盖拼音设置", "status": "fixed", "why": "根因：交互刷新页面用 7 参重载硬编码拼音搜索关闭。修复：改用 6 参重载自动继承会话设置。" },
+    { "title": "D1 · S2CRtsRemoteMenuHintPayload 单向断头", "status": "fixed", "why": "根因：payload 已注册、服务端正常发送，但 dispatcher switch 无对应 case 落入 default 静默丢弃。修复：删除冗余自定义 payload，保留原版方块刷新逻辑。" },
+    { "title": "D2 · handleBlueprintStatus 空实现", "status": "fixed", "why": "根因：<code>handleBlueprintStatus</code> 方法体为空，服务端正常发送状态包。修复：实现翻译 + 按状态加颜色前缀通过 <code>displayClientMessage</code> 反馈。" },
+    { "title": "D3 · CAMERA_POSE 动作分支永不命中", "status": "fixed", "why": "根因：相机姿态走专用 <code>C2SCameraPosePayload</code>，无代码构造该 C2SAction。修复：删除 case；枚举值保留防 ordinal 前移。" },
+    { "title": "D4 · RtsPathfindingPackets 空壳注册", "status": "fixed", "why": "根因：<code>register()</code> 方法体为空却被调用。修复：删除该文件并移除调用。" },
+    { "title": "D5/D9 · 工作流超时服务从未启动", "status": "fixed", "why": "根因：<code>startTimeoutService</code> 已实现但全仓库无调用者，僵尸工作流永不清理。修复：整体删除超时服务、引擎 start/stop 方法及事件残留。" },
+    { "title": "D11 · 切维度时 tickable 管道悬挂", "status": "fixed", "why": "根因：<code>TickablePipelineRegistry.removeAll</code> 仅登出时调用。修复：<code>onPlayerChangedDimension</code> 追加 <code>removeAll(player.getUUID())</code>。" },
+    { "title": "E1 · 网关 6 个零调用死方法", "status": "fixed", "why": "删除 sendSetAutoStoreMinedDrops / sendSetBdNetwork / sendInteractEntityWithToolSlot / sendBreakPlaced / sendAreaMine / sendAreaDestroy 及连带失效 import。" },
+    { "title": "E3 · ActionType 死枚举值", "status": "fixed", "why": "CRAFT_RECIPE 等死值改为 @Deprecated 占位保留（防 ordinal 前移），仅删除服务端 case 与客户端发送方法。" },
+    { "title": "E4 · C2SAction.workflowId 恒空字段", "status": "fixed", "why": "客户端恒传 null、服务端恒不读。删除字段并同步更新 codec。" },
+    { "title": "E5/E12 · 客户端原型参数被服务端忽略", "status": "fixed", "why": "itemPrototype 等一路传递但服务端全部传 EMPTY。删除无效参数链并同步修改调用点。" },
+    { "title": "E6 · 伤害反馈低血量标志被丢弃", "status": "fixed", "why": "handler 透传 payload.lowHealth() 并取客户端实时血量。" },
+    { "title": "E8 · 客户端 bdNetwork 冗余字段", "status": "fixed", "why": "删除客户端 bdNetworkEnabled 字段；服务端会话标志与 payload 字段保留。" },
+    { "title": "E9 · loadout 装备栏整包死代码", "status": "fixed", "why": "删除 server/loadout/ 三个互相引用、无外部调用的类及 MINING_LOADOUT 组件。" },
+    { "title": "E10 · notifyCompletion 无调用者", "status": "fixed", "why": "进度通知统一走 flushDirty 合并发包，删除该方法。" },
+    { "title": "E11 · craft 链路客户端残留", "status": "fixed", "why": "删除 CraftFeedbackInfo / CraftFeedbackReceived 及 StorageState/Module 的 craft 字段与方法。" },
+    { "title": "R1 · 区域破坏目标过滤两处重复", "status": "fixed", "why": "将 RtsDestructionBatch 方法提升为唯一实现，RtsUltimineProcessor 改为委托调用。" },
+    { "title": "R5 · 放置批处理双重 remaining 扣减", "status": "fixed", "why": "删除内层 break 前的重复 remaining--。" },
+    { "title": "R8 · 伤害追踪对非 RTS 玩家无效写入", "status": "fixed", "why": "把 isActive 检查提前到 LAST_HEALTH.put 之前。" },
+    { "title": "R9 · 页面刷新语义不一致", "status": "fixed", "why": "统一改用 6 参重载，消除与 ServerActionHandler 传参不一致。" },
+    { "title": "D7 · craft 链路整体移除（产品决策）", "status": "fixed", "why": "删除网络包/服务/终端类/API；合成格补料逻辑迁入 RtsCraftGridSupport。" },
+    { "title": "D5 · 工作流超时服务删除（产品决策）", "status": "fixed", "why": "删除超时服务类、引擎 start/stop 方法与字段。" }
+  ],
+  "boundaries": [
+    "<b>C2S 收口</b>：客户端全部经 RtsClientPacketGateway；服务端全部经 ServerActionHandler，禁止旁路。",
+    "<b>S2C 收口</b>：全部经 ClientPayloadDispatcher 按域 switch，服务端不直接引用客户端类。",
+    "<b>协议安全</b>：ActionType 按 ordinal 编解码，删除枚举值会导致新旧端错位——故占位保留而非删除。",
+    "<b>建议后续</b>：B12 可做延迟落盘优化；相机高频通道可加最小间隔节流。"
+  ]
+}

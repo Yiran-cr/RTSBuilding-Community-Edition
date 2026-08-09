@@ -562,19 +562,12 @@ public class BuilderScreen extends Screen {
         }
     }
 
-    /** 线/墙画笔进行中时，在下面板上方正中央绘制当前步骤与操作提示。 */
+    /** 线/墙/面画笔进行中时，在下面板上方正中央绘制当前步骤与操作提示。 */
     private void renderLineBrushHint(GuiGraphics g) {
-        var brush = kernel.renderPipeline().lineBrush;
-        if (!brush.isActive()) return;
-        String hint;
-        if (brush.isPicking()) {
-            hint = "画线：右键选择终点  ·  滚轮调终点高度 / Ctrl+滚轮调起点高度  ·  ESC 取消";
-        } else if (brush.isHeightAdjusting()) {
-            hint = "墙高 ↑" + brush.getWallHeight() + " ↓" + brush.getWallDown()
-                    + "：滚轮调墙高（上下对称）  ·  右键建造  ·  ESC 返回";
-        } else {
-            hint = "确认：右键建造  ·  滚轮调终点高度 / Ctrl+滚轮调起点高度  ·  ESC 返回";
-        }
+        var lineBrush = kernel.renderPipeline().lineBrush;
+        // 提示文案由形状自行提供（BuildShape.hint），状态机不再感知具体形状
+        String hint = lineBrush.currentHint();
+        if (hint == null) return;
         // 下面板范围：x=0 到 (width - 右栏宽)，顶部 y = height - 下面板高
         int downBarW = this.width - getRightSidebarWidth();
         int downBarY = this.height - getDownSidebarHeight();

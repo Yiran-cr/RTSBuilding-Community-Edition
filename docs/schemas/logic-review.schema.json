@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rtsbuilding-logic-review",
+  "title": "RTS Building 链路检查报告",
+  "description": "「XX链路检查」流程的产出物：结构化 JSON，由 docs 内 Vue SPA 统一渲染。字段全部为字符串/数组，禁止代码执行。",
+  "type": "object",
+  "required": ["id", "title", "subtitle", "tags", "classes", "sections", "issues", "boundaries"],
+  "properties": {
+    "id": { "type": "string", "description": "唯一标识，对应 docs/reports/<id>.json，如 'sound-architecture'" },
+    "title": { "type": "string", "description": "报告标题，如 '放置/破坏音效链路'" },
+    "subtitle": { "type": "string", "description": "副标题 / 链路概述" },
+    "tags": {
+      "type": "object",
+      "description": "头部标签组（渲染为徽章）",
+      "properties": {
+        "module": { "type": "string" },
+        "status": { "type": "string" },
+        "counts": { "type": "string" },
+        "result": { "type": "string" }
+      }
+    },
+    "classes": {
+      "type": "array",
+      "description": "「1 核心类职责」：表头固定为 类/位置/职责",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "desc"],
+        "properties": {
+          "name": { "type": "string", "description": "类名，如 RtsPlacementSound" },
+          "path": { "type": "string", "description": "相对包路径，如 server/service/placement/" },
+          "desc": { "type": "string", "description": "职责说明，可含 <code> 内联代码" }
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "「2 <链路>链路」的 2.x 小节，按顺序渲染",
+      "items": {
+        "type": "object",
+        "required": ["title", "type"],
+        "properties": {
+          "title": { "type": "string", "description": "小节标题，如 '触发路径' / '时序' / '关键机制'" },
+          "type": {
+            "type": "string",
+            "enum": ["table", "flow", "note", "cards"]
+          },
+          "headers": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "type=table 时有效：表头"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "description": "type=table 时有效：数据行，每格字符串可含 <code>"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["side", "text"],
+              "properties": {
+                "side": { "type": "string", "enum": ["srv", "cli"], "description": "srv=服务端(蓝左缘) / cli=客户端(绿左缘)" },
+                "text": { "type": "string", "description": "节点文本，可含 <code>" }
+              }
+            },
+            "description": "type=flow 时有效：时序节点，自上而下箭头连接"
+          },
+          "note": { "type": "string", "description": "type=note 时有效：说明文本（灰底）" },
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "text": { "type": "string" }
+              }
+            },
+            "description": "type=cards 时有效：并排卡片组（如双 mixin 兜底）"
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "description": "「3 走查发现的问题与修复」：问题卡片",
+      "items": {
+        "type": "object",
+        "required": ["title", "status", "why"],
+        "properties": {
+          "title": { "type": "string", "description": "问题标题，如 '① 破坏音听不到'" },
+          "status": {
+            "type": "string",
+            "enum": ["fixed", "kept"],
+            "description": "fixed=已修复(绿徽章) / kept=保留(黄徽章)"
+          },
+          "why": { "type": "string", "description": "根因 + 修复说明，可含 <code>" }
+        }
+      }
+    },
+    "boundaries": {
+      "type": "array",
+      "description": "「4 边界与设计说明」：列表项",
+      "items": { "type": "string" }
+    }
+  }
+}

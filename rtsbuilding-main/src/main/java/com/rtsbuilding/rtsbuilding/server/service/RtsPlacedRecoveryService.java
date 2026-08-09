@@ -3,7 +3,6 @@ package com.rtsbuilding.rtsbuilding.server.service;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
 import com.rtsbuilding.rtsbuilding.server.history.ServerHistoryManager;
-import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementSound;
 import com.rtsbuilding.rtsbuilding.server.service.resolver.RtsLinkedHandlerResolutionService;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;
@@ -103,12 +102,16 @@ public final class RtsPlacedRecoveryService {
         }
 
         Set<UUID> dropIdsBeforeBreak = snapshotNearbyDropIds(level, targetPos);
+        BlockState beforeBreak = level.getBlockState(targetPos);
         boolean removed = breakWithSimulatedSilkTouch(player, level, targetPos);
         if (!removed || !level.getBlockState(targetPos).isAir()) {
             return;
         }
 
-        RtsPlacementSound.playRemoteBlockBreakSound(player, level, targetPos);
+        // 破坏音效统一由客户端 handleBreakAnimation 在本地主相机位置播放（音源=听者，无跨端坐标依赖）。
+        // 服务端 playRemoteBlockBreakSound 依赖服务端记录的相机坐标，可能有上报延迟导致 RTS 玩家听不到。
+        com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningNetworkHelper.sendBreakAnimation(
+                player, targetPos, beforeBreak, level.getBlockState(targetPos));
         tracker.clear(targetPos);
         List<ItemEntity> droppedEntities = collectNewNearbyDrops(level, targetPos, dropIdsBeforeBreak);
         enqueueRecoveryJob(player, session, targetPos, droppedEntities);

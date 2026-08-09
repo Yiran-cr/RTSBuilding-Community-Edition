@@ -1,0 +1,57 @@
+{
+  "id": "shape-placement",
+  "title": "形状放置链路",
+  "subtitle": "NeoForge 1.21.1 · 形状放置（线 / 墙 / 面 / 体 / 圆 / 球）客户端 → 服务端 → 客户端全链路",
+  "tags": {
+    "module": "rtsbuilding-main / rtsbuilding-common",
+    "status": "已走查并修复",
+    "counts": "修复 9 · 断点 3 · 边界 3 · 冗余 3",
+    "result": "BUILD SUCCESSFUL（含测试）"
+  },
+  "classes": [
+    { "name": "BuildShape", "path": "client/build/shape/", "desc": "形状一等公民抽象，每种形状自带几何计算（compute）。" },
+    { "name": "LineBrushSelector", "path": "client/render/pass/", "desc": "画笔状态机（阶段 + 参数），统一派发 computePositions。" },
+    { "name": "LineBrushRenderPass", "path": "client/render/pass/", "desc": "形状预览线框渲染（含冲突高亮）。" },
+    { "name": "BuildInteractionHandler", "path": "client/presentation/panel/handler/", "desc": "右键点选/确认建造、activeBuildShape 收敛派发。" },
+    { "name": "RtsPlacementQuickBuild", "path": "server/service/placement/", "desc": "快速建造：预解析状态计划 + BlockPlacer.setBlock 精确放置。" },
+    { "name": "RtsPlacementBatch", "path": "server/service/placement/", "desc": "批放置作业队列与每 tick 节流执行。" },
+    { "name": "ShapeButtonGroup", "path": "client/presentation/panel/leftbar/", "desc": "形状单选按钮组（建造/破坏侧）。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 触发路径",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "BuilderScreen 事件 → BuildInteractionHandler（tryStartLineBrush 点选）" },
+        { "side": "cli", "text": "confirmLinePlace → LineBrushSelector.computePositions()（形状几何）" },
+        { "side": "cli", "text": "RtsClientPacketGateway.sendLinePlace → C2SAction(PLACE_BATCH) + quickBuild=true" },
+        { "side": "srv", "text": "ServerActionHandler → RtsPlacementServiceImpl.enqueuePlaceBatch" },
+        { "side": "srv", "text": "Pipeline → RtsPlacementBatch 排队 → 每 tick 节流执行" },
+        { "side": "srv", "text": "快速建造 RtsPlacementQuickBuild.placeStateBatchEntry（精确 setBlock）" },
+        { "side": "cli", "text": "S2CRtsPlaceAnimationPayload → handlePlaceAnimation → grow-in 动画" }
+      ]
+    },
+    {
+      "title": "2.2 关键机制",
+      "type": "note",
+      "note": "<b>快速建造 vs 交互式放置</b>：快速路径 quickBuild=true 预解析状态计划后直接 setBlock，位置精确；交互式路径按 face=UP + hitOffset 构造 BlockPlaceContext，会偏移到目标上方一格。<br><b>形状几何上限</b>：各 compute 方法生成时达 MAX_POSITIONS 即停，并用 LinkedHashSet 去重。"
+    }
+  ],
+  "issues": [
+    { "title": "① 形状建造未走快速建造路径，交互式路径偏移一格", "status": "fixed", "why": "根因：客户端 sendLinePlace 未发送 quickBuild 字段，服务端硬编码 .quickBuild(false)，形状放置实际走了交互式路径，BlockItem 放置位置 = clickedPos.relative(UP) 偏移一格。修复：客户端发送 quickBuild=true，服务端透传，形状放置改走快速建造路径精确放置。" },
+    { "title": "② 无会话 fallback 分支是死代码", "status": "fixed", "why": "根因：无会话 fallback 调 enqueuePlaceBatch(player, null, ...)，该方法首行 if(session==null) return false，fallback 永远无效。修复：删除死代码 fallback。" },
+    { "title": "③ 快速建造计划解析失败后永久卡死", "status": "fixed", "why": "根因：statePlacementPlan 缓存解析失败结果，也置 statePlanResolved=true，永不重试。修复：解析失败不缓存；计划为 null 时跳过该位置，不再回退到交互式路径。" },
+    { "title": "④ 超大形状生成上百万 BlockPos 再截断", "status": "fixed", "why": "根因：MAX_RADIUS=64 时球 ≈ 109 万格，远超 MAX_POSITIONS=32768。修复：各 compute 生成时达上限即停 + LinkedHashSet 去重。" },
+    { "title": "⑤ 球形状在 hover 为空时无预览", "status": "fixed", "why": "根因：shouldRender 要求 getHover()!=null，但球几何只依赖球心+半径。修复：对球形状放宽 hover 非空要求。" },
+    { "title": "⑥ 声音限流注释与常量不一致", "status": "fixed", "why": "MAX_SOUNDS_PER_TICK=1 但 javadoc 写最多 2 次。注释改为引用常量。" },
+    { "title": "⑦ ShapeButtonGroup 六个未使用方法", "status": "fixed", "why": "isXxxConstructionSelected 全代码库无调用（统一走 getBuildShape()），已删除。" },
+    { "title": "⑧ BuildInteractionHandler 无用字段", "status": "fixed", "why": "miningMouseButton 只被赋值从未读取，已删除。" },
+    { "title": "⑨ sendLinePlace / sendAreaBoxPlace 重复代码", "status": "fixed", "why": "约 20 行重复 tag 构建提取为公共 sendBatchTag，避免漏改副本。" }
+  ],
+  "boundaries": [
+    "<b>快速建造统一</b>：形状放置统一走快速路径（位置精确、性能稳定），与客户端预览完全一致。",
+    "<b>形状上限保护</b>：几何生成达 MAX_POSITIONS 即停 + 去重，防止客户端内存/卡顿。",
+    "<b>球预览放宽</b>：球几何不依赖 hover，仅需球心 + 半径。",
+    "<b>核心结论</b>：最严重的是断点 1——同时造成位置偏移和快速建造优化失效，是所有形状放置问题的根因。"
+  ]
+}

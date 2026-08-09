@@ -67,9 +67,12 @@ public final class RtsUltimineProcessor {
             Deque<BlockPos> targets = RtsMiningValidator.collectUltimineTargets(player, pos, slot, ItemStack.EMPTY, false,
                     limit, true, mode);
             if (targets.isEmpty()) {
+                // 通知客户端批次结束（即使无目标，也要清空客户端 activePos）
+                notifyUltimineEnded(player);
                 return;
             }
             breakCreativeUltimineTargets(player, session, targets, slot);
+            notifyUltimineEnded(player);
             // UiRefresh handled by pipeline
             return;
         }
@@ -77,11 +80,13 @@ public final class RtsUltimineProcessor {
         boolean selectedToolRequested = session.mining.miningSelectedToolRequested;
         RtsToolLease toolLease = session.mining.miningToolLease;
         if (toolLease == null) {
+            notifyUltimineEnded(player);
             return;
         }
         Deque<BlockPos> targets = RtsMiningValidator.collectUltimineTargets(player, pos, slot, toolLease.stack(),
                 selectedToolRequested, limit, false, mode);
         if (targets.isEmpty()) {
+            notifyUltimineEnded(player);
             return;
         }
 
@@ -121,6 +126,7 @@ public final class RtsUltimineProcessor {
                 ? RtsToolLease.empty()
                 : session.mining.miningToolLease;
         if (!player.isCreative() && toolLease == null) {
+            notifyUltimineEnded(player);
             return;
         }
 
@@ -133,11 +139,13 @@ public final class RtsUltimineProcessor {
         Deque<BlockPos> targets = new ArrayDeque<>(candidatePositions);
 
         if (targets.isEmpty()) {
+            notifyUltimineEnded(player);
             return;
         }
 
         if (player.isCreative()) {
             breakCreativeUltimineTargets(player, session, targets, slot);
+            notifyUltimineEnded(player);
             return;
         }
 
@@ -169,20 +177,24 @@ public final class RtsUltimineProcessor {
         if (player.isCreative()) {
             Deque<BlockPos> targets = collectAreaDestroyTargets(player, positions, slot, ItemStack.EMPTY, false, true);
             if (targets.isEmpty()) {
+                notifyUltimineEnded(player);
                 return;
             }
             breakCreativeUltimineTargets(player, session, targets, slot);
+            notifyUltimineEnded(player);
             return;
         }
 
         boolean selectedToolRequested = session.mining.miningSelectedToolRequested;
         RtsToolLease toolLease = session.mining.miningToolLease;
         if (toolLease == null) {
+            notifyUltimineEnded(player);
             return;
         }
         Deque<BlockPos> targets = collectAreaDestroyTargets(player, positions, slot, toolLease.stack(),
                 selectedToolRequested, false);
         if (targets.isEmpty()) {
+            notifyUltimineEnded(player);
             return;
         }
 
@@ -221,6 +233,7 @@ public final class RtsUltimineProcessor {
         if (player.isCreative()) {
             Deque<BlockPos> targets = collectAreaDestroyTargets(player, positions, slot, ItemStack.EMPTY, false, true);
             if (targets.isEmpty()) {
+                notifyUltimineEnded(player);
                 return 0;
             }
             breakCreativeBatch(player, session, targets, slot, workflowEntryId);
@@ -231,11 +244,13 @@ public final class RtsUltimineProcessor {
         boolean selectedToolRequested = session.mining.miningSelectedToolRequested;
         RtsToolLease toolLease = session.mining.miningToolLease;
         if (toolLease == null) {
+            notifyUltimineEnded(player);
             return 0;
         }
         Deque<BlockPos> targets = collectAreaDestroyTargets(player, positions, slot, toolLease.stack(),
                 selectedToolRequested, false);
         if (targets.isEmpty()) {
+            notifyUltimineEnded(player);
             return 0;
         }
 
@@ -263,6 +278,7 @@ public final class RtsUltimineProcessor {
             Deque<BlockPos> targets = RtsMiningValidator.collectUltimineTargets(player, pos, slot, ItemStack.EMPTY, false,
                     limit, true, mode);
             if (targets.isEmpty()) {
+                notifyUltimineEnded(player);
                 return 0;
             }
             breakCreativeBatch(player, session, targets, slot, workflowEntryId);
@@ -272,11 +288,13 @@ public final class RtsUltimineProcessor {
         boolean selectedToolRequested = session.mining.miningSelectedToolRequested;
         RtsToolLease toolLease = session.mining.miningToolLease;
         if (toolLease == null) {
+            notifyUltimineEnded(player);
             return 0;
         }
         Deque<BlockPos> targets = RtsMiningValidator.collectUltimineTargets(player, pos, slot, toolLease.stack(),
                 selectedToolRequested, limit, false, mode);
         if (targets.isEmpty()) {
+            notifyUltimineEnded(player);
             return 0;
         }
 
@@ -315,6 +333,7 @@ public final class RtsUltimineProcessor {
                     player);
             Deque<BlockPos> targets = new ArrayDeque<>(candidatePositions);
             if (targets.isEmpty()) {
+                notifyUltimineEnded(player);
                 return 0;
             }
             breakCreativeBatch(player, session, targets, slot, workflowEntryId);
@@ -324,6 +343,7 @@ public final class RtsUltimineProcessor {
         boolean selectedToolRequested = session.mining.miningSelectedToolRequested;
         RtsToolLease toolLease = session.mining.miningToolLease;
         if (toolLease == null) {
+            notifyUltimineEnded(player);
             return 0;
         }
 
@@ -335,6 +355,7 @@ public final class RtsUltimineProcessor {
                 player);
         Deque<BlockPos> targets = new ArrayDeque<>(candidatePositions);
         if (targets.isEmpty()) {
+            notifyUltimineEnded(player);
             return 0;
         }
 
@@ -551,6 +572,16 @@ public final class RtsUltimineProcessor {
                     token.setCompletedBlocks(targets.size());
                     token.complete();
                 });
+    }
+
+    /**
+     * 通知客户端连锁挖掘批次已结束（无剩余进度）。
+     * <p>所有「提前返回/创造模式立即破坏」的路径都必须调用本方法，
+     * 否则客户端 {@code MiningModule.activePos} 残留非空，
+     * 导致下一次点击被误判为"取消批次"而不是发起新挖掘（需要点两次）。</p>
+     */
+    private static void notifyUltimineEnded(ServerPlayer player) {
+        RtsMiningNetworkHelper.sendUltimineProgress(player, -1, 0);
     }
 
 }

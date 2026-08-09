@@ -115,7 +115,8 @@ public final class ServerActionHandler {
                         t.getByte("rotateSteps"), t.getBoolean("forcePlace"), t.getBoolean("skipIfOccupied"),
                         t.getString("itemId"), net.minecraft.world.item.ItemStack.EMPTY,
                         t.getDouble("rayOriginX"), t.getDouble("rayOriginY"), t.getDouble("rayOriginZ"),
-                        t.getDouble("rayDirX"), t.getDouble("rayDirY"), t.getDouble("rayDirZ"));
+                        t.getDouble("rayDirX"), t.getDouble("rayDirY"), t.getDouble("rayDirZ"),
+                        t.getBoolean("quickBuild"));
             }
             case PLACE_FLUID -> {
                 if (!isBuildMode(p)) return;

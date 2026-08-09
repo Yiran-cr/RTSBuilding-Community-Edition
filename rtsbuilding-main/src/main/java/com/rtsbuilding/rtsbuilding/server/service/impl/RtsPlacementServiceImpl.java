@@ -106,74 +106,49 @@ public final class RtsPlacementServiceImpl implements RtsService {
                                   double hitOffsetX, double hitOffsetY, double hitOffsetZ, byte rotateSteps,
                                   boolean forcePlace, boolean skipIfOccupied, String itemId,
                                   ItemStack itemPrototype, double rayOriginX, double rayOriginY, double rayOriginZ,
-                                  double rayDirX, double rayDirY, double rayDirZ) {
+                                  double rayDirX, double rayDirY, double rayDirZ, boolean quickBuild) {
         RtsStorageSession session = player == null ? null : server.session().getIfPresent(player);
 
-        if (player != null && session != null && clickedPositions != null && !clickedPositions.isEmpty()) {
-            List<BlockPos> sanitized = new ArrayList<>(Math.min(clickedPositions.size(), NetworkConstants.MAX_POSITIONS));
-            for (BlockPos pos : clickedPositions) {
-                if (pos != null && RtsLinkedStorageResolver.canAccessWorldTarget(player, pos)) {
-                    sanitized.add(pos.immutable());
-                    if (sanitized.size() >= NetworkConstants.MAX_POSITIONS) {
-                        break;
-                    }
+        if (player == null || session == null || clickedPositions == null || clickedPositions.isEmpty()) {
+            // 无会话或空位置：静默忽略，无需入队
+            return;
+        }
+        List<BlockPos> sanitized = new ArrayList<>(Math.min(clickedPositions.size(), NetworkConstants.MAX_POSITIONS));
+        for (BlockPos pos : clickedPositions) {
+            if (pos != null && RtsLinkedStorageResolver.canAccessWorldTarget(player, pos)) {
+                sanitized.add(pos.immutable());
+                if (sanitized.size() >= NetworkConstants.MAX_POSITIONS) {
+                    break;
                 }
             }
-
-            PipelineRegistry.execute(RtsWorkflowType.PLACE_BATCH,
-                    PlaceContext.builder(player)
-                            .clickedPositions(sanitized)
-                            .face(face)
-                            .hitOffsetX(hitOffsetX)
-                            .hitOffsetY(hitOffsetY)
-                            .hitOffsetZ(hitOffsetZ)
-                            .rotateSteps(rotateSteps)
-                            .forcePlace(forcePlace)
-                            .skipIfOccupied(skipIfOccupied)
-                            .itemId(itemId == null ? "" : itemId)
-                            .itemPrototype(itemPrototype)
-                            .rayOriginX(rayOriginX)
-                            .rayOriginY(rayOriginY)
-                            .rayOriginZ(rayOriginZ)
-                            .rayDirX(rayDirX)
-                            .rayDirY(rayDirY)
-                            .rayDirZ(rayDirZ)
-                            .quickBuild(false)
-                            .forceEmptyHand(false)
-                            .sendRemoteHint(true)
-                            .totalBlocks(sanitized.size())
-                            .build());
+        }
+        if (sanitized.isEmpty()) {
             return;
         }
 
-        // 回退：无会话或空位置 — 入队但不经过工作流
-        RtsPlacementBatch.enqueuePlaceBatch(
-                player,
-                session,
-                clickedPositions,
-                face,
-                hitOffsetX,
-                hitOffsetY,
-                hitOffsetZ,
-                rotateSteps,
-                forcePlace,
-                skipIfOccupied,
-                itemId == null ? "" : itemId,
-                itemPrototype,
-                rayOriginX,
-                rayOriginY,
-                rayOriginZ,
-                rayDirX,
-                rayDirY,
-                rayDirZ,
-                true,
-                false,
-                false,
-                -1);
-
-        if (player != null) {
-            RtsPendingPlacementService.tryResumeAfterStorageChange(player);
-        }
+        PipelineRegistry.execute(RtsWorkflowType.PLACE_BATCH,
+                PlaceContext.builder(player)
+                        .clickedPositions(sanitized)
+                        .face(face)
+                        .hitOffsetX(hitOffsetX)
+                        .hitOffsetY(hitOffsetY)
+                        .hitOffsetZ(hitOffsetZ)
+                        .rotateSteps(rotateSteps)
+                        .forcePlace(forcePlace)
+                        .skipIfOccupied(skipIfOccupied)
+                        .itemId(itemId == null ? "" : itemId)
+                        .itemPrototype(itemPrototype)
+                        .rayOriginX(rayOriginX)
+                        .rayOriginY(rayOriginY)
+                        .rayOriginZ(rayOriginZ)
+                        .rayDirX(rayDirX)
+                        .rayDirY(rayDirY)
+                        .rayDirZ(rayDirZ)
+                        .quickBuild(quickBuild)
+                        .forceEmptyHand(false)
+                        .sendRemoteHint(true)
+                        .totalBlocks(sanitized.size())
+                        .build());
     }
 
     public int submitPendingPlacement(ServerPlayer player) {

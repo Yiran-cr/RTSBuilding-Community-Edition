@@ -1,4 +1,5 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar;
+import com.rtsbuilding.rtsbuilding.client.build.shape.BuildShape;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.ActionButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.BuildDestroyButtonGroup;
@@ -141,20 +142,41 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         return shapeGroup.isSingleBlockDestructionSelected();
     }
 
-    /** 形状按钮组"建造"侧是否选中"线"形状（画笔画线建造）。 */
-    public boolean isLineBuildShapeSelected() {
-        return shapeGroup.isLineConstructionSelected();
+    /**
+     * 形状按钮组"建造"侧当前选中的画笔形状；选中单方块时返回 {@code null}。
+     *
+     * @return 建造形状，供 {@link com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.BuildInteractionHandler}
+     *         统一驱动画笔状态机，替代原先的逐个 {@code isXxxBuildShapeSelected()} 判断
+     */
+    public BuildShape getBuildShape() {
+        return shapeToBuildShape(shapeGroup.getConstructionSelectedShape());
     }
 
-    /** 形状按钮组"建造"侧是否选中"墙"形状（画线并调整高度建造墙体）。 */
-    public boolean isWallBuildShapeSelected() {
-        return shapeGroup.isWallConstructionSelected();
+    /**
+     * 形状按钮组"破坏"侧当前选中的画笔形状；选中单方块时返回 {@code null}。
+     *
+     * @return 破坏形状，供画笔状态机在破坏侧复用同一套几何计算与阶段交互
+     */
+    public BuildShape getBreakShape() {
+        return shapeToBuildShape(shapeGroup.getDestructionSelectedShape());
+    }
+
+    /** 把形状按钮组索引映射为 {@link BuildShape}；单方块返回 {@code null}。 */
+    private static BuildShape shapeToBuildShape(int index) {
+        return switch (index) {
+            case ShapeButtonGroup.LINE -> BuildShape.LINE;
+            case ShapeButtonGroup.WALL -> BuildShape.WALL;
+            case ShapeButtonGroup.PLANE -> BuildShape.FACE;
+            case ShapeButtonGroup.SOLID -> BuildShape.SOLID;
+            case ShapeButtonGroup.CIRCLE_FACE -> BuildShape.CIRCLE;
+            case ShapeButtonGroup.SPHERE -> BuildShape.SPHERE;
+            default -> null;
+        };
     }
 
 
     
 
-    
     private LeftSidebarLayoutHelper.Rect layoutRect() {
         return layout.sidebarRect(
                 this.screen.width, this.screen.height, this.currentWidth);

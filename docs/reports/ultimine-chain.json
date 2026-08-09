@@ -1,0 +1,86 @@
+{
+  "id": "ultimine-chain",
+  "title": "连锁挖掘链路",
+  "subtitle": "NeoForge 1.21.1 · 连锁挖掘（Ultimine）客户端预览 → 服务端收集 → 每 tick 处理的完整链路",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "边界 8 · 断点 4 · 无效 8 · 冗余 7",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "UltiminePreviewPass", "path": "client/render/pass/", "desc": "客户端预览：BFS 收集 → 外周过滤 → 边提取 → 角括号边框。" },
+    { "name": "UltimineBlockMerger", "path": "client/render/util/", "desc": "VoxelShape 外轮廓合并，生成边框线段。" },
+    { "name": "BuildInteractionHandler", "path": "client/presentation/panel/handler/", "desc": "左键触发连锁、批次中点击取消。" },
+    { "name": "MiningModule / MiningState", "path": "client/infrastructure/module/mining/", "desc": "客户端挖掘状态机（activePos / 进度）。" },
+    { "name": "RtsUltimineProcessor", "path": "server/service/mining/", "desc": "批次收集、每 tick 处理、创造模式批量破坏。" },
+    { "name": "RtsMiningStateMachine", "path": "server/service/mining/", "desc": "单块/批次切换、破坏执行、批字段初始化。" },
+    { "name": "RtsMiningValidator", "path": "server/service/mining/", "desc": "目标校验（isTargetMineable / isUltimineCandidate）。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 触发路径",
+      "type": "table",
+      "headers": ["路径", "调用点", "说明"],
+      "rows": [
+        ["客户端预览", "<span class='path'>UltiminePreviewPass → RtsUltimineCollector.collect</span>", "同类型 BFS 收集，硬度比 ≤1.5x 过滤。"],
+        ["左键触发", "<span class='path'>BuildInteractionHandler → MiningModule.startUltimine</span>", "批次进行中再次点击 = 取消。"],
+        ["服务端收集", "<span class='path'>RtsUltimineProcessor.startUltimine / queueStartUltimine</span>", "collectUltimineTargets BFS 收集，限制 ULTIMINE_MAX_BLOCKS。"],
+        ["每 tick 处理", "<span class='path'>tickActiveMining → processUltimineTargets</span>", "每 tick ≤8 块 removeFirst 破坏。"]
+      ]
+    },
+    {
+      "title": "2.2 时序",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "预览 BFS 收集 → 外周过滤 → 边框渲染" },
+        { "side": "cli", "text": "左键 → MiningModule.startUltimine 发包" },
+        { "side": "srv", "text": "ServerActionHandler → Mining Pipeline → ToolBorrow" },
+        { "side": "srv", "text": "collectUltimineTargets BFS 收集（限制上限）" },
+        { "side": "srv", "text": "每 tick processUltimineTargets（≤8 块）→ finishUltimineBatch" },
+        { "side": "cli", "text": "裂纹进度 / 完成信号（-1, 0）清除 activePos" }
+      ]
+    },
+    {
+      "title": "2.3 关键机制",
+      "type": "note",
+      "note": "<b>批字段初始化</b>：initBatchFields 统一初始化 targets/progressPos/total/processed/broken。<br><b>目标校验</b>：isTargetMineable 抽为公共谓词，两处共用。<br><b>完成信号</b>：finishUltimineBatch 结束发送 sendUltimineProgress(-1, 0)，客户端据此清除 activePos。"
+    }
+  ],
+  "issues": [
+    { "title": "B1 · 预览过滤条件与服务端不一致", "status": "fixed", "why": "根因：预览仅做同类型+速度过滤，服务端额外要求硬度比 ≤1.5x 和动作半径校验。修复：预览过滤器补充硬度比与动作半径过滤。" },
+    { "title": "B2 · ultimineProgressPos 从不随目标推进更新", "status": "fixed", "why": "根因：批处理循环不更新 progressPos，裂纹始终钉在首个目标。修复：每次取出目标后立即更新。" },
+    { "title": "B3 · 校验失败目标仍占用 processed 计数", "status": "fixed", "why": "根因：循环顶部无条件 processed++，即使 continue 跳过。修复：校验通过后才 processed++，抽为 isTargetMineable。" },
+    { "title": "B4 · 预览不含工具 / 半径预检", "status": "fixed", "why": "根因：预览 BFS 不含动作半径校验，超半径种子服务端静默返回空。修复：预览过滤增加相机锚点半边长判定。" },
+    { "title": "B5 · 首目标破坏失败 → 丢弃整个批次", "status": "fixed", "why": "根因：单块完成路径 if(result.broken() && !ultimineTargets.isEmpty())，首目标失败落入单方块分支直接 finalize。修复：改为 if(!ultimineTargets.isEmpty()) 无论成败都继续批次。" },
+    { "title": "B6 · 单块 / 批处理两种计数方式不一致", "status": "fixed", "why": "根因：首目标单块路径用 Math.max(processed,1)，批处理用 processed++。修复：统一为已尝试处理即 processed++。" },
+    { "title": "B7 · ultimine mode 硬编码 0", "status": "fixed", "why": "根因：客户端发送 (byte) 0 的 mode。修复：抽取 ULTIMINE_MODE = 0 常量。" },
+    { "title": "B8 · isBuildMode 在相机未激活时直接放行", "status": "fixed", "why": "根因：原实现 if(!isActive(p)) return true，相机未激活反而放行。修复：收紧为相机未激活 return false，并要求 BUILD 模式。" },
+    { "title": "D1 · 破坏动画处理器为空实现", "status": "fixed", "why": "根因：handleBreakAnimation 空方法，每块发包全浪费。修复：实现处理器，清裂纹并触发破坏反馈（后续演进为客户端本地播放破坏音）。" },
+    { "title": "D2 · ultimine 进度链路无消费", "status": "fixed", "why": "根因：服务端仅在中止时发 (-1,0)，客户端写入后无渲染消费。修复：改为批次完成信号，客户端清除 activePos，删除无消费字段。" },
+    { "title": "D3 · 连锁批次无取消入口", "status": "fixed", "why": "根因：批次点击即发、无取消；服务端对已提交批次拒绝停止。修复：客户端批次进行中再次左键=取消；服务端对任一活跃挖掘均支持 STOP_MINING。" },
+    { "title": "D4 · 预览高亮但服务端静默拒绝", "status": "fixed", "why": "根因：种子不可挖时 collectUltimineTargets 静默返回空。修复：预览侧先做半径约束过滤。" },
+    { "title": "I1 · UltimineBlockMerger.mergeAabbs 死代码", "status": "fixed", "why": "改用 getEdgeLines 后无人调用，删除。" },
+    { "title": "I2 · RtsMiningTargetQueue 整个类死代码", "status": "fixed", "why": "三个方法全项目零调用，删除。" },
+    { "title": "I3 · computeRemoteDestroyStep 死代码", "status": "fixed", "why": "@Deprecated 包装器，已被 MiningSpeedCalculator 替代，删除。" },
+    { "title": "I4 · ultimineAbsorbedDrops 字段只写不读", "status": "fixed", "why": "删除。" },
+    { "title": "I5 · 进度/render getter 无消费方", "status": "fixed", "why": "删除 getUltimineProcessed/Total、getRenderStage/Pos。" },
+    { "title": "I6 · MiningState 的 areaMine 遗留字段", "status": "fixed", "why": "无 area-mine UI 的遗留字段，删除。" },
+    { "title": "I7 · handleRemoteMenuHint 空实现", "status": "fixed", "why": "连带移除 dispatcher case 与 import。" },
+    { "title": "I8 · 连续两个 SyncPipe", "status": "fixed", "why": "ULTIMINE/AREA_MINE 管线各删一个。" },
+    { "title": "R1 · 批字段初始化重复 4 份", "status": "fixed", "why": "抽取 initBatchFields，消除 4 份重复。" },
+    { "title": "R2 · 创造模式破坏分支重复 3 份", "status": "fixed", "why": "抽取 breakCreativeBatch，消除 3 份重复。" },
+    { "title": "R3 · 目标验证重复", "status": "fixed", "why": "抽取 isTargetMineable 谓词，消除两处重复。" },
+    { "title": "R4 · sendUltimineStart 死参数 toolPrototype", "status": "fixed", "why": "从未编码进包，删除（API 层保留签名兼容）。" },
+    { "title": "R5 · startUltimine 冗余状态写入", "status": "fixed", "why": "删除对 renderPos/renderStage 的无效果赋值。" },
+    { "title": "R6 · 每帧新建 faceOffsets 数组", "status": "fixed", "why": "提取为 FACE_OFFSETS 常量。" },
+    { "title": "R7 · queueMode 分支重复 setTotalBlocks", "status": "fixed", "why": "抽取 setQueueTotalBlocks。" }
+  ],
+  "boundaries": [
+    "<b>预览与实际一致性</b>：预览过滤（硬度比 ≤1.5x + 动作半径）与服务端 isUltimineCandidate 对齐，避免高亮但挖不到。",
+    "<b>批次取消</b>：activePos 非空时再次左键 = 取消，服务端对任一活跃挖掘均支持 STOP_MINING。",
+    "<b>完成信号</b>：批次结束必发 (-1,0)，保证客户端 activePos 被清除（否则下一次点击被误判为取消）。",
+    "<b>已知近似</b>：预览无法精确模拟服务端 MiningSpeedCalculator 的完整工具速度判定，无合适工具时点击无反应仍可能发生，属可接受近似。",
+    "<b>建议后续</b>：若需完全对齐工具速度，可考虑服务端下发最近一次 ULTIMINE 收集结果给客户端复用。"
+  ]
+}

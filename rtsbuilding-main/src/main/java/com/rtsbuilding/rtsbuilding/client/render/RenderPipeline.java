@@ -77,10 +77,10 @@ public final class RenderPipeline {
     
     public UltiminePreviewPass ultiminePreviewPass;
 
-    /** 线模式建造画笔状态机。 */
+    /** 线/墙/面模式建造画笔状态机。 */
     public final LineBrushSelector lineBrush = new LineBrushSelector();
 
-    /** 线模式建造预览。 */
+    /** 线/墙/面模式建造预览。 */
     public LineBrushRenderPass lineBrushRenderPass;
 
     

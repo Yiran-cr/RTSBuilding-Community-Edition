@@ -267,6 +267,28 @@ public final class RtsClientPacketGateway {
         if (level == null) return;
         List<Long> positions = collectAreaPositions(level, min, max, false);
         if (positions.isEmpty()) return;
+        sendAreaDestroyTag(positions, toolSlot, toolItemId, toolProtectionEnabled);
+    }
+
+    /**
+     * 形状画笔批量破坏：把画笔生成的形状位置列表直接交给服务端 {@code AREA_DESTROY} 队列按 tick 节流破坏。
+     * 与框选破坏共用同一破坏标签构建，只是目标来自形状几何计算而非框选扫描。
+     */
+    public static void sendShapeAreaDestroy(List<BlockPos> positions, int toolSlot,
+                                            String toolItemId, boolean toolProtectionEnabled) {
+        if (positions == null || positions.isEmpty()) return;
+        int limit = Math.min(positions.size(), NetworkConstants.MAX_POSITIONS);
+        List<Long> longs = new ArrayList<>(limit);
+        for (int i = 0; i < limit; i++) {
+            longs.add(positions.get(i).asLong());
+        }
+        sendAreaDestroyTag(longs, toolSlot, toolItemId, toolProtectionEnabled);
+    }
+
+    /** 构建并发送 {@code AREA_DESTROY} 批量破坏请求的公共标签。 */
+    private static void sendAreaDestroyTag(List<Long> positions, int toolSlot,
+                                           String toolItemId, boolean toolProtectionEnabled) {
+        if (positions == null || positions.isEmpty()) return;
         var t = tag();
         var list = new ListTag();
         for (Long l : positions) list.add(net.minecraft.nbt.LongTag.valueOf(l));
@@ -289,6 +311,33 @@ public final class RtsClientPacketGateway {
         if (level == null) return;
         List<Long> positions = collectAreaPositions(level, min, max, true);
         if (positions.isEmpty()) return;
+        sendBatchTag(positions, rotateSteps, forcePlace, skipIfOccupied, itemId,
+                true, rayOrigin, rayDir);
+    }
+
+    /**
+     * 线模式建造批量放置：沿起点到终点线段生成的位置列表，交给服务端 {@code PLACE_BATCH} 队列按 tick 节流放置。
+     * 形状位置是客户端已解析好的精确坐标，走快速建造路径（{@code quickBuild=true}），
+     * 服务端直接 {@code setBlock} 到目标位置，避免交互式放置按面偏移一格。
+     */
+    public static void sendLinePlace(List<BlockPos> positions, byte rotateSteps,
+                                     boolean forcePlace, boolean skipIfOccupied, String itemId,
+                                     Vec3 rayOrigin, Vec3 rayDir) {
+        if (positions == null || positions.isEmpty() || itemId == null || itemId.isBlank()) return;
+        int limit = Math.min(positions.size(), NetworkConstants.MAX_POSITIONS);
+        List<Long> longs = new ArrayList<>(limit);
+        for (int i = 0; i < limit; i++) {
+            longs.add(positions.get(i).asLong());
+        }
+        sendBatchTag(longs, rotateSteps, forcePlace, skipIfOccupied, itemId,
+                true, rayOrigin, rayDir);
+    }
+
+    /** 构建并发送 {@code PLACE_BATCH} 批量放置请求的公共标签。 */
+    private static void sendBatchTag(List<Long> positions, byte rotateSteps,
+                                     boolean forcePlace, boolean skipIfOccupied, String itemId,
+                                     boolean quickBuild, Vec3 rayOrigin, Vec3 rayDir) {
+        if (positions == null || positions.isEmpty()) return;
         var t = tag();
         var list = new ListTag();
         for (Long l : positions) list.add(net.minecraft.nbt.LongTag.valueOf(l));
@@ -297,33 +346,7 @@ public final class RtsClientPacketGateway {
         t.putByte("rotateSteps", rotateSteps);
         t.putBoolean("forcePlace", forcePlace);
         t.putBoolean("skipIfOccupied", skipIfOccupied);
-        t.putString("itemId", itemId);
-        t.putDouble("hitOffsetX", 0.5);
-        t.putDouble("hitOffsetY", 0.5);
-        t.putDouble("hitOffsetZ", 0.5);
-        t.putDouble("rayOriginX", rayOrigin.x); t.putDouble("rayOriginY", rayOrigin.y); t.putDouble("rayOriginZ", rayOrigin.z);
-        t.putDouble("rayDirX", rayDir.x); t.putDouble("rayDirY", rayDir.y); t.putDouble("rayDirZ", rayDir.z);
-        PacketDistributor.sendToServer(act(ActionType.PLACE_BATCH, t));
-    }
-
-    /**
-     * 线模式建造批量放置：沿起点到终点线段生成的位置列表，交给服务端 {@code PLACE_BATCH} 队列按 tick 节流放置。
-     */
-    public static void sendLinePlace(List<BlockPos> positions, byte rotateSteps,
-                                     boolean forcePlace, boolean skipIfOccupied, String itemId,
-                                     Vec3 rayOrigin, Vec3 rayDir) {
-        if (positions == null || positions.isEmpty() || itemId == null || itemId.isBlank()) return;
-        var t = tag();
-        var list = new ListTag();
-        int limit = Math.min(positions.size(), NetworkConstants.MAX_POSITIONS);
-        for (int i = 0; i < limit; i++) {
-            list.add(net.minecraft.nbt.LongTag.valueOf(positions.get(i).asLong()));
-        }
-        t.put("positions", list);
-        t.putByte("face", (byte) Direction.UP.get3DDataValue());
-        t.putByte("rotateSteps", rotateSteps);
-        t.putBoolean("forcePlace", forcePlace);
-        t.putBoolean("skipIfOccupied", skipIfOccupied);
+        t.putBoolean("quickBuild", quickBuild);
         t.putString("itemId", itemId);
         t.putDouble("hitOffsetX", 0.5);
         t.putDouble("hitOffsetY", 0.5);
