@@ -104,7 +104,9 @@ public final class BoxSelectionPass implements RenderPass {
     public void render(Minecraft mc, BufferAllocator alloc, PoseStack poseStack, float partialTick, int frameIndex) {
         if (!(mc.screen instanceof BuilderScreen screen)) return;
 
-        
+        // XYZ 轴调节器拖拽期间跳过：光标隐藏后不应渲染框选 hover 预览（未选定范围时）
+        if (screen.isAxisGizmoDragging()) return;
+
         if (screen.isClickButtonSelected()) {
             selector.reset();
             clearCache();

@@ -1,0 +1,79 @@
+{
+  "id": "xyz-axis-gizmo",
+  "title": "XYZ 轴视角调节器链路",
+  "subtitle": "NeoForge 1.21.1 · 轴端点击跳视角 + 球体拖拽旋转的纯客户端相机操作链路（渲染 → 命中 → 视角跳转/拖拽 → 渲染 pass 跳过）",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "边界 4 · 断点 0 · 无效 0 · 冗余 1",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "AxisViewGizmo", "path": "client/presentation/panel/downbar/", "desc": "门面类：组合投影/渲染/输入，对外暴露 <code>render / mouseClicked / mouseDragged / mouseReleased / releaseCursorIfNeeded</code>。" },
+    { "name": "AxisGizmoState", "path": "client/presentation/panel/downbar/", "desc": "可变状态：位置/球心、拖拽与光标隐藏标志、六段轴悬停动画与 tooltip。" },
+    { "name": "TrackballProjection", "path": "client/presentation/panel/downbar/", "desc": "3D 投影数学：按相机 yaw/pitch 构建视图基底，世界轴投影到屏幕，渲染/命中/tooltip 三处共用统一坐标。" },
+    { "name": "AxisGizmoRenderer", "path": "client/presentation/panel/downbar/", "desc": "圆形背景、随视角投影的六段彩轴与文字圆点绘制、工具提示；<code>hitAxis</code> 供渲染与输入共用命中判定。" },
+    { "name": "AxisGizmoInputHandler", "path": "client/presentation/panel/downbar/", "desc": "轴端点击跳转、左键圆内拖拽旋转、拖拽期间光标隐藏/恢复。" },
+    { "name": "DownSidebarPanel", "path": "client/presentation/panel/downbar/", "desc": "持有 gizmo 并计算悬浮位置（下板右上角），优先转发点击/拖拽事件，向 BuilderScreen 暴露 UI 命中与拖拽查询。" },
+    { "name": "CameraModule", "path": "client/infrastructure/module/camera/", "desc": "相机模块：<code>snapViewToAxis</code> 委托视角跳转、<code>queueRotateDrag</code> 累加旋转输入、每帧推进动画并消费输入。" },
+    { "name": "CameraViewSnapController", "path": "client/infrastructure/module/camera/", "desc": "视角跳转控制器：自由视角仅旋转朝向、环绕模式插值角度，450ms 缓出动画逐帧推进。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 渲染链路",
+      "type": "table",
+      "headers": ["路径", "调用点", "说明"],
+      "rows": [
+        ["面板渲染", "<span class='path'>BuilderScreen.render → PanelRegistry.renderOverlays → DownSidebarPanel.renderOverlays</span>", "CONTENT_PANELS 层，gizmo 随下板渲染。"],
+        ["悬浮定位", "<span class='path'>layoutAxisGizmo</span>", "gizmoX = 下板右端 − WIDTH − 6，gizmoY = 下板上方 − HEIGHT − 6，悬浮于世界画面右下角。"],
+        ["轨道球渲染", "<span class='path'>AxisViewGizmo.render → AxisGizmoRenderer.render</span>", "先 <code>updateViewBasis</code>，绘制背景圆与按深度排序的六段彩轴，刷新悬停动画与 tooltip。"],
+        ["工具提示", "<span class='path'>axisViewGizmo.renderTooltipOverlay</span>", "ABOVE 方向弹出，向上进入世界区域；屏幕宽高用 RTS 虚拟尺寸钳制。"],
+        ["视角基底", "<span class='path'>TrackballProjection.updateViewBasis</span>", "相机不可用/未激活时回退 yaw=0、pitch=-30 的默认视角。"]
+      ]
+    },
+    {
+      "title": "2.2 输入链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "BuilderScreen.mouseClicked → EventDispatcher → PanelRegistry（P_UI_PANEL 优先）" },
+        { "side": "cli", "text": "DownSidebarPanel.mouseClicked：gizmo 区域内点击一律消费（防右键框选/防当世界操作）" },
+        { "side": "cli", "text": "AxisGizmoInputHandler.mouseClicked：左键轴端 hitAxis → flip 判定 → CameraModule.snapViewToAxis" },
+        { "side": "cli", "text": "CameraViewSnapController.snapViewToAxis：自由视角走 yaw/pitch、环绕模式走角度插值，启动 450ms 动画" },
+        { "side": "cli", "text": "CameraModule.onRenderFrame → advance 逐帧推进 → freeCamera/poseComputer/playerOrbit 重算姿态" }
+      ]
+    },
+    {
+      "title": "2.3 拖拽旋转链路",
+      "type": "table",
+      "headers": ["路径", "调用点", "说明"],
+      "rows": [
+        ["拖拽转发", "<span class='path'>BuilderScreen.mouseDragged → PanelRegistry → DownSidebarPanel.mouseDragged</span>", "gizmo 拖拽中不受面板矩形限制，持续转发 <code>dragX/dragY</code>。"],
+        ["输入累加", "<span class='path'>AxisGizmoInputHandler.mouseDragged → CameraModule.queueRotateDrag</span>", "先 <code>viewSnapController.cancel()</code> 取消动画，再累加 pendingRawRotateX/Y。"],
+        ["每帧消费", "<span class='path'>freeCamera.processInput / poseComputer.processOrbitInput / playerOrbit.processInput</span>", "三种相机模式按同一通道消费旋转输入。"],
+        ["光标隐藏", "<span class='path'>hideCursorAndRecordStart / restoreCursor</span>", "拖拽隐藏系统光标并记录起点，释放时恢复并移回起点。"],
+        ["退出兜底", "<span class='path'>BuilderScreen.onClose → DownSidebarPanel.releaseAxisGizmoCursor</span>", "拖拽中退出 RTS 模式时强制恢复光标，防止残留隐藏。"]
+      ]
+    },
+    {
+      "title": "2.4 渲染 pass 跳过与 UI 命中",
+      "type": "note",
+      "note": "<b>拖拽期间跳过</b>：<code>InteractionTargetPass:53</code>、<code>BoxSelectionPass:108</code>、<code>LineBrushRenderPass</code> 在 <code>screen.isAxisGizmoDragging()</code> 时跳过，避免光标隐藏后渲染误导性高亮/框选预览。<br><b>UI 命中兜底</b>：<code>BuilderScreen.isMouseOverRtsPanelApi:286</code> 单独识别 gizmo 区域（下板被压缩很小时它可能越过下板矩形顶部），防止被当成世界操作。"
+    }
+  ],
+  "issues": [
+    { "title": "B1 · 轴段点击跳转不区分鼠标按钮", "status": "fixed", "why": "根因：<code>AxisGizmoInputHandler.mouseClicked</code> 命中轴段即跳转，右键/中键也会触发，与 P_SELECTION 右键框选语义交叉、中键易误触。修复：仅左键（GLFW_MOUSE_BUTTON_LEFT）触发轴端跳转；<code>DownSidebarPanel.mouseClicked</code> 对 gizmo 面板矩形内点击统一消费，右键不再落入框选。" },
+    { "title": "B2 · gizmo 拖拽期间线画笔预览跳动", "status": "fixed", "why": "根因：仅 InteractionTargetPass/BoxSelectionPass 跳过拖拽，<code>LineBrushRenderPass</code> 仍按鼠标射线每帧渲染线框，视角旋转时预览跳动。修复：<code>LineBrushRenderPass.render</code> 增加 <code>isAxisGizmoDragging()</code> 提前返回。" },
+    { "title": "B3 · 视角跳转动画与相机模式切换冲突", "status": "fixed", "why": "根因：orbit↔free 切换时 <code>CameraViewSnapController</code> 不取消动画，freeSnap 每帧写 localYaw/localPitch 与 orbit 模式的 angle 计算互相覆盖，切回后旧动画残留。修复：<code>advance</code> 增加模式匹配保护，不匹配立即置 false。" },
+    { "title": "R1 · hitAxis 内部重复更新视图基底", "status": "fixed", "why": "根因：<code>AxisGizmoRenderer.hitAxis</code> 内部 <code>updateViewBasis()</code> 与 <code>mouseClicked</code> / <code>render</code> 调用方重复（每次点击/每帧多算一次三角函数）。修复：移除内部调用，javadoc 注明调用方须先更新视图基底。" },
+    { "title": "B4 · 拖拽中窗口失焦光标可能残留隐藏", "status": "kept", "why": "恢复光标兜底仅依赖 <code>BuilderScreen.onClose</code>；窗口失焦/释放丢失时 MC 自身会处理 grab 与光标状态，风险极低，保留现状。" },
+    { "title": "B5 · gizmo 面板矩形空白角落点击被吞", "status": "kept", "why": "面板矩形（WIDTH×HEIGHT）大于背景圆，圆外角落点击既不跳转也不拖拽，且被 UI 命中兜底消费。属设计选择：避免该悬浮区域点击被当成世界操作。" }
+  ],
+  "boundaries": [
+    "<b>纯客户端操作</b>：gizmo 只改客户端相机姿态，不产生任何网络交互；相机姿态由 CameraModule 按 2 tick/10Hz + 变化检测上报服务端。",
+    "<b>数学约定一致性</b>：相机 yaw=0 朝向 +Z（南）；环绕模式目标角度 <code>atan2(nx, nz)</code>、<code>asin(ny)</code> 与 <code>CameraPoseComputer</code> / <code>PlayerOrbitCameraMode</code> 的 <code>orbitAngle = atan2(dx,dz)</code>、<code>orbitPitch = atan2(dy,distXZ)</code> 语义互逆一致，验证通过。",
+    "<b>翻转逻辑</b>：点击轴段时若相机已正对按钮方向（观察向量点积 &gt; 0.9），跳转到反方向以观察被遮挡的背面按钮。",
+    "<b>渲染/输入共用判定</b>：hitAxis 在渲染与输入间共用，多按钮投影重叠时取深度最前，保证点哪跳哪与显示一致。",
+    "<b>拖拽优先</b>：gizmo 拖拽启动后转发不受面板矩形限制，且 <code>queueRotateDrag</code> 会取消进行中的视角跳转动画，避免两通道互抢。",
+    "<b>已知近似</b>：拖拽期间实体选择高亮（SelectionHighlight）的目标由 InteractionTargetPass 更新，该 pass 已跳过，高亮冻结在原世界位置，属正确的世界空间表现。"
+  ]
+}

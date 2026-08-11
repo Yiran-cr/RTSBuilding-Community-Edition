@@ -1,0 +1,99 @@
+{
+  "id": "place-break-effect-chain",
+  "title": "放置 / 破坏动画特效链路",
+  "subtitle": "NeoForge 1.21.1 · 放置「方块从天降落」与破坏「方块上飘」的动画链路、缓冲覆盖修复与边界分析",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 5 · 修复 4 · 保留 1",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "RtsPlacementSound", "path": "server/service/placement/", "desc": "放置动画统一出口：<code>playRemotePlacedBlockAnimation</code> 发 <code>S2CRtsPlaceAnimationPayload</code>。" },
+    { "name": "RtsPlacementExecutor", "path": "server/service/placement/", "desc": "单方块放置与框选批量放置（<code>placeSelectedInternal</code>）成功后发放置动画。" },
+    { "name": "RtsPlacementQuickBuild", "path": "server/service/placement/", "desc": "形状快速建造（quickBuild）逐格放置后发放置动画。" },
+    { "name": "RtsInteractionServiceImpl", "path": "server/service/impl/", "desc": "远程交互放方块成功后发放置动画。" },
+    { "name": "RtsMiningStateMachine", "path": "server/service/mining/", "desc": "破坏统一出口 <code>destroyMinedBlock</code>：破坏成功时 <code>sendBreakAnimation</code> 发破坏动画包。" },
+    { "name": "RtsUltimineProcessor", "path": "server/service/mining/", "desc": "连锁挖掘/区域挖掘/区域破坏批处理，经 <code>destroyMinedBlock</code> 复用破坏动画出口。" },
+    { "name": "RtsPlacedRecoveryService", "path": "server/service/", "desc": "放置回收破坏自建方块时补发 <code>sendBreakAnimation</code>。" },
+    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "收包处理：<code>handlePlaceAnimation</code> 写放置缓冲；<code>handleBreakAnimation</code> 清裂纹 + 写破坏缓冲 + 本地破坏音。" },
+    { "name": "GhostRingBuffer", "path": "client/render/", "desc": "特效环形缓冲：本次修复可配置容量、满时覆盖最旧、全槽去重（<code>add</code>/<code>forEach</code>）。" },
+    { "name": "RingBufferHolder", "path": "client/render/", "desc": "特效缓冲实例：<code>INSTANCE</code>（放置，64）与 <code>BREAK_EFFECTS</code>（破坏，128）。" },
+    { "name": "PlaceAnimationPass", "path": "client/render/pass/", "desc": "放置特效：角支架线框方块从 y+2 格降落到目标后淡出（颜色取方块 MapColor）。" },
+    { "name": "BreakEffectPass", "path": "client/render/pass/", "desc": "破坏特效：6 个碎块从方块原位确定性方向上飘散淡出（600ms）。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 放置动画链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "放置成功：<code>RtsPlacementExecutor</code>（单方块/框选批量）/ <code>RtsPlacementQuickBuild</code>（形状快速建造）/ <code>RtsInteractionServiceImpl</code>（远程交互）" },
+        { "side": "srv", "text": "<code>playRemotePlacedBlockAnimation</code> → <code>S2CRtsPlaceAnimationPayload(pos, state)</code>" },
+        { "side": "cli", "text": "<code>handlePlaceAnimation</code> → <code>GhostRingBuffer.INSTANCE.add</code>（容量 64）" },
+        { "side": "cli", "text": "<code>PlaceAnimationPass</code>：线框方块从 y+2 格降落到目标，落定后 250ms 淡出" }
+      ]
+    },
+    {
+      "title": "2.2 破坏动画链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "破坏成功统一出口 <code>destroyMinedBlock</code>（单方块/连锁/区域/创造模式批量均经此）" },
+        { "side": "srv", "text": "broken 时 <code>sendBreakAnimation</code> → <code>S2CRtsBreakAnimationPayload(pos, beforeState, resultState)</code>" },
+        { "side": "srv", "text": "放置回收（<code>RtsPlacedRecoveryService</code>）独立补发 <code>sendBreakAnimation</code>" },
+        { "side": "cli", "text": "<code>handleBreakAnimation</code>：清残留裂纹 + <code>BREAK_EFFECTS.add</code>（state 非空气）+ 本地破坏音" },
+        { "side": "cli", "text": "<code>BreakEffectPass</code>：6 个碎块从方块原位确定性方向上飘散淡出（600ms）" }
+      ]
+    },
+    {
+      "title": "2.3 缓冲写入与消费时序",
+      "type": "table",
+      "headers": ["环节", "位置", "说明"],
+      "rows": [
+        ["服务端发包", "<code>destroyMinedBlock:410</code>", "破坏成功才发，<code>beforeState</code> 为破坏前方块"],
+        ["客户端写入", "<code>handleBreakAnimation</code>", "state 为空气（纯流体等）时跳过写入"],
+        ["渲染消费", "<code>BreakEffectPass.render</code>", "每帧 <code>forEach</code> 全槽遍历 + 渲染后 <code>prune</code>"],
+        ["容量策略", "<code>GhostRingBuffer.add</code>", "满时覆盖最旧活跃条目，动画播得最久中断影响最小"]
+      ]
+    },
+    {
+      "title": "2.4 批量破坏压力场景",
+      "type": "note",
+      "note": "区域破坏 <code>DESTROY_MAX_BLOCKS_PER_TICK = 64</code>，每秒最高约 1280 个动画包；缓冲承受能力 = 容量 × 动画时长（256 / 600ms ≈ 426/秒）。写入侧按 tick 限流（每 tick 最多 20 个 = 400/秒）后写入速率低于承受能力，已入缓冲的动画稳定完整播放，超限部分静默丢弃。"
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 破坏动画“不渲染”——写入速率远超缓冲承受能力",
+      "status": "fixed",
+      "why": "根因：服务端区域破坏 <code>DESTROY_MAX_BLOCKS_PER_TICK = 64</code>，每个破坏发一个动画包，客户端每秒最高约 1280 个；而缓冲容量 × 动画时长仅能承受约 213/秒（128/600ms），大量条目在渲染前即被覆盖。修复：<code>handleBreakAnimation</code> 按 tick 限流写入（每 tick 最多 20 个，写入速率 400/秒 &lt; 承受能力），<code>GhostRingBuffer.add</code> 满时<strong>丢弃新条目</strong>（保护已入缓冲动画完整播放），<code>BREAK_EFFECTS</code> 容量提升到 256。"
+    },
+    {
+      "title": "② add 去重窗口与 prune 空洞交互失效",
+      "status": "fixed",
+      "why": "根因：<code>forEach</code> 已改全槽遍历，但 <code>add</code> 去重仍用 <code>(head-count+i)</code> 连续窗口；<code>prune</code> 清除中间条目形成空洞后，窗口外活跃条目去重失效，同位置可能重复占槽加速挤占。修复：<code>add</code> 去重改全槽扫描。"
+    },
+    {
+      "title": "③ 放置缓冲容量 32 偏小",
+      "status": "fixed",
+      "why": "框选批量放置每 tick 最多 64 格，每个发动画包；容量 32 在快速批量放置时同样会过早覆盖。修复：<code>INSTANCE</code>（放置）容量提升到 256，<code>handlePlaceAnimation</code> 同样按 tick 限流（每 tick 最多 20 个）。"
+    },
+    {
+      "title": "④ 动画首帧渲染时已过期跳过",
+      "status": "fixed",
+      "why": "根因：<code>BreakEffectPass</code> 对 <code>age >= DURATION_MS</code> 直接跳过，卡顿（帧间隔 &gt; 600ms）时动画加入后第一帧渲染即过期。修复：写入侧限流后动画在有效期内被稳定渲染，正常帧率不再触发；超长卡顿属极端情况由 ④ 的天然限流兜底。"
+    },
+    {
+      "title": "⑤ 批量动画天然限流",
+      "status": "kept",
+      "why": "极端海量破坏（区域破坏 32768 目标）时，限流写入会丢弃超出额度的动画包，部分方块无碎块特效。这是刻意取舍——保证已渲染动画完整稳定，避免网络与渲染过载；核心反馈（声音/裂纹）不受影响。"
+    }
+  ],
+  "boundaries": [
+    "<b>破坏动画统一出口</b>：单方块/连锁/区域/创造模式批量均经 <code>destroyMinedBlock</code> → <code>sendBreakAnimation</code>，放置回收独立补发，无遗漏路径。",
+    "<b>动画状态取自破坏前</b>：<code>beforeState</code> 用于碎块颜色与形态；客户端在 state 为空气时跳过写入（无碎块可飘）。",
+    "<b>特效缓冲全槽遍历</b>：<code>forEach</code>/<code>add</code> 去重均全槽扫描，与 <code>prune</code> 空洞共存而不漏项/不误去重。",
+    "<b>确定性碎块方向</b>：碎块角度由位置散列决定，动画稳定不随机抖动，且同位置重复破坏方向一致。",
+    "<b>放置动画覆盖全部放置路径</b>：单方块/框选批量/形状快速建造/远程交互均发动画包；仅蓝图路径刻意静默（避免逐格发包）。",
+    "<b>动画时长与缓冲窗口</b>：破坏 600ms、放置（下落+淡出）600ms；缓冲容量 × 时长决定同一时刻可同时播放的特效数量上限。"
+  ]
+}

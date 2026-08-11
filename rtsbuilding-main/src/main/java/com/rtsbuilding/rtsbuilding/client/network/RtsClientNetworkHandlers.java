@@ -28,6 +28,21 @@ public final class RtsClientNetworkHandlers {
     private static int breakSoundsThisTick;
     private static long breakSoundResetTick = -1L;
 
+    /** 破坏特效每 tick 最多写入次数：服务端区域破坏每 tick 最多 64 格，
+     *  写入速率远超缓冲承受能力，超限丢弃以保证已入缓冲的动画完整播放。 */
+    private static final int MAX_BREAK_EFFECTS_PER_TICK = 20;
+
+    /** 破坏特效限流计数与当前 tick。 */
+    private static int breakEffectsThisTick;
+    private static long breakEffectResetTick = -1L;
+
+    /** 放置特效每 tick 最多写入次数（同破坏特效，避免批量放置动画被覆盖）。 */
+    private static final int MAX_PLACE_EFFECTS_PER_TICK = 20;
+
+    /** 放置特效限流计数与当前 tick。 */
+    private static int placeEffectsThisTick;
+    private static long placeEffectResetTick = -1L;
+
     private static RtsClientKernel kernel() {
         return RtsClientKernel.get();
     }
@@ -174,7 +189,15 @@ public final class RtsClientNetworkHandlers {
 
     public static void handlePlaceAnimation(S2CRtsPlaceAnimationPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.level == null) return;
+            long tick = mc.level.getGameTime();
+            if (tick != placeEffectResetTick) {
+                placeEffectResetTick = tick;
+                placeEffectsThisTick = 0;
+            }
+            if (placeEffectsThisTick >= MAX_PLACE_EFFECTS_PER_TICK) return;
+            placeEffectsThisTick++;
             com.rtsbuilding.rtsbuilding.client.render.RingBufferHolder.INSTANCE.add(
                     payload.pos(), payload.state(), System.currentTimeMillis());
         });
@@ -186,11 +209,29 @@ public final class RtsClientNetworkHandlers {
             if (mc.level == null) return;
             // 清除该位置残留裂纹
             mc.level.destroyBlockProgress(0x525453, payload.pos(), -1);
+            // 破坏特效：记录破坏前的方块状态（非空气），渲染"方块上飘"效果。
+            // 按 tick 限流：区域破坏每 tick 最多 64 格，超限丢弃以保证已入缓冲动画完整播放
+            if (payload.state() != null && !payload.state().isAir()
+                    && tryAcquireBreakEffectSlot(mc.level.getGameTime())) {
+                com.rtsbuilding.rtsbuilding.client.render.RingBufferHolder.BREAK_EFFECTS.add(
+                        payload.pos(), payload.state(), System.currentTimeMillis());
+            }
             // 在客户端本地播放破坏音，音源固定为主相机位置（= 听者位置，无距离衰减）。
             // 不能用 levelEvent(2001, pos, ...)（音源在被破坏方块位置，RTS 相机远离时听不见），
             // 也不依赖服务端上报的相机坐标（有上报延迟，可能回退到玩家本体位置）。
             playRemoteBreakSound(mc, payload.state());
         });
+    }
+
+    /** 尝试为本 tick 获取一次破坏特效写入额度；超限返回 {@code false}（丢弃）。 */
+    private static boolean tryAcquireBreakEffectSlot(long tick) {
+        if (tick != breakEffectResetTick) {
+            breakEffectResetTick = tick;
+            breakEffectsThisTick = 0;
+        }
+        if (breakEffectsThisTick >= MAX_BREAK_EFFECTS_PER_TICK) return false;
+        breakEffectsThisTick++;
+        return true;
     }
 
     /** 在客户端主相机位置播放方块破坏音（音源 = 听者，RTS 模式下任何位置都能清晰听到）。 */

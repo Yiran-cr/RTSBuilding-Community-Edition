@@ -107,14 +107,17 @@ public final class BuildInteractionHandler {
         if (leftSidebarPanel != null && leftSidebarPanel.isClickButtonSelected()
                 && screen.isInteractiveMode()) return PASS;
 
-        // 左键：挖掘
+        // 左键：破坏侧形状画笔左键驱动（选起点/选终点/确认破坏）；不满足则按常规挖掘
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && !isAltDown()) {
+            if (tryStartLineBrush(screen, leftSidebarPanel, true)) return CONSUMED;
             return handleLeftClick(screen, leftSidebarPanel) ? CONSUMED : PASS;
         }
 
-        // 线/墙/面模式建造：右键按下处理画笔逐级点选。消费右键按下，阻止相机层记录右键
+        // 建造侧形状画笔（线/墙/面模式建造）：右键按下处理画笔逐级点选。消费右键按下，阻止相机层记录右键
         if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && !isAltDown() && !isShiftDown()) {
-            if (tryStartLineBrush(screen, leftSidebarPanel)) return CONSUMED;
+            if (tryStartLineBrush(screen, leftSidebarPanel, false)) return CONSUMED;
+            // 破坏侧形状已选中但画笔未启动：右键不驱动画笔（破坏侧改用左键选取），消费右键防相机移动
+            if (activeBreakShape(screen, leftSidebarPanel) != null) return CONSUMED;
             // 单方块持续放置：右键按下进入持续放置状态（首次放置由 handleTick 立即执行，
             // 快速单击由 handleMouseRelease 兜底放置一次）
             if (isSingleBlockPlaceActive(screen, leftSidebarPanel)) {
@@ -146,6 +149,12 @@ public final class BuildInteractionHandler {
             this.leftHoldActive = false;
             this.holdMineCooldown = 0;
             this.holdMineFired = false;
+            return CONSUMED;
+        }
+
+        // 破坏侧画笔活跃阶段：松开左键消费（点选交互由左键按下完成），避免释放落到原版操作
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT
+                && kernel.renderPipeline().lineBrush.isActive()) {
             return CONSUMED;
         }
 
@@ -459,25 +468,37 @@ public final class BuildInteractionHandler {
         return activeBreakShape(screen, leftSidebarPanel);
     }
 
-    /** 右键单击：起点选择/终点选择/确认建造的逐级推进（点选式画线）。 */
-    private boolean tryStartLineBrush(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+    /**
+     * 左键/右键单击：起点选择/终点选择/确认建造的逐级推进（点选式画线）。
+     * 建造侧画笔由<b>右键</b>驱动，破坏侧画笔由<b>左键</b>驱动（左键选取）。
+     *
+     * @param leftClick 本次点击是否为左键；驱动键不匹配时（建造侧遇左键 / 破坏侧遇右键）
+     *                  不推进画笔：画笔未启动则不启动（交由其它左/右键操作），已启动则仅消费事件
+     */
+    private boolean tryStartLineBrush(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel, boolean leftClick) {
         var lineBrush = kernel.renderPipeline().lineBrush;
-        // 任一确认阶段：右键推进（体从宽度进入高度），进入建造阶段后确认建造
+        // 任一确认阶段：由驱动键推进（体从宽度进入高度），进入建造阶段后确认建造
         if (lineBrush.isAdjusting() || lineBrush.isWidthAdjusting() || lineBrush.isHeightAdjusting()
                 || lineBrush.isRadiusAdjusting()) {
+            // 非驱动键（建造侧画笔遇左键、破坏侧画笔遇右键）：消费但不推进
+            if (lineBrush.isBreakActive() != leftClick) return true;
             boolean done = lineBrush.advancePhase();
             if (done) confirmLinePlace(screen, leftSidebarPanel);
             return true;
         }
-        // 起点已选：右键选择终点
+        // 起点已选：由驱动键选择终点
         if (lineBrush.isPicking()) {
+            if (lineBrush.isBreakActive() != leftClick) return true;
             lineBrush.pickEnd();
             return true;
         }
-        // 空闲：右键选择起点，按当前形状决定建造模式（优先建造侧，其次破坏侧）
+        // 空闲：选择起点。建造侧用右键，破坏侧用左键
         BuildShape build = activeBuildShape(screen, leftSidebarPanel);
         BuildShape shape = build != null ? build : activeBreakShape(screen, leftSidebarPanel);
         if (shape == null) return false;
+        boolean breakMode = build == null;
+        // 驱动键不匹配（建造侧遇左键 / 破坏侧遇右键）：不启动画笔
+        if (breakMode != leftClick) return false;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return false;
         var ray = CursorRaycaster.computeCursorRay(mc, screen);
@@ -485,7 +506,7 @@ public final class BuildInteractionHandler {
         BlockHitResult hit = resolveBuildHit(mc, screen, ray);
         if (hit == null) return false;
         // 记录画笔归属：建造侧（选中了物品）还是破坏侧，确认阶段据此分发请求
-        lineBrush.start(hit.getBlockPos(), shape, build == null);
+        lineBrush.start(hit.getBlockPos(), shape, breakMode);
         return true;
     }
 
@@ -666,8 +687,8 @@ public final class BuildInteractionHandler {
         
         if (buildingModule.hasSelectedItem()) {
             if (!isBuildMode) return PASS;
-            // 形状按钮组：仅"建造"侧"单方块"形状允许单方块放置；其余建造形状（线/墙/平面/体/圆面/球）尚未实现，
-            // 选中其他建造形状时禁止单方块放置（破坏不受影响，走破坏侧形状判断）。
+            // 形状按钮组：仅"建造"侧"单方块"形状允许单方块放置；
+            // 选中非单方块建造形状时走右键形状画笔批量建造（破坏不受影响，走破坏侧左键画笔判断）。
             if (leftSidebarPanel != null && !leftSidebarPanel.isSingleBlockBuildShapeSelected()) {
                 return CONSUMED;
             }

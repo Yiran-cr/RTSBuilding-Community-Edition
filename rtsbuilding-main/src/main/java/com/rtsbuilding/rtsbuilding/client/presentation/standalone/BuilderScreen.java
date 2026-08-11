@@ -206,6 +206,8 @@ public class BuilderScreen extends Screen {
         screenCoordinator.closeContainerScreen();
         // 退出 RTS 模式：清空建造选材（选材仅在拿起物品期间有效，退出即失效）
         downSidebarPanel.getRightLayer().cancelSelection();
+        // 释放 XYZ 轴调节器可能隐藏的光标（拖拽中退出时防止光标残留隐藏）
+        downSidebarPanel.releaseAxisGizmoCursor();
         this.topBarPanel.onRtsExited();
         super.onClose();
         this.cursorStyleManager.restoreDefault();
@@ -278,7 +280,21 @@ public class BuilderScreen extends Screen {
         if (downH > 0 && mouseY >= getRtsVirtualHeight() - downH) {
             return true;
         }
+
+        // XYZ 轴视角调节器悬浮于下面板右上角：下板被压缩到很小时它可能越过下板矩形顶部，
+        // 需要单独识别，避免点击被当成世界区域操作
+        if (downSidebarPanel != null && downSidebarPanel.isMouseOverAxisGizmo((int) mouseX, (int) mouseY)) {
+            return true;
+        }
         return false;
+    }
+
+    /**
+     * 查询 XYZ 轴视角调节器是否正在拖拽旋转。
+     * <p>拖拽期间应跳过点击模式/框选模式等世界交互渲染，避免光标隐藏后误判目标。</p>
+     */
+    public boolean isAxisGizmoDragging() {
+        return downSidebarPanel != null && downSidebarPanel.isAxisGizmoDragging();
     }
 
     /**

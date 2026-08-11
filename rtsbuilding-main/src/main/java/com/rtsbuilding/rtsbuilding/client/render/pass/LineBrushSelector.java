@@ -46,6 +46,12 @@ public final class LineBrushSelector {
      *  {@code false} 表示用于建造（确认时发 PLACE_BATCH）。由调用方启动画笔时设置。 */
     private boolean breakActive;
 
+    /** 形状计算结果缓存：输入（形状/阶段/端点/参数）未变时复用，避免每帧重算大形状几何。 */
+    private List<BlockPos> cachedPositions;
+
+    /** 与 {@link #cachedPositions} 对应的输入快照（hash），用于命中检测。 */
+    private long cachedStamp;
+
     public Phase getPhase() {
         return phase;
     }
@@ -127,12 +133,15 @@ public final class LineBrushSelector {
         return params.getFaceDown();
     }
 
-    /** 右键单击选择起点并进入画线预览（shape 决定后续扩展方向与阶段流转）。 */
+    /** 单击选择起点并进入画线预览（shape 决定后续扩展方向与阶段流转）。 */
     public boolean start(BlockPos pos, BuildShape shape) {
         return start(pos, shape, false);
     }
 
-    /** 右键单击选择起点并进入画线预览，指定画笔归属（建造/破坏）。 */
+    /**
+     * 单击选择起点并进入画线预览，指定画笔归属（建造/破坏）。
+     * 驱动键由调用方决定：建造侧由右键触发、破坏侧由左键触发。
+     */
     public boolean start(BlockPos pos, BuildShape shape, boolean breakActive) {
         if (pos == null || shape == null) return false;
         this.start = pos.immutable();
@@ -193,9 +202,35 @@ public final class LineBrushSelector {
      * 计算当前应建造/预览的方块列表（含扩展与两端高度偏移）。
      * 根据「形状 × 阶段」确定当前生效的形态（{@link BuildShape#renderShape}）。
      * 渲染预览与确认提交共用本方法，避免两套派发逻辑。
+     *
+     * <p><b>性能：</b>结果按输入快照缓存——形状参数（墙高/面宽/半径/端点）在
+     * 扩展阶段固定不变，而渲染每帧调用，缓存可避免大形状（如球 r=64 约 200 万次
+     * 迭代）每帧重算。</p>
      */
     public List<BlockPos> computePositions() {
-        return shape.renderShape(phase).compute(toShapeInput());
+        long stamp = inputStamp();
+        if (cachedPositions != null && stamp == cachedStamp) {
+            return cachedPositions;
+        }
+        cachedPositions = shape.renderShape(phase).compute(toShapeInput());
+        cachedStamp = stamp;
+        return cachedPositions;
+    }
+
+    /** 输入快照 hash：形状/阶段/端点/全部扩展参数/平直标志任一变化都会改变。 */
+    private long inputStamp() {
+        long s = shape.ordinal() * 31L + phase.ordinal();
+        s = s * 31 + (start == null ? 0 : start.asLong());
+        s = s * 31 + (hover == null ? 0 : hover.asLong());
+        s = s * 31 + params.getStartDy();
+        s = s * 31 + params.getEndDy();
+        s = s * 31 + params.getWallHeight();
+        s = s * 31 + params.getWallDown();
+        s = s * 31 + params.getFaceWidth();
+        s = s * 31 + params.getFaceDown();
+        s = s * 31 + params.getSphereRadius();
+        s = s * 31 + (RtsKeyMappings.isLineFlatDown() ? 1 : 0);
+        return s;
     }
 
     /** 将当前状态快照为形状计算的不可变输入。 */
@@ -258,13 +293,16 @@ public final class LineBrushSelector {
         }
     }
 
-    /** 当前阶段的交互提示文案；非交互阶段返回 {@code null}。破坏侧将"建造"替换为"破坏"。 */
+    /**
+     * 当前阶段的交互提示文案；非交互阶段返回 {@code null}。
+     * 破坏侧由左键驱动（左键选取），将"建造"替换为"破坏"、"右键"替换为"左键"。
+     */
     @Nullable
     public String currentHint() {
         if (!isActive()) return null;
         String hint = shape.hint(phase, params);
         if (hint == null || !breakActive) return hint;
-        return hint.replace("建造", "破坏");
+        return hint.replace("建造", "破坏").replace("右键", "左键");
     }
 
     public void reset() {
@@ -274,5 +312,7 @@ public final class LineBrushSelector {
         hover = null;
         breakActive = false;
         params.reset();
+        cachedPositions = null;
+        cachedStamp = 0;
     }
 }

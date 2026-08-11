@@ -128,7 +128,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
 
     /**
      * 形状按钮组"建造"侧是否选中"单方块"。
-     * 其余建造形状（线/墙/平面/体/圆面/球）尚未实现，选中时禁止单方块放置。
+     * 选中单方块时允许左/右键单方块放置；选中非单方块形状时走形状画笔批量建造。
      */
     public boolean isSingleBlockBuildShapeSelected() {
         return shapeGroup.isSingleBlockConstructionSelected();
@@ -136,7 +136,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
 
     /**
      * 形状按钮组"破坏"侧是否选中"单方块"。
-     * 其余破坏形状（线/墙/平面/体/圆面/球）尚未实现，选中时禁止单方块破坏。
+     * 选中单方块时允许左键单方块挖掘；选中非单方块形状时走左键驱动的形状画笔批量破坏。
      */
     public boolean isSingleBlockBreakShapeSelected() {
         return shapeGroup.isSingleBlockDestructionSelected();

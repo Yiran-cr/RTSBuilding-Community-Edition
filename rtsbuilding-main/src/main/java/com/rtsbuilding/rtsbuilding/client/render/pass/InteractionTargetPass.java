@@ -48,8 +48,10 @@ public final class InteractionTargetPass implements RenderPass {
     public void render(Minecraft mc, BufferAllocator alloc, PoseStack poseStack, float partialTick, int frameIndex) {
         if (mc.level == null || mc.getCameraEntity() == null) return;
         if (!(mc.screen instanceof BuilderScreen screen)) return;
-        
-        
+
+        // XYZ 轴调节器拖拽期间跳过：光标隐藏后不应基于其位置渲染点击目标高亮
+        if (screen.isAxisGizmoDragging()) return;
+
         if (!screen.isClickButtonSelected()) return;
 
         

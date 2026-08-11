@@ -90,8 +90,10 @@ public final class RenderPipeline {
     public RenderPipeline() {
         this.linesBuf = new Buf(LINES, 256);
         this.fill = new Buf(FILLED_BOX, 256);
-        this.brackets = new Buf(BRACKET_QUADS, 128);
-        this.noDepth = new Buf(TARGET_NO_DEPTH, 128);
+        // 线框缓冲容量较大：形状预览/放置动画/连锁挖掘等大量粗线段一次性提交，
+        // 容量不足会触发 ByteBufferBuilder 运行时扩容（内存分配 + 拷贝）
+        this.brackets = new Buf(BRACKET_QUADS, 512);
+        this.noDepth = new Buf(TARGET_NO_DEPTH, 512);
         this.barrier = new Buf(BOUNDARY_BARRIER, 64);
 
         registerPass(new BoundaryPass());
@@ -115,6 +117,11 @@ public final class RenderPipeline {
         var lbrp = new LineBrushRenderPass(lineBrush);
         this.lineBrushRenderPass = lbrp;
         registerPass(lbrp);
+
+        // 放置成功动画：方块从天降落建造特效（消费 GhostRingBuffer.INSTANCE）
+        registerPass(new PlaceAnimationPass());
+        // 破坏成功特效：方块碎块向上飘散（消费 GhostRingBuffer.BREAK_EFFECTS）
+        registerPass(new BreakEffectPass());
     }
 
     

@@ -1,0 +1,135 @@
+{
+  "id": "place-break-render-chain",
+  "title": "放置 / 破坏渲染链路",
+  "subtitle": "NeoForge 1.21.1 · 远程建造/破坏的形状预览与成功反馈渲染链路、断点修复与边界分析",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 3 · 修复 3",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "ClientRenderHandler", "path": "client/bootstrap/", "desc": "渲染入口：<code>RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS</code> 触发 <code>kernel.onRenderFrame</code>。" },
+    { "name": "RenderPipeline", "path": "client/render/", "desc": "渲染管线调度：reset → 各 pass <code>shouldRender/render</code> → flush；注册形状预览、放置动画等全部 pass。" },
+    { "name": "LineBrushSelector", "path": "client/render/pass/", "desc": "画笔状态机：<code>start/pickEnd/advancePhase/computePositions</code>，不感知具体形状。" },
+    { "name": "BuildShape", "path": "client/build/shape/", "desc": "形状几何计算：LINE/WALL/FACE/SOLID/CIRCLE/SPHERE，按阶段渲染形态 <code>renderShape()</code>。" },
+    { "name": "LineBrushRenderPass", "path": "client/render/pass/", "desc": "形状画笔预览：放置侧蓝/紫（重叠），破坏侧红/紫（不可破坏）/灰（空气）；本次接入动作半径过滤。" },
+    { "name": "PlaceAnimationPass", "path": "client/render/pass/", "desc": "放置成功动画（本次新增）：消费 <code>GhostRingBuffer</code>，白色线框随年龄淡出，渲染后 <code>prune</code>。" },
+    { "name": "GhostRingBuffer", "path": "client/render/", "desc": "放置动画环形缓冲：<code>handlePlaceAnimation</code> 写入；本次修正 <code>forEach</code> 全槽遍历与 <code>prune</code> 计数。" },
+    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "收包处理：<code>handlePlaceAnimation</code>（写缓冲）、<code>handleBreakAnimation</code>（清裂纹+本地破坏音）、<code>handleMineProgress</code>（裂纹）。" },
+    { "name": "MiningState", "path": "client/infrastructure/module/mining/", "desc": "破坏裂纹渲染状态：<code>destroyBlockProgress(0x525453, ...)</code> 驱动原版裂纹。" },
+    { "name": "UltiminePreviewPass", "path": "client/render/pass/", "desc": "连锁挖掘预览：客户端 BFS 收集 + 动作半径过滤 + <code>UltimineBlockMerger</code> 合并外轮廓边框。" },
+    { "name": "ActionRadiusFilter", "path": "client/render/util/", "desc": "动作半径过滤工具（本次新增）：客户端预览与服务端 <code>RtsCameraManager.isWithinActionRange</code> 对齐。" },
+    { "name": "RtsPlacementSound", "path": "server/service/placement/", "desc": "放置动画/声音包发送：<code>playRemotePlacedBlockAnimation</code> 发 <code>S2CRtsPlaceAnimationPayload</code>。" },
+    { "name": "RtsMiningNetworkHelper", "path": "server/service/mining/", "desc": "破坏反馈包发送：<code>sendBreakAnimation</code>、<code>sendMineProgress</code>、<code>sendUltimineBatchProgress</code>。" },
+    { "name": "CornerBracketRenderer", "path": "client/render/util/", "desc": "角支架线框渲染（深度 + 无深度双层），供形状预览/放置动画/连锁挖掘共用。" },
+    { "name": "ClientPacketListenerMixin / ClientLevelMixin", "path": "mixin/", "desc": "RTS 模式下吞掉 2001 破坏事件与 <code>addDestroyBlockEffect</code> 破坏粒子，双兜底静默。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 渲染触发入口",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "<code>ClientRenderHandler.onRenderLevel</code>（AFTER_TRANSLUCENT_BLOCKS）" },
+        { "side": "cli", "text": "<code>RtsClientKernel.onRenderFrame</code>" },
+        { "side": "cli", "text": "<code>RenderPipeline.onRenderFrame</code>：reset → 逐 pass <code>shouldRender/render</code> → flush" }
+      ]
+    },
+    {
+      "title": "2.2 形状画笔预览链路（放置 / 破坏共用）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "<code>BuildInteractionHandler.handleTick</code> 每 tick <code>updateLineBrushHover</code> 更新悬停点（状态源）" },
+        { "side": "cli", "text": "<code>LineBrushSelector.computePositions()</code> → <code>BuildShape.renderShape(phase).compute(ShapeInput)</code> 几何计算" },
+        { "side": "cli", "text": "<code>LineBrushRenderPass.render</code>：动作半径过滤 + 按归属着色（放置蓝/紫、破坏红/紫/灰）" },
+        { "side": "cli", "text": "<code>CornerBracketRenderer.renderCornerBrackets</code>：深度层 + 穿透层双线框" },
+        { "side": "cli", "text": "<code>BuilderScreen.renderLineBrushHint</code>：<code>lineBrush.currentHint()</code> 提示文案（破坏侧已替换为左键文案）" }
+      ]
+    },
+    {
+      "title": "2.3 形状预览着色对比",
+      "type": "table",
+      "headers": ["场景", "着色", "说明"],
+      "rows": [
+        ["放置侧 · 空气位置", "蓝色 <code>lineBrushColor</code>", "可放置位置"],
+        ["放置侧 · 已有方块", "紫色 <code>lineBrushOverlapColor</code>", "冲突提示"],
+        ["破坏侧 · 可破坏方块", "红色 <code>lineBrushBreakColor</code>", "破坏目标"],
+        ["破坏侧 · 不可破坏方块", "紫色 <code>lineBrushOverlapColor</code>", "破坏速度 &lt; 0（如基岩）"],
+        ["破坏侧 · 空气位置", "灰色 <code>lineBrushAirColor</code>", "形状覆盖但无目标方块"],
+        ["超出动作半径", "不渲染", "<code>ActionRadiusFilter</code> 与服务端一致"]
+      ]
+    },
+    {
+      "title": "2.4 放置成功反馈链路（本次修复断点）",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "放置成功：<code>RtsPlacementExecutor</code> / <code>RtsPlacementQuickBuild</code> / <code>RtsInteractionServiceImpl</code>" },
+        { "side": "srv", "text": "<code>RtsPlacementSound.playRemotePlacedBlockAnimation</code> 发 <code>S2CRtsPlaceAnimationPayload</code>" },
+        { "side": "cli", "text": "<code>handlePlaceAnimation</code> → <code>GhostRingBuffer.INSTANCE.add</code>（写入）" },
+        { "side": "cli", "text": "<code>PlaceAnimationPass</code>（新增）：<code>forEach</code> 消费，白色线框 500ms 淡出，渲染后 <code>prune</code>" }
+      ]
+    },
+    {
+      "title": "2.5 破坏成功反馈链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "<code>destroyMinedBlock</code> 破坏成功 → 广播 <code>levelEvent(2001)</code>" },
+        { "side": "cli", "text": "<code>ClientPacketListenerMixin</code> 拦截 2001（静默）" },
+        { "side": "srv", "text": "<code>RtsMiningNetworkHelper.sendBreakAnimation</code> 发 <code>S2CRtsBreakAnimationPayload</code>" },
+        { "side": "cli", "text": "<code>handleBreakAnimation</code>：清残留裂纹 + 主相机位置本地播放破坏音（限流 1/tick）" }
+      ]
+    },
+    {
+      "title": "2.6 破坏进度裂纹链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "<code>sendMineProgress</code> / <code>sendUltimineBatchProgress</code> 发 <code>S2CRtsMineProgressPayload</code>（带变化检测）" },
+        { "side": "cli", "text": "<code>handleMineProgress</code> → <code>MiningModule.applyMineProgress</code>" },
+        { "side": "cli", "text": "<code>MiningState.applyMineProgress</code> → <code>mc.level.destroyBlockProgress(0x525453, pos, stage)</code> 原版裂纹（0-9 阶段）" }
+      ]
+    },
+    {
+      "title": "2.7 连锁挖掘预览链路（破坏另一路径）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "<code>UltiminePreviewPass.render</code>：鼠标方块为种子" },
+        { "side": "cli", "text": "<code>RtsUltimineCollector.collect</code> 客户端 BFS 收集同类型连通方块（硬度比 ≤1.5x 过滤）" },
+        { "side": "cli", "text": "<code>ActionRadiusFilter</code> 动作半径过滤 + <code>filterOuterBlocks</code> 外周提取" },
+        { "side": "cli", "text": "<code>UltimineBlockMerger.getEdgeLines</code> 合并外轮廓边 → <code>CornerBracketRenderer.renderEdges</code> 金色边框" }
+      ]
+    },
+    {
+      "title": "2.8 破坏粒子静默（双 mixin 兜底）",
+      "type": "cards",
+      "cards": [
+        { "title": "ClientPacketListenerMixin · 网络层", "text": "拦截 <code>handleLevelEvent</code>，RTS 激活且类型 2001 时 <code>ci.cancel()</code>，阻断服务端广播的原版破坏音与粒子。" },
+        { "title": "ClientLevelMixin · 渲染层", "text": "拦截 <code>addDestroyBlockEffect</code>，RTS 激活时跳过粒子生成，兜底阻断本地触发路径。" }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 放置动画断点：GhostRingBuffer 无消费者",
+      "status": "fixed",
+      "why": "根因：<code>handlePlaceAnimation</code> 收到放置动画包后仅写入 <code>GhostRingBuffer.INSTANCE</code>，但 <code>forEach/prune/clear</code> 无任何调用者，放置成功动画永不渲染，且缓冲条目永不过期（泄漏隐患）。修复：新增 <code>PlaceAnimationPass</code> 消费缓冲（白色线框 500ms 淡出）并注册到 <code>RenderPipeline</code>；同时修正 <code>GhostRingBuffer.forEach</code> 为全槽遍历（prune 产生空洞后不漏项）与 <code>prune</code> 计数重算。"
+    },
+    {
+      "title": "② 形状预览无动作半径过滤",
+      "status": "fixed",
+      "why": "根因：<code>LineBrushRenderPass</code> 渲染全部形状位置，而服务端 <code>canAccessWorldTarget → RtsCameraManager.isWithinActionRange</code> 会拒绝半径外目标，造成“高亮但点了没反应”。修复：新增公共 <code>ActionRadiusFilter</code> 工具，<code>LineBrushRenderPass</code> 与 <code>UltiminePreviewPass</code> 共用同一过滤逻辑（此前仅连锁挖掘预览对齐了半径）。"
+    },
+    {
+      "title": "③ 过时注释“其余破坏/建造形状尚未实现”",
+      "status": "fixed",
+      "why": "根因：<code>LeftSidebarPanel</code> 与 <code>BuildInteractionHandler</code> 中残留“其余破坏/建造形状（线/墙/面/体/圆/球）尚未实现”的注释，与已实现的 <code>BuildShape</code> 全形状 + <code>LineBrushSelector</code> 状态机不符。修复：改写为描述当前实际行为（非单方块形状走形状画笔批量操作）。"
+    }
+  ],
+  "boundaries": [
+    "<b>放置与破坏反馈链路分离</b>：放置动画走 <code>S2CRtsPlaceAnimationPayload</code> + 客户端缓冲渲染；破坏反馈走 <code>S2CRtsBreakAnimationPayload</code> + 本地破坏音，互不干扰。",
+    "<b>破坏粒子静默是刻意设计</b>：远程高频破坏（连锁/区域/回收）会触发大量 2001 破坏粒子造成闪烁，RTS 模式下统一静默，只保留本地破坏音。",
+    "<b>动作半径过滤客户端与服务端一致</b>：预览过滤由 <code>ActionRadiusFilter</code> 统一处理，服务端由 <code>isWithinActionRange</code> 兜底校验，所见即所得。",
+    "<b>放置动画限流为刻意取舍</b>：蓝图批量放置静默动画避免网络过载；单格/形状放置播放 500ms 白色线框动画。",
+    "<b>幽灵缓冲容量与生命周期</b>：<code>CAPACITY = 32</code>、<code>LIFETIME_MS = 500</code>，超龄条目由 <code>prune</code> 清理，避免长期累积。",
+    "<b>其他玩家音效保留</b>：原版 2001 仅对 RTS 玩家自身拦截，其他玩家在方块附近仍能听到真实破坏音与粒子。"
+  ]
+}

@@ -40,6 +40,9 @@ public final class CameraModule implements FeatureModule {
     /** 开启当前 RTS 模式的那把终端的 UUID（服务端下发），用于锁定网格中的拿去/启用操作 */
     private String activeTerminalUuid;
 
+    /** 视角跳转控制器：处理点击 XYZ 轴调节器后的视角切换与平滑旋转动画 */
+    private final CameraViewSnapController viewSnapController = new CameraViewSnapController();
+
     
     
     
@@ -199,6 +202,9 @@ public final class CameraModule implements FeatureModule {
         Minecraft mc = mc();
         if (mc.player == null || mc.level == null) return;
 
+        // 视角跳转动画：推进角度插值，随后 processOrbitInput/playerOrbit/freeCamera 据此重算姿态
+        this.viewSnapController.advance(state);
+
         if (state.playerOrbitMode) {
             playerOrbit.processInput(state, partialTick);
         } else if (state.orbitMode) {
@@ -216,6 +222,7 @@ public final class CameraModule implements FeatureModule {
     
 
     public void queuePanDrag(double dx, double dy) {
+        viewSnapController.cancel();
         float panX = state.invertPanX ? (float) dx : -(float) dx;
         float panY = state.invertPanY ? (float) dy : -(float) dy;
         state.pendingPanX += panX;
@@ -223,11 +230,13 @@ public final class CameraModule implements FeatureModule {
     }
 
     public void queueRotateDrag(double dx, double dy) {
+        viewSnapController.cancel();
         state.pendingRawRotateX += (float) dx;
         state.pendingRawRotateY += (float) dy;
     }
 
     public void queueDragMove(double dx, double dy) {
+        viewSnapController.cancel();
         if (state.orbitMode && !state.playerOrbitMode) {
             double yawRad = Math.toRadians(state.localYaw);
             double cos = Math.cos(yawRad);
@@ -242,11 +251,26 @@ public final class CameraModule implements FeatureModule {
     }
 
     public void queueScroll(double scrollY) {
+        viewSnapController.cancel();
         state.pendingScroll += (float) scrollY;
     }
 
     public void queueRotateQuarter(int direction) {
+        viewSnapController.cancel();
         state.pendingRotateSteps += direction;
+    }
+
+    // ── XYZ 轴视角调节器：视角切换委托给 CameraViewSnapController ──
+
+    /**
+     * 点击 XYZ 轴视角调节器时切换视角。
+     * <p>由 {@link CameraViewSnapController} 按当前相机模式处理平滑旋转动画。</p>
+     *
+     * @param axis     轴索引：0=X、1=Y、2=Z
+     * @param negative true 表示从轴负方向观察
+     */
+    public void snapViewToAxis(int axis, boolean negative) {
+        viewSnapController.snapViewToAxis(state, axis, negative);
     }
 
     

@@ -51,6 +51,9 @@ public final class DownSidebarPanel implements RtsPanelApi {
     private final RightDownOverlayLayer rightLayer = new RightDownOverlayLayer();
 
     
+    private final AxisViewGizmo axisViewGizmo = new AxisViewGizmo();
+
+    
     public LeftDownOverlayLayer getLeftLayer() { return leftLayer; }
     public RightDownOverlayLayer getRightLayer() { return rightLayer; }
 
@@ -148,6 +151,10 @@ public final class DownSidebarPanel implements RtsPanelApi {
             rightLayer.setLastMousePos(mouseX, mouseY);
             rightLayer.render(g, isDraggingOverlayDivider || isMouseInLayer(rightLayer, mouseX, mouseY));
         }
+
+        // XYZ 轴视角调节器：悬浮于世界画面右下角（右栏左侧、下板之上）
+        layoutAxisGizmo();
+        axisViewGizmo.render(g, mouseX, mouseY);
     }
 
     
@@ -187,7 +194,16 @@ public final class DownSidebarPanel implements RtsPanelApi {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int mx = (int) mouseX;
         int my = (int) mouseY;
-        
+
+        // XYZ 轴视角调节器：优先命中，悬浮于世界画面右下角。
+        // 面板矩形内的点击一律由 gizmo 层消费（轴端左键跳转、圆内左键拖拽、其余吞掉），
+        // 避免右键落入框选、中键/空白被当成世界操作。
+        layoutAxisGizmo();
+        if (axisViewGizmo.contains(mx, my)) {
+            axisViewGizmo.mouseClicked(mouseX, mouseY, button);
+            return true;
+        }
+
         if (leftLayer.contains(mx, my) && leftLayer.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
@@ -240,6 +256,9 @@ public final class DownSidebarPanel implements RtsPanelApi {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button != 0) return false;
         
+        // XYZ 轴视角调节器：结束拖拽旋转
+        axisViewGizmo.mouseReleased();
+
         if (leftLayer.mouseReleased(mouseX, mouseY, button)) return true;
         if (rightLayer.mouseReleased(mouseX, mouseY, button)) return true;
         if (isDraggingOverlayDivider) {
@@ -257,6 +276,11 @@ public final class DownSidebarPanel implements RtsPanelApi {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (button != 0) return false;
         
+        // XYZ 轴视角调节器：拖拽旋转（不受面板矩形限制，拖拽中持续转发）
+        if (axisViewGizmo.isDragging()) {
+            return axisViewGizmo.mouseDragged(dragX, dragY);
+        }
+
         if (leftLayer.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
         if (rightLayer.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
         if (isDraggingOverlayDivider) {
@@ -278,5 +302,39 @@ public final class DownSidebarPanel implements RtsPanelApi {
     public boolean isMouseOverTopEdge(int mx, int my) {
         DownSidebarLayoutHelper.Rect db = layoutRect();
         return resizeHandler.isOverEdge(my, mx, db.y(), db.x(), db.width());
+    }
+
+    /**
+     * 计算 XYZ 轴视角调节器的悬浮位置（世界画面右下角，右栏左侧、下板之上）。
+     */
+    private void layoutAxisGizmo() {
+        DownSidebarLayoutHelper.Rect db = layoutRect();
+        int gizmoX = db.x() + db.width() - AxisViewGizmo.WIDTH - 6;
+        int gizmoY = db.y() - AxisViewGizmo.HEIGHT - 6;
+        axisViewGizmo.setBounds(gizmoX, gizmoY);
+    }
+
+    /**
+     * 判断鼠标是否落在 XYZ 轴视角调节器上。
+     * <p>供 BuilderScreen 的 UI 命中判定使用：gizmo 悬浮在世界画面右下角，
+     * 不位于任何面板矩形内，需要单独识别以免点击被当成世界操作。</p>
+     */
+    public boolean isMouseOverAxisGizmo(int mx, int my) {
+        layoutAxisGizmo();
+        return axisViewGizmo.contains(mx, my);
+    }
+
+    /**
+     * 查询 XYZ 轴视角调节器是否正在拖拽旋转（供渲染 pass 判断是否跳过世界交互渲染）。
+     */
+    public boolean isAxisGizmoDragging() {
+        return axisViewGizmo.isDragging();
+    }
+
+    /**
+     * 释放 XYZ 轴视角调节器可能隐藏的光标（退出 RTS 模式时调用）。
+     */
+    public void releaseAxisGizmoCursor() {
+        axisViewGizmo.releaseCursorIfNeeded();
     }
 }

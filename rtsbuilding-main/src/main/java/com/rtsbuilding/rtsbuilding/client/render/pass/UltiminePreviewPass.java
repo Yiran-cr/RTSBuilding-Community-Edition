@@ -1,10 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.render.pass;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
-import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
+import com.rtsbuilding.rtsbuilding.client.render.util.ActionRadiusFilter;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import com.rtsbuilding.rtsbuilding.client.render.util.UltimineBlockMerger;
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
@@ -89,14 +88,12 @@ public final class UltiminePreviewPass implements RenderPass {
                         }
                     }
                     // B4/D4：动作半径（相机锚点 X/Z 半边长）内才预览，避免“高亮但点了没反应”
-                    return isWithinActionRadius(pos);
+                    return ActionRadiusFilter.isWithinActionRadius(pos);
                 });
         if (targets.isEmpty()) return;
 
         List<BlockPos> outerBlocks = filterOuterBlocks(targets);
         if (outerBlocks.isEmpty()) return;
-
-        
         // 合并相邻方块并提取外轮廓边（VoxelShape OR 组合消除内部共享边），
         // 使非长方体连通区域（L 形、环等）也呈现连续、完全合并的边框。
         List<UltimineBlockMerger.EdgeLine> edges = UltimineBlockMerger.getEdgeLines(outerBlocks);
@@ -130,19 +127,6 @@ public final class UltiminePreviewPass implements RenderPass {
                 r, g, b, EDGE_ALPHA, distance);
         CornerBracketRenderer.renderEdges(poseStack, alloc.noDepth(), edges,
                 r, g, b, CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA, distance);
-    }
-
-    
-    private static boolean isWithinActionRadius(BlockPos pos) {
-        RtsClientKernel kernel = RtsClientKernel.get();
-        if (kernel == null) return true;
-        CameraModule cam = kernel.module(CameraModule.class);
-        if (cam == null || !cam.isCameraEnabled()) return true;
-        var state = cam.getState();
-        double dx = (pos.getX() + 0.5D) - state.getAnchorX();
-        double dz = (pos.getZ() + 0.5D) - state.getAnchorZ();
-        double halfExtent = state.getMaxRadius();
-        return Math.abs(dx) <= halfExtent && Math.abs(dz) <= halfExtent;
     }
 
     
