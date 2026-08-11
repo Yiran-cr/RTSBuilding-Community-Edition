@@ -7,8 +7,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
@@ -100,6 +98,11 @@ public class RtsDroneEntity extends Entity {
     /** 动画网络包变化阈值：位移 ≥ 0.001 格或任一角度变化 ≥ 0.05° 才发送（悬停时收敛到 0，完全停发） */
     private static final double ANIM_MOVE_EPSILON_SQ = 1.0E-6D;   // (0.001)²
     private static final float ANIM_ANGLE_EPSILON_DEG = 0.05F;
+    /** 动画网络包强制重发间隔（tick）：即使状态无变化也周期性重发，
+     *  保证新进入追踪范围（64 格）的玩家能立刻拿到无人机的当前动画姿态（默认缓存为 0，不发则永远平飞）。 */
+    private static final int ANIM_RESEND_INTERVAL = 20;
+    /** 服务端动画包发送 tick 计数（驱动周期重发） */
+    private int animStateSendTick;
 
     public RtsDroneEntity(EntityType<? extends RtsDroneEntity> entityType, Level level) {
         super(entityType, level);
@@ -134,8 +137,11 @@ public class RtsDroneEntity extends Entity {
 
     @Override
     public EntityDimensions getDimensions(Pose pose) {
-        // 零尺寸碰撞箱：无碰撞体积（模型为纯视觉，不参与碰撞检测）
-        return EntityDimensions.scalable(0.0F, 0.0F);
+        // 视觉碰撞箱：与无人机模型尺寸匹配（机身主体约 0.75 格半宽，高度约 0.5 格）。
+        // 碰撞箱以实体位置为中心，配合 {@link #MODEL_HEIGHT_OFFSET} 的渲染偏移
+        // 使模型中心与碰撞箱中心重合，名字标签也会在模型上方正确显示。
+        // 实体仍无物理碰撞（noPhysics + isPickable/isPushable 为 false，移动走 setPosRaw 不参与碰撞检测）。
+        return EntityDimensions.scalable(1.4F, 0.5F);
     }
 
     public UUID getOwnerUuid() {
@@ -158,6 +164,8 @@ public class RtsDroneEntity extends Entity {
      */
     public void snapTo(double x, double y, double z, float yaw) {
         this.setPosRaw(x, y, z);
+        // 位置变化后同步更新碰撞箱（碰撞箱中心随实体位置移动，与模型渲染位置保持一致）
+        this.setBoundingBox(this.makeBoundingBox());
         this.setYRot(yaw);
         this.setYHeadRot(yaw);
         this.setYBodyRot(yaw);
@@ -262,42 +270,41 @@ public class RtsDroneEntity extends Entity {
             // 服务端每 tick 直发无人机动画状态包（与位置包同延迟、同到达相位）。
             // 不能改到 updateCameraPose 里发——那里由客户端 CAMERA_POSE 往返触发，
             // 会让动画值比位置多一次往返、到达时机不齐，客户端插值跳变导致卡顿。
-            this.sendAnimStateToOwner();
+            // 广播给所有追踪该无人机的玩家（而非仅所属玩家）：联机环境下他人也能看到
+            // 机身倾角/云台俯仰/偏航的完整飞行动画。
+            this.sendAnimStateToTracking();
         }
     }
 
     /**
-     * 向所属玩家下发本 tick 的动画状态（机身倾角/云台俯仰/机身朝向）。
+     * 向所有追踪该无人机的玩家广播本 tick 的动画状态（机身倾角/云台俯仰/机身朝向）。
      * <p>只应在服务端调用（无人机 tick 内）。</p>
-     * <p>悬停无变化时停发网络包：客户端 prev/curr 插值窗口保持相同值，渲染自然静止；
-     * 首个状态强制发送，保证客户端实体生成后立即获得初始值。</p>
+     * <p>状态无变化时停发网络包：客户端 prev/curr 插值窗口保持相同值，渲染自然静止；
+     * 首个状态强制发送，保证客户端实体生成后立即获得初始值；
+     * 另按 {@link #ANIM_RESEND_INTERVAL} 周期强制重发，确保后加入追踪范围的玩家拿到当前姿态。</p>
      */
-    private void sendAnimStateToOwner() {
-        UUID ownerUuid = this.getOwnerUuid();
-        if (this.level() instanceof ServerLevel serverLevel && ownerUuid != null) {
-            ServerPlayer owner = serverLevel.getServer().getPlayerList().getPlayer(ownerUuid);
-            if (owner == null) return;
+    private void sendAnimStateToTracking() {
+        double x = this.getX(), y = this.getY(), z = this.getZ();
+        float yaw = this.targetYaw, pitch = this.targetPitch, tiltX = this.tiltX, tiltZ = this.tiltZ;
 
-            double x = this.getX(), y = this.getY(), z = this.getZ();
-            float yaw = this.targetYaw, pitch = this.targetPitch, tiltX = this.tiltX, tiltZ = this.tiltZ;
+        // 变化检测：位移/角度均低于阈值且非首包、未到周期重发点时跳过发送
+        double dx = x - lastSentX, dy = y - lastSentY, dz = z - lastSentZ;
+        boolean forceResend = ++animStateSendTick % ANIM_RESEND_INTERVAL == 0;
+        boolean changed = !animStateSent
+                || forceResend
+                || dx * dx + dy * dy + dz * dz > ANIM_MOVE_EPSILON_SQ
+                || Math.abs(yaw - lastSentYaw) > ANIM_ANGLE_EPSILON_DEG
+                || Math.abs(pitch - lastSentPitch) > ANIM_ANGLE_EPSILON_DEG
+                || Math.abs(tiltX - lastSentTiltX) > ANIM_ANGLE_EPSILON_DEG
+                || Math.abs(tiltZ - lastSentTiltZ) > ANIM_ANGLE_EPSILON_DEG;
+        if (!changed) return;
 
-            // 变化检测：位移/角度均低于阈值且非首包时跳过发送
-            double dx = x - lastSentX, dy = y - lastSentY, dz = z - lastSentZ;
-            boolean changed = !animStateSent
-                    || dx * dx + dy * dy + dz * dz > ANIM_MOVE_EPSILON_SQ
-                    || Math.abs(yaw - lastSentYaw) > ANIM_ANGLE_EPSILON_DEG
-                    || Math.abs(pitch - lastSentPitch) > ANIM_ANGLE_EPSILON_DEG
-                    || Math.abs(tiltX - lastSentTiltX) > ANIM_ANGLE_EPSILON_DEG
-                    || Math.abs(tiltZ - lastSentTiltZ) > ANIM_ANGLE_EPSILON_DEG;
-            if (!changed) return;
-
-            Platform.sendPacket(owner, new S2CRtsDroneAnimPayload(
-                    this.getId(), x, y, z, yaw, pitch, tiltX, tiltZ));
-            animStateSent = true;
-            lastSentX = x; lastSentY = y; lastSentZ = z;
-            lastSentYaw = yaw; lastSentPitch = pitch;
-            lastSentTiltX = tiltX; lastSentTiltZ = tiltZ;
-        }
+        Platform.sendToPlayersTrackingEntity(this, new S2CRtsDroneAnimPayload(
+                this.getId(), x, y, z, yaw, pitch, tiltX, tiltZ));
+        animStateSent = true;
+        lastSentX = x; lastSentY = y; lastSentZ = z;
+        lastSentYaw = yaw; lastSentPitch = pitch;
+        lastSentTiltX = tiltX; lastSentTiltZ = tiltZ;
     }
 
     /**
@@ -327,6 +334,9 @@ public class RtsDroneEntity extends Entity {
                         this.getY() + dy / dist * step,
                         this.getZ() + dz / dist * step);
             }
+
+            // 位置变化后同步更新碰撞箱（碰撞箱中心随实体位置移动，与模型渲染位置保持一致）
+            this.setBoundingBox(this.makeBoundingBox());
 
             // 朝向平滑旋转（不直接锁定，保持飞行动画自然）
             float dyaw = Mth.wrapDegrees(this.targetYaw - this.getYRot());

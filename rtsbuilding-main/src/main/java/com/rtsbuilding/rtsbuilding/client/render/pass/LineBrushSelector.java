@@ -1,11 +1,11 @@
 package com.rtsbuilding.rtsbuilding.client.render.pass;
 
-import com.rtsbuilding.rtsbuilding.client.build.shape.AdjustKind;
-import com.rtsbuilding.rtsbuilding.client.build.shape.BuildShape;
-import com.rtsbuilding.rtsbuilding.client.build.shape.Phase;
-import com.rtsbuilding.rtsbuilding.client.build.shape.PhaseAdvance;
-import com.rtsbuilding.rtsbuilding.client.build.shape.ShapeInput;
-import com.rtsbuilding.rtsbuilding.client.build.shape.ShapeParams;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.AdjustKind;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.Phase;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.PhaseAdvance;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.ShapeInput;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.ShapeParams;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import net.minecraft.core.BlockPos;
 

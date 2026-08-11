@@ -1,5 +1,5 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar;
-import com.rtsbuilding.rtsbuilding.client.build.shape.BuildShape;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.ActionButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.BuildDestroyButtonGroup;

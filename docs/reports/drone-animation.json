@@ -1,0 +1,84 @@
+{
+  "id": "drone-animation",
+  "title": "无人机动画同步链路",
+  "subtitle": "NeoForge 1.21.1 · 无人机飞行动画（机身倾角 / 云台俯仰 / 偏航）从客户端上报到服务端计算、广播到客户端渲染的完整链路，含联机不同步修复",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 2 · 修复 2 · 保留 0",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "RtsDroneEntity", "path": "common/entity/", "desc": "无人机实体：服务端飞行/倾角计算、<code>tick()</code> 触发动画包<strong>广播</strong>，客户端 <code>receiveAnimState</code> 维护 prev/curr 插值缓存。" },
+    { "name": "rts_drone", "path": "client/entity/", "desc": "Blockbench 导出模型：螺旋桨本地 float 旋转 + prev/curr 插值 + <code>AnimFloat</code> 时间平滑，驱动 <code>body.xRot/zRot/yRot</code>、<code>camera.xRot</code>。" },
+    { "name": "RtsDroneRenderer", "path": "client/entity/", "desc": "渲染器：<code>isHiddenFromOwner</code> 摄像机视角隐藏自身无人机、Y 轴翻转、悬停正弦浮动、partialTick 传入 <code>setupAnim</code>。" },
+    { "name": "S2CRtsDroneAnimPayload", "path": "network/camera/", "desc": "服务端→客户端动画状态包：<code>entityId + xyz + yaw/pitch/tiltX/tiltZ</code>，已注册 <code>playToClient</code>。" },
+    { "name": "Platform", "path": "platform/", "desc": "平台层发包：<code>sendPacket</code>(单播) 与新增 <code>sendToPlayersTrackingEntity</code>(追踪广播)。" },
+    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "客户端收包：<code>handleDroneAnim</code> 经 <code>mc.level.getEntity</code> 定位实体并写入动画缓存。" },
+    { "name": "CameraModule", "path": "client/infrastructure/module/camera/", "desc": "客户端每 2 tick 上报相机姿态（<code>C2SCameraPosePayload</code>），作为动画输入源头。" },
+    { "name": "RtsCameraManager", "path": "server/camera/", "desc": "接收相机姿态并 <code>setTarget</code> 驱动无人机飞行目标（相机上方 4 格、朝向一致）。" },
+    { "name": "AnimFloat", "path": "client/util/animate/", "desc": "时间基浮点平滑器，对插值输出再平滑，抗多人联机网络抖动。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 动画内容分层（哪部分需要网络同步）",
+      "type": "cards",
+      "cards": [
+        { "title": "本地计算 · 无需网络", "text": "螺旋桨旋转（<code>ageInTicks % 5 * 72°</code>）与悬停正弦浮动（<code>sin(age*0.12)*0.15</code>）全部由本地 tick/render 驱动，<strong>所有玩家客户端一致</strong>，不依赖网络包。" },
+        { "title": "服务端广播 · 需要网络", "text": "机身倾角（俯仰/横滚）、相机云台俯仰、机身偏航由服务端每 tick 计算后经 <code>S2CRtsDroneAnimPayload</code> 下发。<strong>这是联机不同步的部分。</strong>" }
+      ]
+    },
+    {
+      "title": "2.2 完整数据流",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "<code>CameraModule.tick</code>（每 2 tick）变化检测后发 <code>C2SCameraPosePayload</code> 上报相机姿态" },
+        { "side": "srv", "text": "<code>RtsCameraManager.updateCameraPose</code> 坐标钳位后 <code>drone.setTarget(x,y,z,yaw,pitch)</code>" },
+        { "side": "srv", "text": "<code>RtsDroneEntity.tick()</code>：<code>moveTowardTarget</code> 有限速度飞行 + <code>updateMovementTilt</code> 倾角平滑" },
+        { "side": "srv", "text": "<code>sendAnimStateToTracking</code>：变化检测（或 20 tick 周期重发）后经 <code>Platform.sendToPlayersTrackingEntity</code> <strong>广播</strong> <code>S2CRtsDroneAnimPayload</code>" },
+        { "side": "cli", "text": "<code>ClientPayloadDispatcher</code> → <code>handleDroneAnim</code> → <code>receiveAnimState</code> 写 prev/curr 缓存 + 位置插值窗口" },
+        { "side": "cli", "text": "<code>RtsDroneRenderer.render</code> → <code>rts_drone.setupAnim</code>：SMOOTHSTEP 插值 → <code>AnimFloat</code> 时间平滑 → 施加到 <code>body</code>/<code>camera</code>" }
+      ]
+    },
+    {
+      "title": "2.3 服务端动画状态计算",
+      "type": "table",
+      "headers": ["状态", "来源", "计算规则", "同步方式"],
+      "rows": [
+        ["机身倾角 tiltX/tiltZ", "<span class='path'>RtsDroneEntity:366</span>", "按剩余<strong>水平距离</strong>线性递增，最多 25°，<code>TILT_SMOOTHING=0.3</code> 每 tick 平滑", "动画包广播"],
+        ["云台俯仰 pitch", "<span class='path'>RtsDroneEntity:199</span>", "直接取客户端上报相机俯仰角", "动画包广播"],
+        ["机身偏航 yaw", "<span class='path'>RtsDroneEntity:340</span>", "向目标偏航角按 <code>YAW_LERP_RATE=0.25</code> 平滑旋转", "动画包广播"],
+        ["位置 x/y/z", "原版位置包", "<code>moveTowardTarget</code> 有限速度逼近", "原版实体位置包 + 动画包"]
+      ]
+    },
+    {
+      "title": "2.4 客户端三层平滑",
+      "type": "note",
+      "note": "<b>① prev/curr 插值窗口</b>：<code>receiveAnimState</code> 把上一包存入 prev、本包存入 curr；<b>② partialTick 缓动</b>：<code>setupAnim</code> 用 <code>SMOOTHSTEP</code> 对 prev/curr 做 <code>Mth.lerp / rotLerp</code>（偏航走 <code>wrapDegrees</code> 最短路径）；<b>③ AnimFloat 时间平滑</b>（120ms EASE_OUT_CUBIC）抗多人联机网络抖动。位置插值由原版 <code>xo/yo/zo</code> 窗口维护（动画包先于位置包处理也不会归零）。"
+    },
+    {
+      "title": "2.5 变化检测与限流",
+      "type": "note",
+      "note": "位移 ≥ 0.001 格或任一角度 ≥ 0.05° 才发包（<code>RtsDroneEntity:280</code>），悬停收敛时完全停发；另每 <code>ANIM_RESEND_INTERVAL = 20</code> tick 周期强制重发一次，保证<strong>后进入 64 格追踪范围</strong>的玩家能拿到当前姿态（修复 ②）。"
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 联机玩家看不到无人机的飞行动画",
+      "status": "fixed",
+      "why": "根因：<code>sendAnimStateToOwner</code> 把 <code>S2CRtsDroneAnimPayload</code> 只发给<strong>所属玩家</strong>。他人虽能看到实体移动（原版位置包广播）与螺旋桨旋转（本地计算），但机身倾角/云台俯仰/偏航永远收不到 → 机身水平、云台不动、朝向固定。修复：改为 <code>sendAnimStateToTracking</code>，经新增的 <code>Platform.sendToPlayersTrackingEntity</code>（<code>PacketDistributor.sendToPlayersTrackingEntity</code>）广播给所有追踪该无人机的玩家，广播范围与原版位置包一致（tracking 64）。"
+    },
+    {
+      "title": "② 后进入追踪范围的玩家拿不到当前动画姿态",
+      "status": "fixed",
+      "why": "根因：变化检测停发逻辑下，悬停静止的无人机不再发包，新进入 64 格追踪范围的玩家客户端缓存恒为默认 0（云台可能正保持非零俯仰也看不到）。修复：新增 <code>ANIM_RESEND_INTERVAL = 20</code> tick 周期强制重发一次当前动画状态。"
+    }
+  ],
+  "boundaries": [
+    "<b>广播范围与位置包一致</b>：<code>sendToPlayersTrackingEntity</code> 仅发给追踪该实体的玩家（tracking range 64），owner 也在其中，原有行为不受影响。",
+    "<b>owner 视角隐藏自身无人机</b>：<code>isHiddenFromOwner</code> 仅在自己进入 RTS 摄像机视角时隐藏自己的无人机（挡住视线），其他玩家仍可见完整动画。",
+    "<b>螺旋桨/悬停浮动本地计算</b>：不占用网络，所有客户端视觉一致。",
+    "<b>动画状态不走 SynchedEntityData</b>：自定义包每 tick 直发可与位置包同相位，避免 SynchedEntityData 的同步粒度/相位错位导致插值跳变。",
+    "<b>悬停时姿态天然为 0</b>：到达后倾角平滑回正，故静止无人机新玩家看到的默认 0 姿态与真实一致，周期重发兜底非零云台俯仰场景。"
+  ]
+}

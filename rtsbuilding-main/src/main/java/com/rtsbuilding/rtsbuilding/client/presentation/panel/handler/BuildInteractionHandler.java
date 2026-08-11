@@ -1,6 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.handler;
 
-import com.rtsbuilding.rtsbuilding.client.build.shape.BuildShape;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.building.BuildingModule;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.mining.MiningModule;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;

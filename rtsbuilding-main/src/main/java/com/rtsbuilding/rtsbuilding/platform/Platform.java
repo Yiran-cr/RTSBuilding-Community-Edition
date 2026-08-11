@@ -8,6 +8,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -125,5 +126,14 @@ public final class Platform {
      */
     public static void sendPacket(ServerPlayer player, CustomPacketPayload payload) {
         PacketDistributor.sendToPlayer(player, payload);
+    }
+
+    /**
+     * Broadcast a custom payload packet to all players currently tracking the given entity.
+     * <p>与实体的原版位置包广播范围一致（仅追踪该实体的客户端能收到），
+     * 用于把实体状态类动画数据同步给所有可见该实体的玩家，而非仅实体所属玩家。</p>
+     */
+    public static void sendToPlayersTrackingEntity(Entity entity, CustomPacketPayload payload) {
+        PacketDistributor.sendToPlayersTrackingEntity(entity, payload);
     }
 }

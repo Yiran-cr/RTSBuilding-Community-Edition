@@ -3,10 +3,12 @@ package com.rtsbuilding.rtsbuilding.server.camera;
 import com.rtsbuilding.rtsbuilding.common.RtsEntities;
 import com.rtsbuilding.rtsbuilding.common.entity.RtsCameraEntity;
 import com.rtsbuilding.rtsbuilding.common.entity.RtsDroneEntity;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.Set;
 import java.util.UUID;
@@ -153,6 +155,12 @@ final class RtsCameraEntityHelper {
             double x, double y, double z, float yaw) {
         RtsDroneEntity drone = new RtsDroneEntity(RtsEntities.RTS_DRONE.get(), level);
         drone.setOwnerUuid(ownerUuid);
+        // 使用原生态实方法显示所属玩家的名字（飘字名称牌）
+        Player owner = level.getPlayerByUUID(ownerUuid);
+        if (owner != null) {
+            drone.setCustomName(Component.literal(owner.getGameProfile().getName()));
+            drone.setCustomNameVisible(true);
+        }
         drone.snapTo(x, y, z, yaw);
         level.addFreshEntity(drone);
         return drone;
