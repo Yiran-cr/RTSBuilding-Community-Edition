@@ -1,4 +1,4 @@
-# RTS Building: Build From Above
+# RTS Building: Community Edition
 
 Minecraft RTS-style top-down building mod. NeoForge 1.21.1 / Forge 1.20.1 (branch `forge-1.20.1`). Java 21.
 

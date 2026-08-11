@@ -6,6 +6,7 @@ import com.rtsbuilding.rtsbuilding.network.builder.*;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraAnchorPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneAnimPayload;
+import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneBeamPayload;
 import com.rtsbuilding.rtsbuilding.network.feedback.S2CRtsDamageFeedbackPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsCarriedSyncPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStorageDirtyPayload;
@@ -42,6 +43,8 @@ public final class ClientPayloadDispatcher {
                     RtsClientNetworkHandlers.handleCameraAnchor(p, ctx);
             case S2CRtsDroneAnimPayload p ->
                     RtsClientNetworkHandlers.handleDroneAnim(p, ctx);
+            case S2CRtsDroneBeamPayload p ->
+                    RtsClientNetworkHandlers.handleDroneBeam(p, ctx);
             default -> {}
         }
     }

@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.server.service.impl;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.RtsService;
 import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementSound;
+import com.rtsbuilding.rtsbuilding.server.service.beam.RtsDroneBeamService;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferExtractor;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.RtsStorageFluids;
@@ -127,6 +128,8 @@ public final class RtsBlueprintServiceImpl implements RtsService {
             return;
         }
         RtsPlacementSound.playRemotePlacedBlockSound(player, player.serverLevel(), pos);
+        // 蓝图放置也广播建造蓝光给其他玩家（该路径不经过 playRemotePlacedBlockAnimation）
+        RtsDroneBeamService.broadcastPlace(player, pos);
         server.page().recordRecentItem(session, itemId, (byte) 1, 1L);
     }
 

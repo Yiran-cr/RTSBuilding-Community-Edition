@@ -1,0 +1,87 @@
+{
+  "id": "boundary-render-chain",
+  "title": "边界屏障渲染链路",
+  "subtitle": "NeoForge 1.21.1 · 边界墙数据流、光影防护失效与「跟随摄像机视角阴影」走查修复",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 9 · 修复 8 · 保留 1",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "BoundaryPass", "path": "client/render/pass/", "desc": "RTS 区域边界墙渲染：以 region 锚点为中心绘制四堵半透明 <code>entityTranslucent</code> 墙，含高度缓存、距离裁剪与光影防护。" },
+    { "name": "RenderPipeline", "path": "client/render/", "desc": "渲染管线：注册各 pass，<code>AFTER_TRANSLUCENT_BLOCKS</code> 阶段统一提交缓冲；本次新增光影下跳过 <code>BoundaryPass</code> 的兜底。" },
+    { "name": "ClientRenderHandler", "path": "client/bootstrap/", "desc": "<code>RenderLevelStageEvent</code> 入口：手动 <code>translate(-camPos)</code> 补齐相机平移（该阶段事件 poseStack 为单位矩阵）。" },
+    { "name": "ShaderState", "path": "client/util/render/", "desc": "Iris/OptiFine 光影检测：反射 + 配置文件探测；本次改为保守判定——loader 存在但无法证明关闭时视为激活。" },
+    { "name": "RtsCameraManager", "path": "server/camera/", "desc": "服务端相机会话与锚点：<code>startNormal</code> 下发状态包，<code>updateAnchorForPlayer</code> 每 tick 跟随玩家实体更新锚点。" },
+    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "客户端收包：<code>handleCameraState</code>/<code>handleCameraAnchor</code> 更新 region 锚点；本次关闭模式改为复位 region。" },
+    { "name": "RtsClientKernel", "path": "client/kernel/", "desc": "客户端内核：保存 region 锚点（<code>updateRegion</code>/新增 <code>resetRegion</code>）与渲染管线生命周期。" },
+    { "name": "CameraModule", "path": "client/infrastructure/module/camera/", "desc": "纯客户端相机：<code>RtsCameraEntity</code> 本地镜像 + 自由/环绕/玩家环绕三种移动模式。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 链路数据流",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "<code>RtsCameraManager.startNormal</code>：anchor=玩家脚下、radius=32，发 <code>S2CRtsCameraStatePayload</code>" },
+        { "side": "srv", "text": "每 tick <code>updateAnchorForPlayer</code>：玩家实体位置变化 → 更新锚点并发 <code>S2CRtsCameraAnchorPayload</code>" },
+        { "side": "cli", "text": "<code>handleCameraState</code>/<code>handleCameraAnchor</code> → <code>kernel.updateRegion(anchor, radius)</code>" },
+        { "side": "cli", "text": "<code>ClientRenderHandler.onRenderLevel</code>(AFTER_TRANSLUCENT_BLOCKS) → <code>translate(-camPos)</code> → RenderPipeline" },
+        { "side": "cli", "text": "<code>BoundaryPass.renderBarrierWalls</code>：以 region 锚点 ± radius 绘制四堵半透明墙" }
+      ]
+    },
+    {
+      "title": "2.2 锚点下发路径",
+      "type": "table",
+      "headers": ["包", "触发点", "锚点来源", "客户端处理"],
+      "rows": [
+        ["<code>S2CRtsCameraStatePayload</code>", "<span class='path'>RtsCameraManager:131</span>", "玩家脚下（开启时）", "<code>handleCameraState</code> → <code>updateRegion</code>/<code>resetRegion</code>"],
+        ["<code>S2CRtsCameraAnchorPayload</code>", "<span class='path'>RtsCameraManager:529</span>", "<code>floor(player.position)+0.5</code>", "<code>handleCameraAnchor</code> → <code>updateRegion</code>"],
+        ["<code>C2SCameraPosePayload</code>", "<span class='path'>RtsPayloadRegistrar:29</span>", "客户端相机姿态上报", "<code>updateCameraPose</code> 仅记录会话 + 驱动无人机，不动玩家"]
+      ]
+    },
+    {
+      "title": "2.3 渲染矩阵语义（已从 NeoForge 21.1.219 源码确认）",
+      "type": "note",
+      "note": "<code>AFTER_TRANSLUCENT_BLOCKS</code> 由 <code>renderSectionLayer(RenderType.translucent)</code> 触发，<code>ClientHooks.dispatchRenderStage(RenderType,...)</code> 传 <code>poseStack=null</code>（事件内 new 单位矩阵），modelView = <code>R⁻¹</code>（GameRenderer 仅含旋转无平移）。因此 <code>ClientRenderHandler</code> 的 <code>translate(-camPos)</code> 是<strong>必要且唯一</strong>的相机平移——原版管线语义正确，墙坐标固定于世界锚点。"
+    },
+    {
+      "title": "2.4 相机移动",
+      "type": "note",
+      "note": "相机移动为<strong>纯客户端</strong>：<code>CameraModule.onRenderFrame</code> → 自由/环绕模式重算 <code>state.localX/Y/Z</code> → <code>RtsCameraEntity.snapToState</code>。服务端收到 <code>C2SCameraPosePayload</code> 仅刷新会话记录与无人机目标。<b>自由相机被 clamp 在 anchor ± radius 内</b>（<code>FreeCameraMode:85-87</code>），玩家环绕模式以玩家实体为圆心。"
+    },
+    {
+      "title": "2.5 光影防护",
+      "type": "cards",
+      "cards": [
+        { "title": "原设计防护", "text": "<code>BoundaryPass.shouldRender</code> 原带 <code>!ShaderState.isShaderPackActive()</code>：光影把半透明墙当光照/阴影采样几何，渲染成暗色条带。" },
+        { "title": "失效根因", "text": "用户开光影仍见墙 → <code>ShaderState</code> 仅在「明确检测到」时返回 true，API 反射失败或 <code>iris.properties</code> 读取失败时误报 false，防护失效。" },
+        { "title": "修复", "text": "检测改为<strong>保守模式</strong>：无法证明「无光影」即视为激活（Iris 多包名检测 + OptiFine）；<code>RenderPipeline</code> 再叠加一道兜底，双保险。" }
+      ]
+    },
+    {
+      "title": "2.6 墙高限制与锚点防御",
+      "type": "note",
+      "note": "<b>墙高</b>：原 <code>yMin=-64</code>、<code>yMax=最高+5</code> → 墙超百格长且围住相机，任何视角占满视野（「超长跟随」观感根因）。现封顶 <code>[anchor.y-4, min(最高+5, anchor.y+20)]</code>。<b>锚点防御</b>：<code>TemporaryContextSwitcher</code> 临时 <code>setPos</code> 玩家执行操作期间置 <code>temporarilySwitchingPosition</code> 标记，<code>updateAnchorForPlayer</code> 跳过；锚点更新改为<strong>仅水平跨格</strong>（x/z 比较），锚点 y 保持开启时值——玩家虚空下落时墙与相机不再联动下移。"
+    }
+  ],
+  "issues": [
+    { "title": "① 光影下边界墙渲染成暗色阴影（主因，运行日志实锤）", "status": "fixed", "why": "用户 Iris 1.8.14 + Sodium + ComplementaryReimagined 仍见墙，且日志无 <code>[RTS-Building] Shader pack detection</code> 输出 → 检测返回 false。实锤根因有二：<b>(a)</b> <code>iris.properties</code> 新版键名为 <code>shaderPack=</code>，检测只解析旧键 <code>shaderPackName=</code>，packName 恒为 null → 启用判定失败；<b>(b)</b> NeoForge 模块化 classloader 下 <code>Class.forName</code> 跨模块加载 Iris 类不可靠，保守兜底 <code>isIrisPresent()</code> 也失效。修复：解析兼容 <code>shaderPack=</code>/<code>shaderPackName=</code> 两键，并新增 NeoForge 原生 <code>ModList.get().isLoaded(\"iris\")</code> 作为最可靠存在性判定，<code>detect()</code> 第一优先检查。" },
+    { "title": "② 墙体位置随相机平移（Iris 兼容）", "status": "fixed", "why": "Iris 接管渲染后 <code>AFTER_TRANSLUCENT_BLOCKS</code> 事件的 poseStack/相机基准可能与原版不同，手动 <code>translate(-camPos)</code> 出现偏移，墙随相机移动。修复：<code>RenderPipeline.onRenderFrame</code> 对 <code>BoundaryPass</code> 增加光影态硬跳过（含注释），即使 shouldRender 被绕过也绝不渲染。" },
+    { "title": "③ RTS 关闭后边界墙残留", "status": "fixed", "why": "<code>handleCameraState(false)</code> 仍调用 <code>updateRegion(0,0,0,32)</code> 且 <code>regionValid</code> 永不复位，关闭瞬间会在世界原点残留 32 半径墙。修复：<code>RtsClientKernel</code> 新增 <code>resetRegion()</code>，关闭模式改用 <code>resetRegion</code>，并在 <code>RtsToggled(false)</code> 派发时兜底复位。" },
+    { "title": "④ 墙高 100+ 格「超长」占满视野（跟随观感根因）", "status": "fixed", "why": "原 <code>yMin=minBuildHeight(-64)</code>、<code>yMax=边界最高+5</code>，墙从地下一直延伸到上百格高空；相机又被 clamp 在 anchor±radius 内活动，任何视角墙都占满视野，转动/平移相机时相对位置不断变化 → 「超长的边界屏障阴影一直跟随摄像机」。修复：<code>yMax=min(最高+5, anchor.y+20)</code>、<code>yMin=max(-64, anchor.y-4)</code>，墙高封顶约 24 格，不再遮挡视线。" },
+    { "title": "⑤ 墙 alpha 0.8 遮挡感强", "status": "fixed", "why": "0.8 透明度旋转视角时形成大片半透明深色扫动。修复：<code>BARRIER_ALPHA</code> 0.80 → 0.35，弱化为边界提示。" },
+    { "title": "⑥ 锚点被临时操作位置污染", "status": "fixed", "why": "服务端 RTS 操作（放置/破坏/交互）经 <code>TemporaryContextSwitcher</code> 临时 <code>setPos</code> 玩家到相机指向的虚拟位置再恢复；若 <code>updateAnchorForPlayer</code>（每 tick 跟随玩家位置）恰在切换窗口内运行，会把锚点拉到虚拟位置，导致边界墙/动作范围跳动。修复：切换器增加 <code>temporarilySwitchingPosition</code> 标记，<code>updateAnchorForPlayer</code> 在窗口内跳过。" },
+    { "title": "⑦ 锚点垂直跟随玩家下落（「跟随摄像机」实锤）", "status": "fixed", "why": "运行日志显示玩家出生在 y=-60 虚空，持续下落。原 <code>updateAnchorForPlayer</code> 用三维距离 <code>distanceToSqr</code> 判断，玩家下落时 y 变化 → 锚点被反复拉向玩家 y，边界墙与相机（自由相机 clamp 于 anchor 范围）随之一起下移 → 「墙整体跟随摄像机」。修复：改为仅比较 x/z 平面位移，水平未跨格不更新；且锚点 y 保持开启时值（墙高基于地形最高点，不依赖锚点 y 跟随）。" },
+    { "title": "⑧ 冗余代码清理", "status": "kept", "why": "<code>BoundaryPass.isConfigSafe()</code> 异常时返回 true 且 try 块无意义，已删除并直连 <code>PerformanceConfig.shouldRenderBoundaryWalls()</code>。<code>StateEvent.AnchorUpdated</code> 无 dispatch 点，属预留事件定义，保留不动。" },
+    { "title": "⑨ 光影下边界提示缺失 → 统一带贴图无光照墙", "status": "fixed", "why": "修复①后光影下边界墙被完全跳过，区域边界提示丢失。先后尝试线框、POSITION_COLOR 纯色墙，用户期望<strong>光影下仍显示带 barrier.png 贴图的半透明墙</strong>。最终：<code>RenderPipeline</code> 将屏障 RenderType 从 <code>entityTranslucent</code>（Iris 映射为带光照/阴影采样的实体材质 → 暗带）改为自定义 <code>POSITION_TEX_COLOR</code> + <code>GameRenderer.getPositionTexColorShader()</code>（<code>position_tex_color</code>，unlit 不采样光照/阴影，Iris 对 basic 管线通常直通），带纹理、半透明、LEQUAL 深度；<code>BoundaryPass</code> 移除光影分派与纯色/线框分支，原版与光影下统一渲染带贴图滚动动画的半透明墙，顶点格式改为 <code>setColor+setUv</code>（无 lightmap/normal）。" }
+  ],
+  "boundaries": [
+    "边界墙中心 = 服务端锚点（<code>floor(player.position)+0.5</code>），仅水平跨格时更新且锚点 y 保持开启时值；玩家垂直下落/抖动不再影响边界墙位置。",
+    "服务端 RTS 会话不冻结玩家实体物理：水平位移（被推挤/主动移动）仍会使锚点跟随，边界墙随之平移，属设计行为。",
+    "自由相机活动范围被 clamp 在 anchor ± radius 内（默认 32 格），边界墙天然包裹相机活动空间，属设计行为。",
+    "光影（Iris/OptiFine）下边界<strong>以带 barrier.png 贴图的无光照半透明墙渲染</strong>（自定义 <code>POSITION_TEX_COLOR</code> + <code>position_tex_color</code> shader，不采样光照/阴影，Iris 对 basic 管线通常直通），原版与光影下统一；若实测某光影仍对该 shader 做调制，需回退线框方案。",
+    "墙高已封顶：<code>[anchor.y-4, min(边界最高+5, anchor.y+20)]</code>，不再出现从 -64 到上百格的超长墙体。",
+    "<code>entityTranslucent</code> 墙受雾影响，原版远距离观察会自然淡出。"
+  ]
+}

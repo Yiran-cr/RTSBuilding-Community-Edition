@@ -273,6 +273,46 @@ public final class RtsCameraManager {
     }
 
     /**
+     * 获取玩家 RTS 模式跟随无人机的实体 ID。
+     *
+     * @return 无人机实体 ID；未激活或无无人机实体时返回 {@code -1}
+     */
+    public static int getDroneEntityId(ServerPlayer player) {
+        if (player == null || player.getServer() == null) {
+            return -1;
+        }
+        Session session = SESSIONS.get(player.getUUID());
+        if (session == null || session.droneUuid() == null) {
+            return -1;
+        }
+        Entity drone = RtsCameraEntityHelper.findDroneEntity(player.getServer(), session.droneUuid());
+        return drone != null ? drone.getId() : -1;
+    }
+
+    /**
+     * 获取玩家 RTS 模式跟随无人机的"摄像头"世界位置。
+     * <p>摄像头位置 = 无人机实体位置 + {@link RtsDroneEntity#CAMERA_PART_OFFSET}，
+     * 用于光束两端锁定无人机摄像头部件。</p>
+     *
+     * @return 摄像头世界位置；未激活或无无人机实体时返回 {@code null}
+     */
+    @Nullable
+    public static Vec3 getDroneCameraPosition(ServerPlayer player) {
+        if (player == null || player.getServer() == null) {
+            return null;
+        }
+        Session session = SESSIONS.get(player.getUUID());
+        if (session == null || session.droneUuid() == null) {
+            return null;
+        }
+        Entity drone = RtsCameraEntityHelper.findDroneEntity(player.getServer(), session.droneUuid());
+        if (drone == null) {
+            return null;
+        }
+        return drone.position().add(RtsDroneEntity.CAMERA_PART_OFFSET);
+    }
+
+    /**
      * 更新玩家 RTS 相机的姿态（客户端权威上报）。
      * <p>相机移动/旋转为纯客户端计算，客户端每 tick 通过 {@code CAMERA_POSE}
      * 消息上报相机真实位置与朝向；服务端据此刷新会话记录，供权威逻辑
@@ -473,12 +513,25 @@ public final class RtsCameraManager {
         Session session = SESSIONS.get(player.getUUID());
         if (session == null) return;
 
+        // RTS 操作会临时 setPos 玩家到虚拟交互位置（TemporaryContextSwitcher）再恢复，
+        // 若在切换窗口内检测位置变化，会把锚点拉到虚拟位置导致边界墙/动作范围跳动。此处跳过。
+        if (com.rtsbuilding.rtsbuilding.server.util.TemporaryContextSwitcher.isTemporarilySwitchingPosition()) {
+            return;
+        }
+
         Vec3 playerPos = player.position();
         Vec3 currentAnchor = session.anchor();
         Vec3 newAnchor = new Vec3(Math.floor(playerPos.x) + 0.5D, playerPos.y, Math.floor(playerPos.z) + 0.5D);
 
-        // 只有锚点真正变化时才发包
-        if (currentAnchor.distanceToSqr(newAnchor) < 0.01D) return;
+        // 仅当玩家水平位移跨过方块边界时才更新锚点（x/z 比较，忽略 y）。
+        // 原实现用三维距离判断：玩家在虚空/高处下落时 y 持续变化，锚点会被反复
+        // 拉向玩家 y 坐标，边界墙与相机随之下移——观感即"边界屏障跟随摄像机视角"。
+        double dx = newAnchor.x - currentAnchor.x;
+        double dz = newAnchor.z - currentAnchor.z;
+        if (dx * dx + dz * dz < 0.01D) return;
+
+        // 锚点 y 保持开启时的值（基于地形高度计算墙高，不跟随玩家垂直位移）
+        newAnchor = new Vec3(newAnchor.x, currentAnchor.y, newAnchor.z);
 
         SESSIONS.put(player.getUUID(), new Session(
                 session.cameraUuid(), newAnchor, session.cameraPos(),

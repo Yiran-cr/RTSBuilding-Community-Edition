@@ -1,5 +1,5 @@
 
-# RTS Building: Build From Above
+# RTS Building: Community Edition
 
 **Language / 语言:** [English](#english) | [中文](#chinese)
 
@@ -21,7 +21,7 @@ releases remain under the license terms that accompanied those releases.
 
 Tired of running back and forth between chests while building?
 
-**RTS Building: Build From Above** adds an RTS-style building panel that lets you
+**RTS Building: Community Edition** adds an RTS-style building panel that lets you
 plan, place, mine, and manage materials from a top-down view. Instead of
 constantly moving your player body around your base, you can build more like you
 are managing a strategy game.
@@ -127,7 +127,7 @@ On Windows:
 
 受够了建造时在箱子之间来回翻材料吗？
 
-**RTS Building: Build From Above** 添加了一个类似即时战略游戏的建造面板，
+**RTS Building: Community Edition** 添加了一个类似即时战略游戏的建造面板，
 让你可以从俯视视角规划、放置、挖掘和管理材料。你不再需要为了放几块方块就
 不停移动玩家本体、在各种箱子之间翻找材料，而是可以像在管理一款策略游戏一样
 建造基地。

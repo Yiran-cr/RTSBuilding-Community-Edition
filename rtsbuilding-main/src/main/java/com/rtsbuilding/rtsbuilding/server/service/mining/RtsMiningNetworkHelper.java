@@ -4,6 +4,7 @@ import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsBreakAnimationPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsMineProgressPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsUltimineProgressPayload;
 import com.rtsbuilding.rtsbuilding.platform.Platform;
+import com.rtsbuilding.rtsbuilding.server.service.beam.RtsDroneBeamService;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,6 +37,7 @@ public final class RtsMiningNetworkHelper {
 
     /**
      * 发送破坏动画数据包，显示方块从哪种状态变为哪种状态。
+     * <p>同时广播一条破坏红光（目标方块 → 无人机摄像头）给其他玩家。</p>
      */
     public static void sendBreakAnimation(ServerPlayer player, BlockPos pos, BlockState state, BlockState resultState) {
         if (player == null || pos == null) {
@@ -43,6 +45,8 @@ public final class RtsMiningNetworkHelper {
         }
         Platform.sendPacket(player,
                 new S2CRtsBreakAnimationPayload(pos.immutable(), state, resultState));
+        // 破坏光束：只对其他玩家可见（主控不接收），两端追踪方块位置与无人机摄像头位置
+        RtsDroneBeamService.broadcastBreak(player, pos);
     }
 
     /** 发送连锁挖掘进度更新（已处理数/总数）。 */

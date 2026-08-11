@@ -193,7 +193,9 @@ public final class RtsClientKernel {
                 }
             } else {
                 closeBuilderScreenIfOpen();
-                
+                // 复位区域锚点，避免关闭后边界墙残留在旧锚点/世界原点渲染
+                resetRegion();
+                // 关闭 LinkedStoragePass 的动画状态，避免残留高亮
                 if (this.renderPipeline != null && this.renderPipeline.linkedStoragePass != null) {
                     this.renderPipeline.linkedStoragePass.clearAnimationState();
                 }
@@ -231,6 +233,19 @@ public final class RtsClientKernel {
         this.regionAnchorZ = z;
         this.regionMaxRadius = maxRadius;
         this.regionValid = true;
+    }
+
+    /**
+     * 复位 RTS 区域状态（RTS 模式关闭时调用）。
+     * <p>防止 {@link #updateRegion} 曾把 {@code regionValid} 置为 true 后，
+     * 关闭模式仍残留一个以旧锚点为中心的边界墙在世界上渲染。</p>
+     */
+    public void resetRegion() {
+        this.regionAnchorX = 0.0D;
+        this.regionAnchorY = 0.0D;
+        this.regionAnchorZ = 0.0D;
+        this.regionMaxRadius = 0.0D;
+        this.regionValid = false;
     }
 
     public double getRegionAnchorX() { return regionAnchorX; }

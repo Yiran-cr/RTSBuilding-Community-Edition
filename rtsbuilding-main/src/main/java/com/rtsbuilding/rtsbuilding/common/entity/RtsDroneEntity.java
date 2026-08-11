@@ -13,6 +13,8 @@ import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -36,6 +38,14 @@ public class RtsDroneEntity extends Entity {
      * 模型中心约为 y=15.6 像素（15.6/16 格），此处换算为格并向下偏移，使模型中心对准实体位置。
      */
     public static final float MODEL_HEIGHT_OFFSET = -15.6F / 16.0F;
+
+    /**
+     * 无人机模型上"摄像机摄像头"部件（camera cube）相对实体锚点（飞行目标点）的世界偏移（格）。
+     * <p>渲染时经 {@code scale(-1,-1,1)} + {@link #MODEL_HEIGHT_OFFSET} 后，camera 部件位于
+     * 实体位置下方约 0.21 格。服务端与客户端据此计算光束发射/接收端点，保证光束两端
+     * 持续锁定"摄像头"与"目标方块"两个端点。</p>
+     */
+    public static final Vec3 CAMERA_PART_OFFSET = new Vec3(0.0D, -0.2125D, 0.0D);
 
     /** 无人机飞行封顶速度（格/tick）：40 格/秒。距离越远速度越快，达到该值后不再增加 */
     private static final double MAX_FLY_SPEED = 2.0D;
@@ -137,11 +147,24 @@ public class RtsDroneEntity extends Entity {
 
     @Override
     public EntityDimensions getDimensions(Pose pose) {
-        // 视觉碰撞箱：与无人机模型尺寸匹配（机身主体约 0.75 格半宽，高度约 0.5 格）。
-        // 碰撞箱以实体位置为中心，配合 {@link #MODEL_HEIGHT_OFFSET} 的渲染偏移
-        // 使模型中心与碰撞箱中心重合，名字标签也会在模型上方正确显示。
-        // 实体仍无物理碰撞（noPhysics + isPickable/isPushable 为 false，移动走 setPosRaw 不参与碰撞检测）。
-        return EntityDimensions.scalable(1.4F, 0.5F);
+        // 视觉碰撞箱：与无人机模型尺寸匹配（螺旋桨叶片横跨约 2.2 格、模型高约 0.55 格），
+        // 碰撞箱完整包裹模型（含四旋翼叶片）。实体仍无物理碰撞
+        // （noPhysics + isPickable/isPushable 为 false，移动走 setPosRaw 不参与碰撞检测）。
+        return EntityDimensions.scalable(2.2F, 0.6F);
+    }
+
+    @Override
+    public AABB makeBoundingBox() {
+        // 无人机实体位置是模型/相机锚点（即中心点），碰撞箱须以实体位置为中心对称包裹，
+        // 才能与模型渲染中心（MODEL_HEIGHT_OFFSET 已把模型中心对准实体位置）重合。
+        // 原版 makeBoundingBox 的 Y 范围是 [getY(), getY()+height]（以底部为基准向上），
+        // 与以实体位置为中心的模型相比会整体偏高半个碰撞箱，导致"模型偏下"，故此处重写为中心对称。
+        EntityDimensions dimensions = this.getDimensions(this.getPose());
+        float halfWidth = dimensions.width() / 2.0F;
+        float halfHeight = dimensions.height() / 2.0F;
+        return new AABB(
+                this.getX() - halfWidth, this.getY() - halfHeight, this.getZ() - halfWidth,
+                this.getX() + halfWidth, this.getY() + halfHeight, this.getZ() + halfWidth);
     }
 
     public UUID getOwnerUuid() {

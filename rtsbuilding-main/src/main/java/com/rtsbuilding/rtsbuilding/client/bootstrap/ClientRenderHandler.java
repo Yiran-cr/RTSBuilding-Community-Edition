@@ -51,4 +51,14 @@ public final class ClientRenderHandler {
 
         poseStack.popPose();
     }
+
+    /**
+     * 无人机建造/破坏光束渲染：独立于 RTS 客户端内核，任何收到光束包的玩家
+     * （含非 RTS 模式的旁观者）都会在世界渲染阶段看到光束。
+     */
+    @SubscribeEvent
+    public static void onRenderDroneBeams(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
+        com.rtsbuilding.rtsbuilding.client.render.DroneBeamRenderer.INSTANCE.render(event);
+    }
 }

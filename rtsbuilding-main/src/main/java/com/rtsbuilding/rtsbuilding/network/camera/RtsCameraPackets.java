@@ -29,5 +29,10 @@ public final class RtsCameraPackets {
                 S2CRtsDroneAnimPayload.TYPE,
                 S2CRtsDroneAnimPayload.STREAM_CODEC,
                 ClientPayloadDispatcher::dispatchCamera);
+
+        registrar.playToClient(
+                S2CRtsDroneBeamPayload.TYPE,
+                S2CRtsDroneBeamPayload.STREAM_CODEC,
+                ClientPayloadDispatcher::dispatchCamera);
     }
 }

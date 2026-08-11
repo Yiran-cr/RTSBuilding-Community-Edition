@@ -4,6 +4,7 @@ import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsPlaceAnimationPayload;
 import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
 import com.rtsbuilding.rtsbuilding.server.service.SoundService;
+import com.rtsbuilding.rtsbuilding.server.service.beam.RtsDroneBeamService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -54,6 +55,7 @@ public final class RtsPlacementSound {
 
     /**
      * 向玩家发送给定位置的方块放置动画数据包。
+     * <p>同时广播一条建造蓝光（无人机摄像头 → 目标方块）给其他玩家。</p>
      */
     public static void playRemotePlacedBlockAnimation(ServerPlayer player, BlockPos pos) {
         if (player == null || pos == null) {
@@ -61,6 +63,8 @@ public final class RtsPlacementSound {
         }
         BlockState state = player.serverLevel().getBlockState(pos);
         Platform.sendPacket(player, new S2CRtsPlaceAnimationPayload(pos.immutable(), state));
+        // 建造光束：只对其他玩家可见（主控不接收），两端追踪方块位置与无人机摄像头位置
+        RtsDroneBeamService.broadcastPlace(player, pos);
     }
 
     /**

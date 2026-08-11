@@ -8,6 +8,7 @@ import com.rtsbuilding.rtsbuilding.client.render.pass.*;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster.CursorRay;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
@@ -25,8 +26,7 @@ public final class RenderPipeline {
     private static final RenderType CHUNK_XRAY_LINES = createXrayType("rtsbuilding_chunk_xray_lines");
     private static final RenderType BRACKET_QUADS = createBracketType();
     private static final RenderType TARGET_NO_DEPTH = createNoDepthType();
-    private static final RenderType BOUNDARY_BARRIER = RenderType.entityTranslucent(
-            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "textures/misc/barrier.png"));
+    private static final RenderType BOUNDARY_BARRIER = createBoundaryBarrierType();
     private static final RenderType LINES = RenderType.lines();
     private static final RenderType FILLED_BOX = RenderType.debugFilledBox();
 
@@ -199,6 +199,29 @@ public final class RenderPipeline {
                 VertexFormat.Mode.QUADS, 512, false, false,
                 RenderType.CompositeState.builder()
                         .setShaderState(RenderStateShard.POSITION_COLOR_SHADER)
+                        .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                        .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
+                        .setOutputState(RenderStateShard.MAIN_TARGET)
+                        .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                        .setCullState(RenderStateShard.NO_CULL)
+                        .createCompositeState(false));
+    }
+
+    /**
+     * 边界屏障墙 RenderType：带 <code>barrier.png</code> 纹理的无光照半透明渲染。
+     * <p>不使用 <code>entityTranslucent</code>——光影（Iris/OptiFine）会把它映射为
+     * 带光照/阴影采样的实体材质，把半透明墙渲染成暗色条带伪影；改用
+     * <code>POSITION_TEX_COLOR</code> + <code>position_tex_color</code>（unlit shader，
+     * 不采样光照/阴影，Iris 对 basic 管线通常直通），原版与光影下均为带贴图的半透明墙。</p>
+     */
+    private static RenderType createBoundaryBarrierType() {
+        return RenderType.create("rtsbuilding_boundary_barrier", DefaultVertexFormat.POSITION_TEX_COLOR,
+                VertexFormat.Mode.QUADS, 512, false, false,
+                RenderType.CompositeState.builder()
+                        .setShaderState(new RenderStateShard.ShaderStateShard(GameRenderer::getPositionTexColorShader))
+                        .setTextureState(new RenderStateShard.TextureStateShard(
+                                ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "textures/misc/barrier.png"),
+                                false, false))
                         .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
                         .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
                         .setOutputState(RenderStateShard.MAIN_TARGET)

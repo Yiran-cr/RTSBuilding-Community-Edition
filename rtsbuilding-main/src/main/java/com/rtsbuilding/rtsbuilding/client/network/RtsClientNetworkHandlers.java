@@ -12,6 +12,7 @@ import com.rtsbuilding.rtsbuilding.network.builder.*;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraAnchorPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneAnimPayload;
+import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneBeamPayload;
 import com.rtsbuilding.rtsbuilding.network.feedback.S2CRtsDamageFeedbackPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsCarriedSyncPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStorageDirtyPayload;
@@ -66,7 +67,12 @@ public final class RtsClientNetworkHandlers {
             CameraModule cm = kernel().module(CameraModule.class);
             if (cm != null) cm.applyServerCameraState(payload);
             long perfT1 = System.nanoTime();
-            kernel().updateRegion(payload.anchorX(), payload.anchorY(), payload.anchorZ(), payload.maxRadius());
+            if (payload.enabled()) {
+                kernel().updateRegion(payload.anchorX(), payload.anchorY(), payload.anchorZ(), payload.maxRadius());
+            } else {
+                // 关闭模式：复位区域锚点，避免关闭后边界墙残留渲染
+                kernel().resetRegion();
+            }
             kernel().dispatch(new StateEvent.RtsToggled(payload.enabled()));
             long perfT2 = System.nanoTime();
 
@@ -95,6 +101,19 @@ public final class RtsClientNetworkHandlers {
                 drone.receiveAnimState(payload.x(), payload.y(), payload.z(),
                         payload.yawDeg(), payload.pitchDeg(), payload.tiltX(), payload.tiltZ());
             }
+        });
+    }
+
+    /**
+     * 处理无人机建造/破坏光束同步包：注册一条光束（仅其他玩家会收到此包，
+     * 主控玩家不接收，故看不到光束）。光束渲染由 {@link DroneBeamRenderer} 在
+     * 世界渲染阶段实时追踪无人机实体与方块位置。
+     */
+    public static void handleDroneBeam(S2CRtsDroneBeamPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.level == null) return;
+            com.rtsbuilding.rtsbuilding.client.render.DroneBeamRenderer.INSTANCE.addBeam(payload);
         });
     }
 

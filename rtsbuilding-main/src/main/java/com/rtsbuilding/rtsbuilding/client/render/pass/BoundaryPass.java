@@ -6,7 +6,6 @@ import com.rtsbuilding.rtsbuilding.PerformanceConfig;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.ShaderState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -25,11 +24,23 @@ public final class BoundaryPass implements RenderPass {
     
     public static int barrierColor = 0xFFFFCC00;
 
-    
-    private static final float BARRIER_ALPHA = 0.80F;
+    /**
+     * 屏障墙透明度。原 0.80 过实，相机被限制在墙内活动时大片半透明遮挡感强，
+     * 旋转视角时形成"跟随摄像机视角"的深色阴影观感；调低后仅作弱边界提示。
+     */
+    private static final float BARRIER_ALPHA = 0.35F;
 
-    
-    private static final int FULL_BRIGHT = 0xF0;
+    /**
+     * 边界墙相对锚点的最大向上高度（格）。原实现 yMax=最高边界方块+5、yMin=minBuildHeight(-64)，
+     * 墙可从地下一直延伸到上百格高空，相机又被限制在墙内活动，任何视角墙都占满视野，
+     * 观感即"超长的边界屏障阴影一直跟随摄像机"。限高后墙仅覆盖锚点附近一段，不再遮挡视线。
+     */
+    private static final float WALL_MAX_HEIGHT_ABOVE = 20.0F;
+
+    /**
+     * 边界墙相对锚点的最大向下深度（格）。墙底不再一路延伸到 -64，避免地下部分占据视野下部。
+     */
+    private static final float WALL_MAX_DEPTH_BELOW = 4.0F;
 
     
     private static final float SCROLL_SPEED = 0.5F;
@@ -72,23 +83,9 @@ public final class BoundaryPass implements RenderPass {
 
     @Override
     public boolean shouldRender(Minecraft mc) {
-        return mc.player != null 
+        return mc.player != null
             && mc.screen instanceof com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen
-            && isConfigSafe() && PerformanceConfig.shouldRenderBoundaryWalls()
-            // Shader packs treat the translucent barrier walls as lit, shadow-sampled
-            // geometry, turning the wall into a dark band artifact. Skip it while a
-            // shader pack is active.
-            && !ShaderState.isShaderPackActive();
-    }
-    
-    private boolean isConfigSafe() {
-        try {
-            PerformanceConfig.shouldRenderBoundaryWalls();
-            return true;
-        } catch (IllegalStateException e) {
-            
-            return true; 
-        }
+            && PerformanceConfig.shouldRenderBoundaryWalls();
     }
 
     @Override
@@ -143,8 +140,29 @@ public final class BoundaryPass implements RenderPass {
             this.lastFrameMillis = now;
         }
 
+        // 屏障墙 RenderType 已改为自定义 POSITION_COLOR_TEX 无光照半透明（见
+        // RenderPipeline.createBoundaryBarrierType）：不采样光照/阴影，Iris 对 basic
+        // 管线通常直通，原版与光影下均为带 barrier.png 贴图的半透明墙。
         renderBarrierWalls(alloc, mc.level, poseStack, cx, cy, cz, r, useFallback, now);
     }
+
+    /**
+     * 计算边界框的 Y 范围：{@code yMin}（墙底）、{@code yMax}（墙顶）与 {@code wallH}。
+     * 墙顶不超过边界最高方块+5 且不高于锚点上方 {@link #WALL_MAX_HEIGHT_ABOVE}；
+     * 墙底不深入地下，最多锚点下方 {@link #WALL_MAX_DEPTH_BELOW}。
+     */
+    private WallBounds resolveWallY(Level level, float minX, float minZ, float maxX, float maxZ,
+                                    float ay, boolean useFallback, long now) {
+        int highest = resolveHighestY(level, minX, minZ, maxX, maxZ, useFallback, now);
+        float yMax = (highest > Integer.MIN_VALUE)
+                ? Math.min(highest + 5.0F, ay + WALL_MAX_HEIGHT_ABOVE)
+                : ay + 3.0F;
+        float yMin = Math.max((float) level.getMinBuildHeight(), ay - WALL_MAX_DEPTH_BELOW);
+        return new WallBounds(yMin, yMax, Math.max(1.0F, yMax - yMin));
+    }
+
+    /** 边界框 Y 范围。 */
+    private record WallBounds(float yMin, float yMax, float wallH) {}
 
     
     private void renderBarrierWalls(BufferAllocator alloc, Level level, PoseStack poseStack,
@@ -157,13 +175,10 @@ public final class BoundaryPass implements RenderPass {
         float maxX = (float) (ax + r);
         float maxZ = (float) (az + r);
 
-        
-        int highest = resolveHighestY(level, minX, minZ, maxX, maxZ, useFallback, now);
-        float yMax = (highest > Integer.MIN_VALUE)
-                ? highest + 5.0F
-                : (float) ay + 3.0F;
-        float yMin = (float) level.getMinBuildHeight();
-        float wallH = yMax - yMin;
+        WallBounds b = resolveWallY(level, minX, minZ, maxX, maxZ, (float) ay, useFallback, now);
+        float yMax = b.yMax();
+        float yMin = b.yMin();
+        float wallH = b.wallH();
 
         var pose = poseStack.last();
         VertexConsumer barrier = alloc.barrier();
@@ -174,23 +189,19 @@ public final class BoundaryPass implements RenderPass {
 
         
         addTexturedQuad(pose, barrier, minX, yMin, minZ, maxX, yMax, minZ,
-                wallWX / TILE_SIZE, wallH / TILE_SIZE,
-                0.0F, 0.0F, 1.0F, scroll);
+                wallWX / TILE_SIZE, wallH / TILE_SIZE, scroll);
 
         
         addTexturedQuad(pose, barrier, maxX, yMin, maxZ, minX, yMax, maxZ,
-                wallWX / TILE_SIZE, wallH / TILE_SIZE,
-                0.0F, 0.0F, -1.0F, scroll);
+                wallWX / TILE_SIZE, wallH / TILE_SIZE, scroll);
 
         
         addTexturedQuad(pose, barrier, minX, yMin, minZ, minX, yMax, maxZ,
-                wallWZ / TILE_SIZE, wallH / TILE_SIZE,
-                1.0F, 0.0F, 0.0F, scroll);
+                wallWZ / TILE_SIZE, wallH / TILE_SIZE, scroll);
 
         
         addTexturedQuad(pose, barrier, maxX, yMin, maxZ, maxX, yMax, minZ,
-                wallWZ / TILE_SIZE, wallH / TILE_SIZE,
-                -1.0F, 0.0F, 0.0F, scroll);
+                wallWZ / TILE_SIZE, wallH / TILE_SIZE, scroll);
     }
 
     
@@ -267,32 +278,21 @@ public final class BoundaryPass implements RenderPass {
                                          float x1, float yMin, float z1,
                                          float x2, float yMax, float z2,
                                          float tileU, float tileV,
-                                         float nx, float ny, float nz,
                                          float scroll) {
-        
-        buffer.addVertex(pose, x1, yMin, z1).setUv(scroll, scroll)
-                .setUv1(0, 10)
-                .setUv2(FULL_BRIGHT, FULL_BRIGHT)
+        // POSITION_COLOR_TEX 顶点格式：位置 + 颜色 + UV，无光照/法线/lightmap。
+        // 颜色 alpha 由 BARRIER_ALPHA 控制半透明，纹理为 barrier.png（UV 随 scroll 滚动）。
+        buffer.addVertex(pose, x1, yMin, z1)
                 .setColor(barrierRgb.r, barrierRgb.g, barrierRgb.b, BARRIER_ALPHA)
-                .setNormal(nx, ny, nz);
-        
-        buffer.addVertex(pose, x2, yMin, z2).setUv(tileU + scroll, scroll)
-                .setUv1(0, 10)
-                .setUv2(FULL_BRIGHT, FULL_BRIGHT)
+                .setUv(scroll, scroll);
+        buffer.addVertex(pose, x2, yMin, z2)
                 .setColor(barrierRgb.r, barrierRgb.g, barrierRgb.b, BARRIER_ALPHA)
-                .setNormal(nx, ny, nz);
-        
-        buffer.addVertex(pose, x2, yMax, z2).setUv(tileU + scroll, tileV + scroll)
-                .setUv1(0, 10)
-                .setUv2(FULL_BRIGHT, FULL_BRIGHT)
+                .setUv(tileU + scroll, scroll);
+        buffer.addVertex(pose, x2, yMax, z2)
                 .setColor(barrierRgb.r, barrierRgb.g, barrierRgb.b, BARRIER_ALPHA)
-                .setNormal(nx, ny, nz);
-        
-        buffer.addVertex(pose, x1, yMax, z1).setUv(scroll, tileV + scroll)
-                .setUv1(0, 10)
-                .setUv2(FULL_BRIGHT, FULL_BRIGHT)
+                .setUv(tileU + scroll, tileV + scroll);
+        buffer.addVertex(pose, x1, yMax, z1)
                 .setColor(barrierRgb.r, barrierRgb.g, barrierRgb.b, BARRIER_ALPHA)
-                .setNormal(nx, ny, nz);
+                .setUv(scroll, tileV + scroll);
     }
 
     @Override

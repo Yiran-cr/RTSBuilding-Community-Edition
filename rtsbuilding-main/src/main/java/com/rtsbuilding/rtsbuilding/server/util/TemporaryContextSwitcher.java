@@ -23,6 +23,20 @@ public final class TemporaryContextSwitcher {
     private TemporaryContextSwitcher() {
     }
 
+    /**
+     * 标记当前是否处于"临时切换玩家位置"的窗口内（服务端主线程可见）。
+     * <p>RTS 操作会把玩家临时 {@code setPos} 到虚拟交互位置再恢复；期间
+     * {@link com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager#updateAnchorForPlayer}
+     * 若检测到玩家位置变化会误把锚点拉到虚拟位置，导致边界墙/动作范围跳动。
+     * 该标记用于让锚点跟随逻辑在切换窗口内跳过。</p>
+     */
+    private static volatile boolean temporarilySwitchingPosition;
+
+    /** @return 是否处于临时位置切换窗口内 */
+    public static boolean isTemporarilySwitchingPosition() {
+        return temporarilySwitchingPosition;
+    }
+
     // ======================================================================
     //  射线上下文
     // ======================================================================
@@ -169,6 +183,7 @@ public final class TemporaryContextSwitcher {
         player.setXRot(look[1]);
         player.setYHeadRot(look[0]);
         player.yBodyRot = look[0];
+        temporarilySwitchingPosition = true;
         try {
             return action.get();
         } finally {
@@ -177,6 +192,7 @@ public final class TemporaryContextSwitcher {
             player.setXRot(prevXRot);
             player.setYHeadRot(prevYHeadRot);
             player.yBodyRot = prevYBodyRot;
+            temporarilySwitchingPosition = false;
         }
     }
 
