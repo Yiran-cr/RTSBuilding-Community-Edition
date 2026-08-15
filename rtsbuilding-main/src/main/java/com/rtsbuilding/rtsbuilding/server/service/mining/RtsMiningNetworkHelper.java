@@ -7,8 +7,13 @@ import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.service.beam.RtsDroneBeamService;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * 挖掘网络包发送辅助器，向客户端发送视觉反馈数据包。
@@ -27,6 +32,10 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 public final class RtsMiningNetworkHelper {
 
+    /** 破坏动画同 tick 序号：每 tick 每玩家递增，用于客户端错峰启动批量破坏动画。 */
+    private static final Map<UUID, Integer> PER_PLAYER_BREAK_SEQ = new HashMap<>();
+    private static long BREAK_SEQ_RESET_TICK = -1L;
+
     private RtsMiningNetworkHelper() {
     }
 
@@ -37,16 +46,33 @@ public final class RtsMiningNetworkHelper {
 
     /**
      * 发送破坏动画数据包，显示方块从哪种状态变为哪种状态。
-     * <p>同时广播一条破坏红光（目标方块 → 无人机摄像头）给其他玩家。</p>
+     * <p>数据包携带服务端 tick 与同 tick 内序号（{@code seq}），客户端据此错峰启动动画。
+     * 同时广播一条破坏红光（目标方块 → 无人机摄像头）给其他玩家。</p>
      */
     public static void sendBreakAnimation(ServerPlayer player, BlockPos pos, BlockState state, BlockState resultState) {
         if (player == null || pos == null) {
             return;
         }
+        ServerLevel level = player.serverLevel();
+        long tick = level.getGameTime();
+        int seq = nextBreakSeq(player, tick);
         Platform.sendPacket(player,
-                new S2CRtsBreakAnimationPayload(pos.immutable(), state, resultState));
+                new S2CRtsBreakAnimationPayload(pos.immutable(), state, resultState, tick, seq));
         // 破坏光束：只对其他玩家可见（主控不接收），两端追踪方块位置与无人机摄像头位置
         RtsDroneBeamService.broadcastBreak(player, pos);
+    }
+
+    /**
+     * 获取本玩家本 tick 的破坏动画序号并递增；tick 变化时序号从 0 重新计数。
+     */
+    private static int nextBreakSeq(ServerPlayer player, long tick) {
+        if (tick != BREAK_SEQ_RESET_TICK) {
+            BREAK_SEQ_RESET_TICK = tick;
+            PER_PLAYER_BREAK_SEQ.clear();
+        }
+        int seq = PER_PLAYER_BREAK_SEQ.getOrDefault(player.getUUID(), 0);
+        PER_PLAYER_BREAK_SEQ.put(player.getUUID(), seq + 1);
+        return seq;
     }
 
     /** 发送连锁挖掘进度更新（已处理数/总数）。 */

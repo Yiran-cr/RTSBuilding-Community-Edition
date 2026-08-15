@@ -4,8 +4,10 @@ import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
 import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * RTS 建造画笔的一等公民形状抽象：每种形状自行负责
@@ -23,11 +25,11 @@ import java.util.List;
  */
 public enum BuildShape {
 
-    /** 线：沿走向线单排放置。 */
+    /** 线：沿走向线单排放置。连接模式下路径方块直角连接（不斜向），断点模式为 DDA 对角。 */
     LINE {
         @Override
         public List<BlockPos> compute(ShapeInput in) {
-            return linePositions(in);
+            return in.fillMode() == FillMode.CONNECTED ? connectedLinePositions(in) : linePositions(in);
         }
 
         @Override
@@ -61,12 +63,11 @@ public enum BuildShape {
             return BuildShape.LINE;
         }
     },
-    /** 墙：走向线沿竖直方向（上下）扩展。 */
+    /** 墙：走向线沿竖直方向（上下）扩展。实心为完整墙，框架为矩形四边框。 */
     WALL {
         @Override
         public List<BlockPos> compute(ShapeInput in) {
-            List<BlockPos> line = linePositions(in);
-            return extendVertical(line, in.wallUp(), in.wallDown());
+            return wallFillPositions(in);
         }
 
         @Override
@@ -107,12 +108,11 @@ public enum BuildShape {
             return phase == Phase.HEIGHT ? BuildShape.WALL : BuildShape.LINE;
         }
     },
-    /** 面（条形面）：走向线沿垂直的水平方向（左右）扩展。 */
+    /** 面（条形面）：走向线沿垂直的水平方向（左右）扩展。实心为完整面，框架为矩形四边框。 */
     FACE {
         @Override
         public List<BlockPos> compute(ShapeInput in) {
-            List<BlockPos> line = linePositions(in);
-            return extendHorizontal(line, in.faceWidth(), in.faceDown(), horizontalExtendAxis(in));
+            return faceFillPositions(in);
         }
 
         @Override
@@ -154,13 +154,11 @@ public enum BuildShape {
             return phase == Phase.WIDTH ? BuildShape.FACE : BuildShape.LINE;
         }
     },
-    /** 体（实心）：走向线同时沿竖直与水平方向扩展。 */
+    /** 体（实心/空心/框架）：走向线同时沿竖直与水平方向扩展。 */
     SOLID {
         @Override
         public List<BlockPos> compute(ShapeInput in) {
-            List<BlockPos> line = linePositions(in);
-            return extendSolid(line, in.wallUp(), in.wallDown(),
-                    in.faceWidth(), in.faceDown(), horizontalExtendAxis(in));
+            return solidFillPositions(in);
         }
 
         @Override
@@ -201,7 +199,8 @@ public enum BuildShape {
             }
             if (phase == Phase.HEIGHT) {
                 return "体高 ↑" + params.getWallHeight() + " ↓" + params.getWallDown()
-                        + "：Shift+滚轮调高度 · 滚轮缩放相机  ·  右键建造  ·  ESC 返回";
+                        + "：Shift+滚轮调高度 · 滚轮缩放相机  ·  右键建造  ·  ESC 返回"
+;
             }
             return null;
         }
@@ -211,11 +210,11 @@ public enum BuildShape {
             return (phase == Phase.WIDTH || phase == Phase.HEIGHT) ? BuildShape.SOLID : BuildShape.LINE;
         }
     },
-    /** 圆面/圆柱：圆心 + 半径 + 高度扩展。 */
+    /** 圆面/圆柱（实心/空心/框架）：圆心 + 半径 + 高度扩展。 */
     CIRCLE {
         @Override
         public List<BlockPos> compute(ShapeInput in) {
-            return cylinderPositions(in);
+            return cylinderFillPositions(in);
         }
 
         @Override
@@ -246,7 +245,8 @@ public enum BuildShape {
             }
             if (phase == Phase.HEIGHT) {
                 return "圆柱 ↑" + params.getWallHeight() + " ↓" + params.getWallDown()
-                        + "：Shift+滚轮调高度 · 滚轮缩放相机  ·  右键建造  ·  ESC 返回";
+                        + "：Shift+滚轮调高度 · 滚轮缩放相机  ·  右键建造  ·  ESC 返回"
+;
             }
             return null;
         }
@@ -256,11 +256,11 @@ public enum BuildShape {
             return (phase == Phase.PICK_START || phase == Phase.HEIGHT) ? BuildShape.CIRCLE : BuildShape.LINE;
         }
     },
-    /** 球/椭球：球心 + 水平半径 + 高度半径。 */
+    /** 球/椭球（实心/空心/框架）：球心 + 水平半径 + 高度半径。 */
     SPHERE {
         @Override
         public List<BlockPos> compute(ShapeInput in) {
-            return spherePositions(in);
+            return sphereFillPositions(in);
         }
 
         @Override
@@ -291,7 +291,8 @@ public enum BuildShape {
             }
             if (phase == Phase.RADIUS) {
                 return "球半径 " + params.getSphereRadius()
-                        + "：Shift+滚轮调半径  ·  滚轮缩放相机  ·  右键建造  ·  ESC 返回";
+                        + "：Shift+滚轮调半径  ·  滚轮缩放相机  ·  右键建造  ·  ESC 返回"
+;
             }
             return null;
         }
@@ -304,6 +305,20 @@ public enum BuildShape {
 
     /** 扩展量上限（格，向上/向下、两侧分别限制）。 */
     public static final int MAX_EXTEND = 64;
+
+    /** 中文显示名（下嵌层标题、提示等 UI 用），经 lang 语言文件本地化。 */
+    public String label() {
+        String key = switch (this) {
+            case LINE -> "line";
+            case WALL -> "wall";
+            case FACE -> "plane";
+            case SOLID -> "solid";
+            case CIRCLE -> "circle_face";
+            case SPHERE -> "sphere";
+        };
+        return net.minecraft.network.chat.Component.translatable(
+                "tooltip.rtsbuilding.left.shape." + key).getString();
+    }
 
     /** 圆面/圆柱半径上限（格）。 */
     public static final int MAX_RADIUS = 64;
@@ -374,6 +389,139 @@ public enum BuildShape {
         BlockPos end = in.effectiveEnd();
         if (end == null) return List.of();
         return lineBetween(start, end);
+    }
+
+    /** 线：连接模式（路径方块直角连接，不斜向相连）。 */
+    private static List<BlockPos> connectedLinePositions(ShapeInput in) {
+        if (in.start() == null || in.hover() == null) return List.of();
+        BlockPos end = in.effectiveEnd();
+        if (end == null) return List.of();
+        return connectedLineBetween(in.effectiveStart(), end);
+    }
+
+    /**
+     * 管道式连接线段：以断点（3D DDA）路径为基础，逐对检查相邻方块——
+     * 凡是斜向断开（未共享面，曼哈顿距离 &gt; 1）的相邻对，在两者之间补一个
+     * 中间方块使其面连接，从而把断点串成连续的管道，且不改变断点路径的走向。
+     */
+    private static List<BlockPos> connectedLineBetween(BlockPos a, BlockPos b) {
+        List<BlockPos> base = lineBetween(a, b);
+        if (base.isEmpty()) {
+            return base;
+        }
+        List<BlockPos> result = new ArrayList<>(base.size() * 2);
+        result.add(base.get(0));
+        for (int i = 1; i < base.size(); i++) {
+            BlockPos prev = result.get(result.size() - 1);
+            BlockPos cur = base.get(i);
+            int dx = cur.getX() - prev.getX();
+            int dy = cur.getY() - prev.getY();
+            int dz = cur.getZ() - prev.getZ();
+            // 斜向断开：在 prev 与 cur 之间补中间连接块
+            if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 1) {
+                BlockPos mid = midStep(prev, dx, dy, dz);
+                result.add(mid);
+                int dx2 = cur.getX() - mid.getX();
+                int dy2 = cur.getY() - mid.getY();
+                int dz2 = cur.getZ() - mid.getZ();
+                // 三轴同时变化时补一个仍不面连接，再补第二个
+                if (Math.abs(dx2) + Math.abs(dy2) + Math.abs(dz2) > 1) {
+                    result.add(midStep(mid, dx2, dy2, dz2));
+                }
+            }
+            result.add(cur);
+            if (result.size() >= MAX_POSITIONS) {
+                break;
+            }
+        }
+        return result;
+    }
+
+    /** 从 {@code prev} 出发沿第一个非零分量前进一步（用于补中间连接块）。 */
+    private static BlockPos midStep(BlockPos prev, int dx, int dy, int dz) {
+        if (dx != 0) {
+            return new BlockPos(prev.getX() + Integer.signum(dx), prev.getY(), prev.getZ());
+        }
+        if (dy != 0) {
+            return new BlockPos(prev.getX(), prev.getY() + Integer.signum(dy), prev.getZ());
+        }
+        return new BlockPos(prev.getX(), prev.getY(), prev.getZ() + Integer.signum(dz));
+    }
+
+    /** 墙：实心为完整竖直扩展，框架为矩形四边框。 */
+    private static List<BlockPos> wallFillPositions(ShapeInput in) {
+        List<BlockPos> line = linePositions(in);
+        return switch (in.fillMode()) {
+            case FRAME -> wallFramePositions(in, line);
+            default -> extendVertical(line, in.wallUp(), in.wallDown());
+        };
+    }
+
+    /** 墙框架：矩形墙的四条棱边——走向线两端竖直边 + 顶部/底部沿走向线。 */
+    private static List<BlockPos> wallFramePositions(ShapeInput in, List<BlockPos> line) {
+        if (line.isEmpty()) return List.of();
+        BlockPos startP = line.get(0);
+        BlockPos endP = line.get(line.size() - 1);
+        LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
+        // 两端竖直边
+        for (int dy = -in.wallDown(); dy < in.wallUp(); dy++) {
+            addIfRoom(result, new BlockPos(startP.getX(), startP.getY() + dy, startP.getZ()));
+            addIfRoom(result, new BlockPos(endP.getX(), endP.getY() + dy, endP.getZ()));
+        }
+        // 顶部/底部沿走向线
+        int top = in.wallUp() - 1;
+        int bottom = -in.wallDown();
+        for (BlockPos p : line) {
+            addIfRoom(result, new BlockPos(p.getX(), p.getY() + top, p.getZ()));
+            addIfRoom(result, new BlockPos(p.getX(), p.getY() + bottom, p.getZ()));
+        }
+        return new ArrayList<>(result);
+    }
+
+    /** 面：实心为完整水平扩展，框架为矩形四边框。 */
+    private static List<BlockPos> faceFillPositions(ShapeInput in) {
+        List<BlockPos> line = linePositions(in);
+        return switch (in.fillMode()) {
+            case FRAME -> faceFramePositions(in, line);
+            default -> extendHorizontal(line, in.faceWidth(), in.faceDown(), horizontalExtendAxis(in));
+        };
+    }
+
+    /** 面框架：矩形面的四条棱边——走向线两端列 + 两侧最外水平行。 */
+    private static List<BlockPos> faceFramePositions(ShapeInput in, List<BlockPos> line) {
+        if (line.isEmpty()) return List.of();
+        boolean alongX = horizontalExtendAxis(in);
+        BlockPos startP = line.get(0);
+        BlockPos endP = line.get(line.size() - 1);
+        LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
+        // 两端列（走向线首尾各沿水平方向一列）
+        for (int d = -in.faceDown(); d < in.faceWidth(); d++) {
+            addIfRoom(result, alongX
+                    ? new BlockPos(startP.getX() + d, startP.getY(), startP.getZ())
+                    : new BlockPos(startP.getX(), startP.getY(), startP.getZ() + d));
+            addIfRoom(result, alongX
+                    ? new BlockPos(endP.getX() + d, endP.getY(), endP.getZ())
+                    : new BlockPos(endP.getX(), endP.getY(), endP.getZ() + d));
+        }
+        // 两侧最外水平行（沿走向线）
+        int near = in.faceWidth() - 1;
+        int far = -in.faceDown();
+        for (BlockPos p : line) {
+            addIfRoom(result, alongX
+                    ? new BlockPos(p.getX() + near, p.getY(), p.getZ())
+                    : new BlockPos(p.getX(), p.getY(), p.getZ() + near));
+            addIfRoom(result, alongX
+                    ? new BlockPos(p.getX() + far, p.getY(), p.getZ())
+                    : new BlockPos(p.getX(), p.getY(), p.getZ() + far));
+        }
+        return new ArrayList<>(result);
+    }
+
+    /** 超限保护地向集合添加方块。 */
+    private static void addIfRoom(LinkedHashSet<BlockPos> set, BlockPos p) {
+        if (set.size() < MAX_POSITIONS) {
+            set.add(p);
+        }
     }
 
     /** 墙：走向线上的每个方块向上/向下扩展。 */
@@ -466,6 +614,125 @@ public enum BuildShape {
                         }
                     }
                 }
+            }
+        }
+        return result;
+    }
+
+    // ==================== 填充模式（实心 / 空心 / 框架） ====================
+
+    /**
+     * 体：按填充模式生成——实心全填 / 空心外壳 / 框架 12 条棱边。
+     */
+    private static List<BlockPos> solidFillPositions(ShapeInput in) {
+        List<BlockPos> solid = extendSolid(linePositions(in), in.wallUp(), in.wallDown(),
+                in.faceWidth(), in.faceDown(), horizontalExtendAxis(in));
+        return switch (in.fillMode()) {
+            case SOLID -> solid;
+            case HOLLOW -> hollowFilter(solid);
+            case FRAME -> frameOfSolid(solid);
+            default -> solid;
+        };
+    }
+
+    /**
+     * 圆柱：按填充模式生成——实心全填 / 空心外壳（侧壁 + 顶底）/ 框架侧壁薄壳。
+     */
+    private static List<BlockPos> cylinderFillPositions(ShapeInput in) {
+        List<BlockPos> solid = cylinderPositions(in);
+        return switch (in.fillMode()) {
+            case SOLID -> solid;
+            case HOLLOW -> hollowFilter(solid);
+            case FRAME -> sideWallOf(solid);
+            default -> solid;
+        };
+    }
+
+    /**
+     * 球：按填充模式生成——实心全填 / 空心球壳 / 框架赤道大圆环 + 两条子午线环。
+     */
+    private static List<BlockPos> sphereFillPositions(ShapeInput in) {
+        List<BlockPos> solid = spherePositions(in);
+        List<BlockPos> hollow = hollowFilter(solid);
+        return switch (in.fillMode()) {
+            case SOLID -> solid;
+            case HOLLOW -> hollow;
+            case FRAME -> sphereFrameOf(hollow, in.start(), in.effectiveStart().getY());
+            default -> solid;
+        };
+    }
+
+    /** 空心过滤：保留至少有一个 6 邻格不在集合内的边界格（外壳薄层）。 */
+    private static List<BlockPos> hollowFilter(List<BlockPos> positions) {
+        if (positions.isEmpty()) return List.of();
+        Set<BlockPos> set = new HashSet<>(positions);
+        List<BlockPos> result = new ArrayList<>();
+        for (BlockPos p : positions) {
+            if (!set.contains(p.offset(1, 0, 0)) || !set.contains(p.offset(-1, 0, 0))
+                    || !set.contains(p.offset(0, 1, 0)) || !set.contains(p.offset(0, -1, 0))
+                    || !set.contains(p.offset(0, 0, 1)) || !set.contains(p.offset(0, 0, -1))) {
+                result.add(p);
+                if (result.size() >= MAX_POSITIONS) {
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+    /** 体框架：至少两个轴方向有缺失邻格的格子（12 条棱 + 角点）。 */
+    private static List<BlockPos> frameOfSolid(List<BlockPos> solid) {
+        if (solid.isEmpty()) return List.of();
+        Set<BlockPos> set = new HashSet<>(solid);
+        List<BlockPos> result = new ArrayList<>();
+        for (BlockPos p : solid) {
+            int missingAxes = 0;
+            if (!set.contains(p.offset(1, 0, 0)) || !set.contains(p.offset(-1, 0, 0))) missingAxes++;
+            if (!set.contains(p.offset(0, 1, 0)) || !set.contains(p.offset(0, -1, 0))) missingAxes++;
+            if (!set.contains(p.offset(0, 0, 1)) || !set.contains(p.offset(0, 0, -1))) missingAxes++;
+            if (missingAxes >= 2) {
+                result.add(p);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 圆柱框架：保留圆周侧壁薄壳（水平方向至少一侧无邻格、y 方向两侧都有邻格），
+     * 即去掉顶面与底面后的侧壁一圈。
+     */
+    private static List<BlockPos> sideWallOf(List<BlockPos> solid) {
+        if (solid.isEmpty()) return List.of();
+        Set<BlockPos> set = new HashSet<>(solid);
+        List<BlockPos> result = new ArrayList<>();
+        for (BlockPos p : solid) {
+            // 圆周边界：水平方向至少一侧缺失
+            if (!set.contains(p.offset(1, 0, 0)) || !set.contains(p.offset(-1, 0, 0))
+                    || !set.contains(p.offset(0, 0, 1)) || !set.contains(p.offset(0, 0, -1))) {
+                boolean top = set.contains(p.offset(0, 1, 0));
+                boolean bottom = set.contains(p.offset(0, -1, 0));
+                if (top && bottom) {
+                    result.add(p);
+                    if (result.size() >= MAX_POSITIONS) {
+                        break;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 球框架：球壳中位于三个正交主平面（x=球心x / z=球心z / y=球心y）上的格子，
+     * 构成赤道大圆环 + 两条子午线环（外轮廓线框）。
+     */
+    private static List<BlockPos> sphereFrameOf(List<BlockPos> hollow, BlockPos center, int cy) {
+        int cx = center.getX();
+        int cz = center.getZ();
+        List<BlockPos> result = new ArrayList<>();
+        for (BlockPos p : hollow) {
+            if (p.getX() == cx || p.getZ() == cz || p.getY() == cy) {
+                result.add(p);
             }
         }
         return result;

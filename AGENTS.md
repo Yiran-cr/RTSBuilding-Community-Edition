@@ -29,6 +29,17 @@ Minecraft RTS-style top-down building mod. NeoForge 1.21.1 / Forge 1.20.1 (branc
 - The main mod must not compile-reference the built-in addon modules (`rtsbuilding-technologized`, `rtsaddon-*`) — they inject their services via bridges in `common`; the main mod JAR merges all built-in addon outputs and declares them in `neoforge.mods.toml`.
 - New host-mod integrations go under `rtsaddon-<host>/` at the repo root, must be registered in `settings.gradle`, merged into the main JAR, and declared in `rtsbuilding-main/src/main/templates/META-INF/neoforge.mods.toml`.
 
+## 语言文件（lang）约定
+
+所有**用户可见 UI 文案**必须通过 lang 语言文件管理，禁止硬编码中文：
+
+- Lang 文件：`rtsbuilding-main/src/main/resources/assets/rtsbuilding/lang/zh_cn.json`（中文）与 `en_us.json`（英文），两个文件 key 必须同步。
+- Key 前缀约定：`screen.rtsbuilding.*`（面板/界面）、`ui.rtsbuilding.*`（小组件/标签）、`message.rtsbuilding.*`（聊天/提示消息）、`button.rtsbuilding.*`（按钮）、`tooltip.rtsbuilding.*`（提示）、`key.rtsbuilding.*`（按键）。
+- 代码中通过 `Component.translatable(key, args)`（Component）或 `Component.translatable(key, args).getString()`（String）取文案；带参数用 `%d`/`%s` 占位符。
+- **不迁移**（保留硬编码）：日志输出（`LOGGER.*`）、异常消息（`throw new ...Exception`）、代码注释、测试断言消息。
+- 已迁移实例：工作流恢复面板、下嵌层调节器、形状/填充模式标签、容器面板、蓝图消息、工作流状态等。
+- **待迁移（后续）**：`BuildShape.hint`（形状交互提示，含 `LineBrushSelector` 的"建造/破坏/右键/左键"替换）、`BindingRenderer`/`RowLayout`（绑定按钮文字）、`RenderingSection`（设置面板颜色标签与 tooltip）。新增 UI 文案时直接按 lang 方式编写，不再产生新的硬编码。
+
 ## Do not touch
 
 - `build/`, `rtsbuilding-main/run/` (Minecraft dev run dir), generated sources.

@@ -9,6 +9,8 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityAttachment;
+import net.minecraft.world.entity.EntityAttachments;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Pose;
@@ -150,7 +152,13 @@ public class RtsDroneEntity extends Entity {
         // 视觉碰撞箱：与无人机模型尺寸匹配（螺旋桨叶片横跨约 2.2 格、模型高约 0.55 格），
         // 碰撞箱完整包裹模型（含四旋翼叶片）。实体仍无物理碰撞
         // （noPhysics + isPickable/isPushable 为 false，移动走 setPosRaw 不参与碰撞检测）。
-        return EntityDimensions.scalable(2.2F, 0.6F);
+        EntityDimensions base = EntityDimensions.scalable(2.2F, 0.6F);
+        // 中心对称修正：本实体 getY() 是模型/相机锚点（中心）而非底部，而原版 NAME_TAG
+        // 附件默认在 (0, getBbHeight(), 0)（假设底部基准向上），名字标签会被整体抬高一个
+        // 碰撞箱半径（离模型顶部太远）。这里把 NAME_TAG 附件锚定在模型中心 (0,0,0)，
+        // 原版 renderNameTag 在其上再 +0.5 → 标签恰好位于模型上方合适位置。
+        return base.withAttachments(EntityAttachments.builder()
+                .attach(EntityAttachment.NAME_TAG, new Vec3(0.0D, 0.0D, 0.0D)));
     }
 
     @Override

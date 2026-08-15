@@ -4,6 +4,8 @@ import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsCarriedSyncPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
+import com.rtsbuilding.rtsbuilding.server.service.mining.RtsDropAbsorber;
+import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningStateMachine;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.RtsStoragePageBuilder;
 import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;
@@ -122,10 +124,16 @@ public final class RtsPlacementQuickBuild {
      * 这是快速建造批处理作业采用的快速路径：它提取物品一次
      * （或重用主手堆叠），直接设置方块，并触发成功效果。
      *
+     * <p>替换模式（{@code replace=true}）：目标位置被非空气方块占用且确认物品可用时，
+     * 先逐个破坏该方块（使用项目原生破坏逻辑 {@link RtsMiningStateMachine#destroyMinedBlock}），
+     * 再放置新方块——形成"破坏一个、放置一个"的交替替换效果，避免
+     * 一次性清空区域导致中间状态混乱。物品不可用时不会破坏目标。</p>
+     *
+     * @param replace 替换模式：允许覆盖已有方块（先破坏再放置）
      * @return {@code true} 继续处理批次，{@code false} 中止当前作业
      */
     public static boolean placeStateBatchEntry(ServerPlayer player, RtsStorageSession session, BlockPos targetPos,
-                                               StatePlacementPlan plan) {
+                                               StatePlacementPlan plan, boolean replace) {
         if (session == null || targetPos == null || plan == null) {
             return false;
         }
@@ -135,10 +143,13 @@ public final class RtsPlacementQuickBuild {
         RtsLinkedStorageResolver.sanitizeSessionDimension(player, session);
 
         ServerLevel level = player.serverLevel();
-        if (!canPlaceStateAt(level, player, targetPos, plan.state())) {
+        boolean occupied = !canPlaceStateAt(level, player, targetPos, plan.state());
+        if (occupied && !replace) {
+            // 非替换模式：位置被占用，跳过（原行为）
             return true;
         }
 
+        // 先提取物品（确认可用；替换模式避免“破坏后无物可放”）
         ItemStack placementStack = plan.templateStack();
         ItemStack extracted = ItemStack.EMPTY;
         boolean refundExtractedOnFailure = false;
@@ -170,6 +181,7 @@ public final class RtsPlacementQuickBuild {
                                 ? RtsPlacementExtractor.extractSelectedFromNetworkCached(player, extractHandlers, plan.item(), plan.templateStack())
                                 : RtsPlacementExtractor.extractSelectedFromLinked(extractHandlers, plan.item(), plan.templateStack());
                 if (extracted.isEmpty()) {
+                    // 物品不可用：不破坏目标，直接跳过（替换模式也不破坏）
                     return false;
                 }
                 refundExtractedOnFailure = !creativeSource;
@@ -178,20 +190,26 @@ public final class RtsPlacementQuickBuild {
             placementStack.setCount(1);
         }
 
+        // 替换模式：确认有物品后再逐个破坏目标方块（使用项目原生破坏逻辑）
+        if (occupied) {
+            RtsMiningStateMachine.destroyMinedBlock(player, session, targetPos, player.getInventory().selected);
+            // 破坏掉落物直接存入 RTS 储存空间（与正常挖掘一致）
+            RtsDropAbsorber.absorbNearbyMinedDrops(player, targetPos, session);
+            if (!canPlaceStateAt(level, player, targetPos, plan.state())) {
+                // 破坏后仍无法放置（碰撞/世界边界等）：退款已提取物品并跳过
+                refundExtracted(player, extracted, insertHandlers, fromCarried, refundExtractedOnFailure);
+                return true;
+            }
+        }
+
+        // 先发放置动画包（预知目标 state，使用带 state 的重载），使其先于 setBlock 广播的
+        // BlockUpdate 到达客户端——客户端据此在"方块状态实际变化"的瞬间触发动画，
+        // 消除网络 RTT 造成的动画滞后；setBlock 失败时动画包仅登记、状态不变则不播放。
+        RtsPlacementSound.playRemotePlacedBlockAnimation(player, targetPos, plan.state());
+
         boolean placed = BlockPlacer.setBlock(level, targetPos, plan.state());
         if (!placed) {
-            if (!extracted.isEmpty()) {
-                if (fromCarried) {
-                    // 从 carried 扣减的物品：放置失败时合并回 carried，合并不下的退回网络
-                    ItemStack remain = RtsPlacementExtractor.mergeIntoCarried(player, extracted);
-                    if (!remain.isEmpty()) {
-                        RtsTransferInserter.refundToLinked(insertHandlers, player, remain);
-                    }
-                    Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
-                } else if (refundExtractedOnFailure) {
-                    RtsTransferInserter.refundToLinked(insertHandlers, player, extracted);
-                }
-            }
+            refundExtracted(player, extracted, insertHandlers, fromCarried, refundExtractedOnFailure);
             return true;
         }
 
@@ -201,7 +219,6 @@ public final class RtsPlacementQuickBuild {
         }
         // 完全改为使用储存空间的方块进行放置，不再从主手扣除
         BlockPlacer.trackPlaced(level, targetPos);
-        RtsPlacementSound.playRemotePlacedBlockAnimation(player, targetPos);
         RtsPlacementSound.playRemotePlacedBlockSound(player, level, targetPos);
         RtsServer.get().page().recordRecentItem(session, plan.itemId(), S2CRtsStoragePagePayload.RECENT_ITEM_PLACED, 1L);
         if (fromCarried) {
@@ -223,6 +240,27 @@ public final class RtsPlacementQuickBuild {
         }
         CollisionContext collision = player == null ? CollisionContext.empty() : CollisionContext.of(player);
         return state.canSurvive(level, targetPos) && level.isUnobstructed(state, targetPos, collision);
+    }
+
+    /**
+     * 放置失败/替换破坏后无法放置时，退回已提取的物品：
+     * 从 carried 扣减的合并回 carried（剩余退回网络），否则按需退回链接存储。
+     */
+    private static void refundExtracted(ServerPlayer player, ItemStack extracted,
+                                        List<IItemHandler> insertHandlers,
+                                        boolean fromCarried, boolean refundExtractedOnFailure) {
+        if (extracted.isEmpty()) {
+            return;
+        }
+        if (fromCarried) {
+            ItemStack remain = RtsPlacementExtractor.mergeIntoCarried(player, extracted);
+            if (!remain.isEmpty()) {
+                RtsTransferInserter.refundToLinked(insertHandlers, player, remain);
+            }
+            Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+        } else if (refundExtractedOnFailure) {
+            RtsTransferInserter.refundToLinked(insertHandlers, player, extracted);
+        }
     }
 
     /**

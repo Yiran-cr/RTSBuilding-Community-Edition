@@ -33,6 +33,9 @@ public final class ContainerPageState {
     @Nullable
     private Object pendingId;
     private int pendingTicks;
+    /** tick 已把等待键转正为活动键的标记：供 {@link #consumePendingPromotion()} 区分
+     * "本面板请求打开的容器（转正）" 与 "外部打开的新容器"。 */
+    private boolean pendingPromoted;
 
     public boolean isPageOpen() {
         return pageOpen;
@@ -70,6 +73,7 @@ public final class ContainerPageState {
         this.pendingTicks = 0;
         this.activeId = null;
         this.pageOpen = true;
+        this.pendingPromoted = false;
     }
 
     /**
@@ -88,6 +92,7 @@ public final class ContainerPageState {
     public void cancelPending() {
         this.pendingId = null;
         this.pendingTicks = 0;
+        this.pendingPromoted = false;
     }
 
     /** 关闭容器页：清空全部状态。 */
@@ -96,6 +101,18 @@ public final class ContainerPageState {
         this.activeId = null;
         this.pendingId = null;
         this.pendingTicks = 0;
+        this.pendingPromoted = false;
+    }
+
+    /**
+     * 消费"等待键已转正"标记：仅当 tick 探测到容器打开且 pending 已转正时返回 {@code true}，
+     * 并清除该标记。宿主在 {@code openContainerPage} 中据此决定 openedId 的来源：
+     * 转正过则沿用 {@link #getActiveId()}（本面板请求打开的容器），否则归为外部打开（key=null）。
+     */
+    public boolean consumePendingPromotion() {
+        boolean promoted = pendingPromoted;
+        pendingPromoted = false;
+        return promoted;
     }
 
     /**
@@ -116,6 +133,7 @@ public final class ContainerPageState {
             this.pendingId = null;
             this.pendingTicks = 0;
             this.pageOpen = true;
+            this.pendingPromoted = true;
             return TickResult.OPENED;
         }
         if (++pendingTicks > PENDING_OPEN_TIMEOUT_TICKS) {

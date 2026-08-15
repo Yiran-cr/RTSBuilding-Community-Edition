@@ -84,7 +84,7 @@ public final class LineBrushRenderPass implements RenderPass {
         } else {
             flicker = 1.0F;
         }
-        float depthAlpha = 0.9F * flicker;
+        float depthAlpha = 1.0F; // 深度测试线框 100% 完全不透明（不随闪烁调制）
         float noDepthAlpha = CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA * flicker;
 
         // 按颜色分组：破坏侧红/紫/灰、放置侧蓝/紫，每组独立提取轮廓并着色，

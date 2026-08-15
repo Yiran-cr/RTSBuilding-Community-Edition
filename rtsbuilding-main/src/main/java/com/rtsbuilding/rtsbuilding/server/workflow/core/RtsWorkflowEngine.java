@@ -1,6 +1,8 @@
 package com.rtsbuilding.rtsbuilding.server.workflow.core;
 
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
+import com.rtsbuilding.rtsbuilding.server.RtsServer;
+import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowPriority;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowType;
@@ -201,8 +203,8 @@ public final class RtsWorkflowEngine implements IWorkflowEngine {
             RtsbuildingMod.LOGGER.warn("[Workflow] {} 工作流已满 ({}), 拒绝新工作流 {}",
                     name, RtsWorkflowSlotManager.MAX_SLOTS, type);
             player.displayClientMessage(
-                    Component.literal("§c工作流已满 (" + RtsWorkflowSlotManager.MAX_SLOTS
-                            + "/" + RtsWorkflowSlotManager.MAX_SLOTS + "), 无法开始新的操作！"),
+                    Component.translatable("message.rtsbuilding.workflow.full",
+                            RtsWorkflowSlotManager.MAX_SLOTS, RtsWorkflowSlotManager.MAX_SLOTS),
                     true);
             return Optional.empty();
         }
@@ -409,12 +411,28 @@ public final class RtsWorkflowEngine implements IWorkflowEngine {
         RtsbuildingMod.LOGGER.info("[Workflow] {} 删除工作流 #{}: {}",
                 player.getGameProfile().getName(), entry.id(), entry.type());
 
+        // 清理挂起队列中该工作流的作业（放置缺货 / 破坏工具耐久挂起），
+        // 避免作业残留并在后续恢复尝试中被误拉回活跃队列
+        clearPendingJobs(player, entryId);
+
         slots.removeEntryById(entryId);
 
         if (slots.occupiedCount() > 0) {
             syncService.notifyPlayer(player, slots);
         } else {
             syncService.sendIdle(player);
+        }
+    }
+
+    /** 从挂起作业队列中移除指定工作流条目的作业（幂等；会话不存在时静默）。 */
+    private void clearPendingJobs(ServerPlayer player, int entryId) {
+        try {
+            RtsStorageSession session = RtsServer.get().session().getIfPresent(player);
+            if (session == null) return;
+            session.placement.pendingJobs.removeIf(j -> j.workflowEntryId() == entryId);
+            session.destruction.pendingDestroyJobs.removeIf(j -> j.workflowEntryId() == entryId);
+        } catch (RuntimeException ignored) {
+            // 会话清理失败不影响工作流删除
         }
     }
 

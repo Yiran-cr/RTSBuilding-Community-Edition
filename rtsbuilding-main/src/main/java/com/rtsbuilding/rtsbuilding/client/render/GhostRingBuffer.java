@@ -3,14 +3,22 @@ package com.rtsbuilding.rtsbuilding.client.render;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.ArrayDeque;
+
 /**
  * 特效环形缓冲：保存最近的特效条目（位置 + 方块状态 + 加入时间），
  * 供渲染 pass 消费。
  *
  * <p><b>容量策略：</b>批量操作（区域破坏/批量放置每 tick 最多 64 格）会在短时间内
- * 写入大量条目，容量不足会把<strong>正在播放的动画</strong>挤出。写入侧（
- * {@code RtsClientNetworkHandlers}）已按 tick 限流，且 {@link #add} 在缓冲满时
- * <strong>丢弃新条目</strong>而非覆盖——保证已入缓冲的动画完整播放。</p>
+ * 写入大量条目，容量不足会把<strong>正在播放的动画</strong>挤出。因此本缓冲采用
+ * 「写入侧排期 + 满则排队」两级背压：{@link #schedule} 先补入等待队列
+ * {@link #pending}，再尝试写入环形区；环形区满时新条目进入 {@link #pending}，
+ * 由渲染 pass 每帧 {@link #drainPending} 在环形区释放后补入——动画只延迟不丢失，
+ * 不会出现"一帧同时爆发、超限直接丢弃"的不完整现象。</p>
+ *
+ * <p><b>同位置重复写入：</b>同 key 已存在时只刷新方块状态、<strong>保留原播放进度
+ * （{@code addedAtMs} 不变）</strong>，避免"破坏→放置"高速交替时动画反复从头播放
+ * 产生跳变。</p>
  *
  * <p><b>全槽遍历：</b>去重查找与 {@link #forEach} 均全槽扫描——{@link #prune}
  * 清除中间条目会形成空洞，依赖连续窗口会漏项。</p>
@@ -20,6 +28,9 @@ public final class GhostRingBuffer {
     /** 默认容量（2 的幂）。 */
     public static final int DEFAULT_CAPACITY = 32;
 
+    /** 等待队列上限：超过则丢弃最新条目，防止极端持续高速操作时内存无限增长。 */
+    private static final int MAX_PENDING = 512;
+
     private final int capacity;
     private final int mask;
     private final long[] keys;
@@ -28,6 +39,11 @@ public final class GhostRingBuffer {
     private final boolean[] active;
     private int head;
     private int count;
+    private final ArrayDeque<PendingEffect> pending = new ArrayDeque<>();
+
+    /** 等待补入的排期特效：startMs 为预期动画启动时刻（毫秒时间戳）。 */
+    private record PendingEffect(long key, BlockState state, long startMs) {
+    }
 
     public GhostRingBuffer() {
         this(DEFAULT_CAPACITY);
@@ -50,18 +66,52 @@ public final class GhostRingBuffer {
     }
 
     /**
-     * 记录一个特效条目。
+     * 排期写入一个特效条目（推荐入口）。
      *
-     * @return {@code true} 写入成功；缓冲已满时返回 {@code false}（丢弃新条目，
-     *         保证已入缓冲的动画能完整播放，不被后续高频写入中断）
+     * <p>先补入等待队列，再尝试写入环形区；环形区满时进入等待队列，
+     * 由后续 {@link #drainPending} 补入。等待队列超限时丢弃该条目。
+     *
+     * @param startMs 预期的动画启动时刻（毫秒时间戳），可用于错峰（如
+     *                {@code now + seq * staggerMs}）
+     */
+    public void schedule(BlockPos pos, BlockState state, long startMs) {
+        drainPending();
+        if (!addToSlot(pos.asLong(), state, startMs) && pending.size() < MAX_PENDING) {
+            pending.addLast(new PendingEffect(pos.asLong(), state, startMs));
+        }
+    }
+
+    /**
+     * 将等待队列中的条目补入环形区（环形区释放出空间后生效）。
+     * <p>由渲染 pass 每帧调用；环形区仍满时保持排队，等待下一帧。</p>
+     */
+    public void drainPending() {
+        while (!pending.isEmpty()) {
+            PendingEffect e = pending.peekFirst();
+            if (!addToSlot(e.key(), e.state(), e.startMs())) {
+                break;
+            }
+            pending.removeFirst();
+        }
+    }
+
+    /**
+     * 记录一个特效条目（低层写入，缓冲满返回 {@code false}）。
+     *
+     * @return {@code true} 写入成功；缓冲已满时返回 {@code false}（调用方应使用
+     *         {@link #schedule} 让其进入等待队列而非直接丢弃）
      */
     public boolean add(BlockPos pos, BlockState state, long nowMs) {
-        long key = pos.asLong();
+        return addToSlot(pos.asLong(), state, nowMs);
+    }
+
+    private boolean addToSlot(long key, BlockState state, long startMs) {
         // 全槽去重（prune 可能产生空洞，不能依赖连续窗口）
         for (int i = 0; i < capacity; i++) {
             if (active[i] && keys[i] == key) {
+                // 同位置重复写入：保留原播放进度（addedAtMs 不变），只刷新方块状态，
+                // 避免"破坏→放置"高速交替时动画反复从头播放产生跳变
                 states[i] = state;
-                addedAtMs[i] = nowMs;
                 return true;
             }
         }
@@ -70,13 +120,13 @@ public final class GhostRingBuffer {
             if (!active[i]) {
                 keys[i] = key;
                 states[i] = state;
-                addedAtMs[i] = nowMs;
+                addedAtMs[i] = startMs;
                 active[i] = true;
                 count++;
                 return true;
             }
         }
-        // 缓冲已满：丢弃新条目，保护正在播放的动画不被覆盖
+        // 缓冲已满：返回失败，由 schedule 排入等待队列
         return false;
     }
 
@@ -113,6 +163,7 @@ public final class GhostRingBuffer {
         }
         head = 0;
         count = 0;
+        pending.clear();
     }
 
     public boolean isEmpty() {

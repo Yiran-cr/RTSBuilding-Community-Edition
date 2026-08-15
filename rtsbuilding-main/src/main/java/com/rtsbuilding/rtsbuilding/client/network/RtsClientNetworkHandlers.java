@@ -29,21 +29,6 @@ public final class RtsClientNetworkHandlers {
     private static int breakSoundsThisTick;
     private static long breakSoundResetTick = -1L;
 
-    /** 破坏特效每 tick 最多写入次数：服务端区域破坏每 tick 最多 64 格，
-     *  写入速率远超缓冲承受能力，超限丢弃以保证已入缓冲的动画完整播放。 */
-    private static final int MAX_BREAK_EFFECTS_PER_TICK = 20;
-
-    /** 破坏特效限流计数与当前 tick。 */
-    private static int breakEffectsThisTick;
-    private static long breakEffectResetTick = -1L;
-
-    /** 放置特效每 tick 最多写入次数（同破坏特效，避免批量放置动画被覆盖）。 */
-    private static final int MAX_PLACE_EFFECTS_PER_TICK = 20;
-
-    /** 放置特效限流计数与当前 tick。 */
-    private static int placeEffectsThisTick;
-    private static long placeEffectResetTick = -1L;
-
     private static RtsClientKernel kernel() {
         return RtsClientKernel.get();
     }
@@ -159,6 +144,12 @@ public final class RtsClientNetworkHandlers {
 
     public static void handleWorkflowProgress(S2CRtsWorkflowProgressPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
+            // 该工作流的恢复面板存在且已完成：移除其线框并关闭对应面板
+            if (com.rtsbuilding.rtsbuilding.client.presentation.plugin.resume.ResumeWorkflowState.get(payload.workflowEntryId()) != null
+                    && payload.completedBlocks() + payload.failedBlocks() >= payload.totalBlocks()) {
+                com.rtsbuilding.rtsbuilding.client.presentation.plugin.resume.ResumeWorkflowState.remove(payload.workflowEntryId());
+                com.rtsbuilding.rtsbuilding.client.presentation.panel.resume.ResumeWorkflowPanel.closePanel(payload.workflowEntryId());
+            }
             WorkflowModule wm = kernel().module(WorkflowModule.class);
             if (wm != null) wm.applyWorkflowProgress(payload);
         });
@@ -208,17 +199,12 @@ public final class RtsClientNetworkHandlers {
 
     public static void handlePlaceAnimation(S2CRtsPlaceAnimationPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-            if (mc.level == null) return;
-            long tick = mc.level.getGameTime();
-            if (tick != placeEffectResetTick) {
-                placeEffectResetTick = tick;
-                placeEffectsThisTick = 0;
-            }
-            if (placeEffectsThisTick >= MAX_PLACE_EFFECTS_PER_TICK) return;
-            placeEffectsThisTick++;
-            com.rtsbuilding.rtsbuilding.client.render.RingBufferHolder.INSTANCE.add(
-                    payload.pos(), payload.state(), System.currentTimeMillis());
+            if (net.minecraft.client.Minecraft.getInstance().level == null) return;
+            // 登记"预期放置"：目标状态 = payload.state()（快速建造路径已让动画包先于 BlockUpdate
+            // 到达，此处通常入等待集合，由 handleBlockUpdate 捕获状态变化在那一刻精确触发动画，
+            // 消除网络 RTT 造成的滞后；交互式路径状态已就绪则立即播放）
+            com.rtsbuilding.rtsbuilding.client.render.RtsEffectStateTracker.registerPlace(
+                    payload.pos(), payload.state());
         });
     }
 
@@ -228,29 +214,17 @@ public final class RtsClientNetworkHandlers {
             if (mc.level == null) return;
             // 清除该位置残留裂纹
             mc.level.destroyBlockProgress(0x525453, payload.pos(), -1);
-            // 破坏特效：记录破坏前的方块状态（非空气），渲染"方块上飘"效果。
-            // 按 tick 限流：区域破坏每 tick 最多 64 格，超限丢弃以保证已入缓冲动画完整播放
-            if (payload.state() != null && !payload.state().isAir()
-                    && tryAcquireBreakEffectSlot(mc.level.getGameTime())) {
-                com.rtsbuilding.rtsbuilding.client.render.RingBufferHolder.BREAK_EFFECTS.add(
-                        payload.pos(), payload.state(), System.currentTimeMillis());
+            // 破坏特效：登记"预期破坏"，动画绑定到客户端实际看到该位置变为空气的那一刻播放，
+            // 碎块颜色取破坏前状态 payload.state()。启动时刻 = 状态变化时刻，不做 seq 错峰。
+            if (payload.state() != null && !payload.state().isAir()) {
+                com.rtsbuilding.rtsbuilding.client.render.RtsEffectStateTracker.registerBreak(
+                        payload.pos(), payload.state());
             }
             // 在客户端本地播放破坏音，音源固定为主相机位置（= 听者位置，无距离衰减）。
             // 不能用 levelEvent(2001, pos, ...)（音源在被破坏方块位置，RTS 相机远离时听不见），
             // 也不依赖服务端上报的相机坐标（有上报延迟，可能回退到玩家本体位置）。
             playRemoteBreakSound(mc, payload.state());
         });
-    }
-
-    /** 尝试为本 tick 获取一次破坏特效写入额度；超限返回 {@code false}（丢弃）。 */
-    private static boolean tryAcquireBreakEffectSlot(long tick) {
-        if (tick != breakEffectResetTick) {
-            breakEffectResetTick = tick;
-            breakEffectsThisTick = 0;
-        }
-        if (breakEffectsThisTick >= MAX_BREAK_EFFECTS_PER_TICK) return false;
-        breakEffectsThisTick++;
-        return true;
     }
 
     /** 在客户端主相机位置播放方块破坏音（音源 = 听者，RTS 模式下任何位置都能清晰听到）。 */
@@ -293,11 +267,28 @@ public final class RtsClientNetworkHandlers {
                 message = message.copy().append(" ").append(net.minecraft.network.chat.Component.literal(detail));
             }
             String prefix = switch (payload.status()) {
-                case S2CBlueprintStatusPayload.SUCCESS -> "§a[蓝图] ";
-                case S2CBlueprintStatusPayload.ERROR -> "§c[蓝图] ";
-                default -> "§7[蓝图] ";
+                case S2CBlueprintStatusPayload.SUCCESS -> net.minecraft.network.chat.Component
+                        .translatable("message.rtsbuilding.blueprint.prefix").getString();
+                case S2CBlueprintStatusPayload.ERROR -> net.minecraft.network.chat.Component
+                        .translatable("message.rtsbuilding.blueprint.prefix.error").getString();
+                default -> net.minecraft.network.chat.Component
+                        .translatable("message.rtsbuilding.blueprint.prefix.info").getString();
             };
             mc.player.displayClientMessage(net.minecraft.network.chat.Component.literal(prefix).copy().append(message), true);
+        });
+    }
+
+    /**
+     * 处理工作流恢复扫描结果：按工作流独立保存状态并打开（刷新）对应恢复面板。
+     */
+    public static void handleResumeScan(com.rtsbuilding.rtsbuilding.network.resume.S2CResumeScanPayload payload,
+                                        net.neoforged.neoforge.network.handling.IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            com.rtsbuilding.rtsbuilding.client.presentation.plugin.resume.ResumeWorkflowState.put(payload);
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.screen instanceof com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen bs) {
+                com.rtsbuilding.rtsbuilding.client.presentation.panel.resume.ResumeWorkflowPanel.open(bs, payload);
+            }
         });
     }
 }

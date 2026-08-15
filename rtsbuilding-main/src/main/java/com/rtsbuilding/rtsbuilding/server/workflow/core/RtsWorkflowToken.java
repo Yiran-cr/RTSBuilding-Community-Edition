@@ -198,7 +198,8 @@ public record RtsWorkflowToken(
         RtsWorkflowEntry entry = resolveEntry();
         if (entry != null) {
             entry.setSuspended(true);
-            entry.setDetailMessage("等待物品...");
+            entry.setDetailMessage(net.minecraft.network.chat.Component
+                    .translatable("message.rtsbuilding.workflow.waiting_items").getString());
             engine.notifyPlayer(playerId, dimension);
         }
     }

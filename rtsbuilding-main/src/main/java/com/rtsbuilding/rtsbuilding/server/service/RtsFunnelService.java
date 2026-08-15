@@ -57,11 +57,14 @@ public final class RtsFunnelService {
 
     public static final RtsFunnelService INSTANCE = new RtsFunnelService();
 
-    /** 球心吸取半径（格）。 */
+    /** 球心吸取半径（格），客户端未调节时的默认值。 */
     private static final double SPHERE_RADIUS = 2.0D;
 
     /** 每 tick 最多提取的物品数量。 */
     private static final int MAX_ITEMS_PER_TICK = 16;
+
+    /** 玩家 UUID → 调节后的球心吸取半径（格）；无记录时使用 {@link #SPHERE_RADIUS}。 */
+    private static final Map<UUID, Double> funnelRadii = new ConcurrentHashMap<>();
 
     /** 完整世界校验（含第三方保护插件）的间隔 tick（1 秒）。 */
     private static final int FULL_CHECK_INTERVAL = 20;
@@ -99,6 +102,32 @@ public final class RtsFunnelService {
     }
 
     /**
+     * 客户端同步球心吸取半径（格）：调节器拖动时调用，按玩家保存并 clamp 到合理范围。
+     * 若该玩家已有持续吸取任务，用新半径重建几何缓存（下次 tick 立即生效）。
+     */
+    public void setFunnelRadius(ServerPlayer player, double radius) {
+        if (player == null) {
+            return;
+        }
+        double clamped = Math.max(1.0D, Math.min(5.0D, radius));
+        funnelRadii.put(player.getUUID(), clamped);
+        FunnelTask task = sphereTargets.get(player.getUUID());
+        if (task != null) {
+            sphereTargets.put(player.getUUID(), new FunnelTask(task.center.immutable(), clamped));
+        }
+    }
+
+    /**
+     * 查询玩家当前的球心吸取半径（格），未调节过时返回默认值。
+     */
+    public double getFunnelRadius(ServerPlayer player) {
+        if (player == null) {
+            return SPHERE_RADIUS;
+        }
+        return funnelRadii.getOrDefault(player.getUUID(), SPHERE_RADIUS);
+    }
+
+    /**
      * 客户端左键请求：以目标方块为球心注册持续吸取任务，并立即处理一个 tick 以获得即时反馈。
      */
     public void onFunnelPickupRequest(ServerPlayer player, BlockPos center) {
@@ -115,7 +144,7 @@ public final class RtsFunnelService {
         if (!RtsLinkedStorageResolver.canAccessWorldTarget(player, center)) {
             return;
         }
-        sphereTargets.put(player.getUUID(), new FunnelTask(center.immutable()));
+        sphereTargets.put(player.getUUID(), new FunnelTask(center.immutable(), getFunnelRadius(player)));
         tickPlayer(player);
     }
 
@@ -172,12 +201,13 @@ public final class RtsFunnelService {
     }
 
     /**
-     * 玩家断开时清理其持续吸取任务与漏斗开关状态。
+     * 玩家断开时清理其持续吸取任务、漏斗开关状态与调节后的半径。
      */
     public void onPlayerDisconnect(ServerPlayer player) {
         if (player != null) {
             sphereTargets.remove(player.getUUID());
             funnelEnabledPlayers.remove(player.getUUID());
+            funnelRadii.remove(player.getUUID());
         }
     }
 
@@ -431,11 +461,11 @@ public final class RtsFunnelService {
         int ticksSinceFullCheck;
         int ticksSinceAlert;
 
-        FunnelTask(BlockPos center) {
+        FunnelTask(BlockPos center, double radius) {
             this.center = center;
             this.centerPos = Vec3.atCenterOf(center);
-            this.searchBox = new AABB(center).inflate(SPHERE_RADIUS);
-            this.radiusSqr = SPHERE_RADIUS * SPHERE_RADIUS;
+            this.searchBox = new AABB(center).inflate(radius);
+            this.radiusSqr = radius * radius;
         }
     }
 

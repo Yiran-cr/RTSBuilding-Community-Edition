@@ -119,7 +119,7 @@ public final class InteractionTargetPass implements RenderPass {
         CornerBracketRenderer.renderCornerBrackets(poseStack, alloc.brackets(),
                 smoothTarget.minX(), smoothTarget.minY(), smoothTarget.minZ(),
                 smoothTarget.maxX(), smoothTarget.maxY(), smoothTarget.maxZ(),
-                r, g, b, 0.9f, distance);
+                r, g, b, 1.0f, distance);
         
         if (BoxSelectionPass.depthTestEnabled) {
             CornerBracketRenderer.renderCornerBrackets(poseStack, alloc.noDepth(),

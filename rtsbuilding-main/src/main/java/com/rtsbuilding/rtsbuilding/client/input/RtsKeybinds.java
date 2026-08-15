@@ -57,6 +57,7 @@ public final class RtsKeybinds {
         add("cycle_mode", RtsKeyMappings.CYCLE_MODE_KEY);
         add("place_offset", RtsKeyMappings.PLACE_OFFSET_KEY);
         add("line_flat", RtsKeyMappings.LINE_FLAT_KEY);
+        add("ultimine", RtsKeyMappings.ULTIMINE_KEY);
     }
 
     public static List<Entry> entries() {

@@ -48,6 +48,8 @@ public final class BreakEffectPass implements RenderPass {
         if (mc.level == null) return;
         long now = System.currentTimeMillis();
         GhostRingBuffer buffer = RingBufferHolder.BREAK_EFFECTS;
+        // 补入等待队列中的破坏动画（环形区释放出空间后生效），保证批量破坏动画不丢失
+        buffer.drainPending();
 
         buffer.forEach((key, state, addedAtMs) -> {
             long age = now - addedAtMs;

@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -37,6 +38,49 @@ class GhostRingBufferTest {
         buf.add(new BlockPos(1, 0, 0), null, 200L);
         buf.add(new BlockPos(0, 0, 0), null, 300L);
         assertEquals(2, buf.size());
+    }
+
+    @Test
+    void duplicateKeepsOriginalStartTime() {
+        GhostRingBuffer buf = new GhostRingBuffer(4);
+        buf.add(new BlockPos(0, 0, 0), null, 100L);
+        // 同位置重复写入只刷新状态，保留原播放进度（addedAtMs 不变），避免动画跳变
+        buf.add(new BlockPos(0, 0, 0), null, 300L);
+        assertEquals(1, buf.size());
+        AtomicLong seen = new AtomicLong(-1L);
+        buf.forEach((k, s, t) -> seen.set(t));
+        assertEquals(100L, seen.get());
+    }
+
+    @Test
+    void scheduleQueuesWhenFullThenDrains() {
+        GhostRingBuffer buf = new GhostRingBuffer(4);
+        for (int i = 0; i < 4; i++) {
+            buf.add(new BlockPos(i, 0, 0), null, 0L);
+        }
+        // 环形区已满：schedule 排入等待队列而非丢弃
+        buf.schedule(new BlockPos(4, 0, 0), null, 100L);
+        assertEquals(4, buf.size());
+        assertFalse(contains(buf, new BlockPos(4, 0, 0)));
+        // 环形区释放空间后 drainPending 将等待队列补入
+        buf.prune(200L, 50L);
+        buf.drainPending();
+        assertTrue(contains(buf, new BlockPos(4, 0, 0)));
+        assertEquals(1, buf.size());
+    }
+
+    @Test
+    void clearDropsPending() {
+        GhostRingBuffer buf = new GhostRingBuffer(4);
+        for (int i = 0; i < 4; i++) {
+            buf.add(new BlockPos(i, 0, 0), null, 0L);
+        }
+        buf.schedule(new BlockPos(4, 0, 0), null, 100L);
+        buf.clear();
+        // 清空后环形区与等待队列均被清空，pending 不会在后续 drain 中复活
+        buf.drainPending();
+        assertEquals(0, buf.size());
+        assertTrue(buf.isEmpty());
     }
 
     @Test

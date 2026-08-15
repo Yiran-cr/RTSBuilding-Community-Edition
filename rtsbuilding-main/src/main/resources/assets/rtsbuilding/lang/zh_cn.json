@@ -24,6 +24,8 @@
   "key.rtsbuilding.cycle_mode": "循环切换模式",
   "key.rtsbuilding.place_offset": "偏移选中位置（命中面外侧一格）",
   "key.rtsbuilding.line_flat": "线模式平直（按住）",
+  "key.rtsbuilding.cycle_fill_mode": "循环切换填充模式（实心/空心/框架）",
+  "key.rtsbuilding.ultimine": "连锁挖掘（按住）",
 
   "button.rtsbuilding.fluid_occlusion": "流体遮挡",
 
@@ -88,7 +90,7 @@
   "tooltip.rtsbuilding.left.item_pickup": "物品拾取",
   "tooltip.rtsbuilding.left.item_pickup.desc": "从世界中拾取物品",
   "tooltip.rtsbuilding.left.ultimine": "连锁挖掘",
-  "tooltip.rtsbuilding.left.ultimine.desc": "一键挖掘相连的同类方块（占位）",
+  "tooltip.rtsbuilding.left.ultimine.desc": "按住连锁挖掘按键时，一键挖掘相连的同类方块（指示灯）",
 
   "tooltip.rtsbuilding.left.construction": "建造",
   "tooltip.rtsbuilding.left.construction.desc": "放置方块",
@@ -136,5 +138,58 @@
 
   "tooltip.rtsbuilding.rightdown.no_search_results": "未找到匹配物品",
 
-  "screen.rtsbuilding.workflow.none": "没有活跃的工作流"
+  "screen.rtsbuilding.workflow.none": "没有活跃的工作流",
+
+  "screen.rtsbuilding.resume.title": "工作流恢复",
+  "screen.rtsbuilding.resume.remaining": "剩余 %d 格",
+  "screen.rtsbuilding.resume.conflict": " · 冲突 %d 格",
+  "screen.rtsbuilding.resume.missing": " · 缺 %d",
+  "screen.rtsbuilding.resume.no_materials": "无材料需求",
+  "screen.rtsbuilding.resume.start": "开始",
+  "screen.rtsbuilding.resume.skip": "跳过",
+  "screen.rtsbuilding.resume.overwrite": "覆盖",
+  "screen.rtsbuilding.resume.material_avail_req": "有 %s / 需 %d",
+  "screen.rtsbuilding.resume.material_missing_item": "缺 %d",
+
+  "ui.rtsbuilding.adjuster.funnel_radius": "漏斗吸取范围：",
+  "ui.rtsbuilding.adjuster.ultimine_limit": "连锁挖掘数量：",
+  "ui.rtsbuilding.adjuster.none": "暂无调节器",
+  "ui.rtsbuilding.adjuster.shape_mode": "形状模式：",
+  "ui.rtsbuilding.adjuster.single_block": "单方块",
+  "ui.rtsbuilding.adjuster.replace": "替换",
+
+  "ui.rtsbuilding.mode.solid": "实心",
+  "ui.rtsbuilding.mode.hollow": "空心",
+  "ui.rtsbuilding.mode.frame": "框架",
+  "ui.rtsbuilding.mode.connected": "连接",
+  "ui.rtsbuilding.mode.separated": "断点",
+
+  "screen.rtsbuilding.container_panel": "容器面板",
+  "screen.rtsbuilding.container.opening": "正在打开容器…",
+  "screen.rtsbuilding.container.click_tab": "点击上方标签打开容器",
+
+  "screen.rtsbuilding.settings.ui_scale.auto": "自动",
+
+  "message.rtsbuilding.blueprint.prefix": "§a[蓝图] ",
+  "message.rtsbuilding.blueprint.prefix.error": "§c[蓝图] ",
+  "message.rtsbuilding.blueprint.prefix.info": "§7[蓝图] ",
+
+  "message.rtsbuilding.workflow.resumed": "§7[工作流] §a▶ 已恢复",
+  "message.rtsbuilding.workflow.paused": "§7[工作流] §e⏸ 已暂停",
+  "message.rtsbuilding.workflow.waiting_items": "等待物品...",
+  "message.rtsbuilding.workflow.full": "§c工作流已满 (%d/%d), 无法开始新的操作！",
+  "message.rtsbuilding.shape.truncated_place": "§c形状过大（达到上限 %d 格），已截断放置前一部分！",
+  "message.rtsbuilding.shape.truncated_break": "§c形状过大（达到上限 %d 格），已截断破坏前一部分！",
+
+  "screen.rtsbuilding.workflow.type.idle": "空闲",
+  "screen.rtsbuilding.workflow.type.mine_single": "挖掘",
+  "screen.rtsbuilding.workflow.type.ultimine": "连锁挖掘",
+  "screen.rtsbuilding.workflow.type.area_mine": "区域挖掘",
+  "screen.rtsbuilding.workflow.type.area_destroy": "摧毁",
+  "screen.rtsbuilding.workflow.type.place_single": "放置",
+  "screen.rtsbuilding.workflow.type.place_batch": "批量放置",
+  "screen.rtsbuilding.workflow.type.quick_build": "快速建造",
+  "screen.rtsbuilding.workflow.type.blueprint_build": "蓝图建造",
+  "screen.rtsbuilding.workflow.type.stop_mining": "停止挖掘",
+  "screen.rtsbuilding.workflow.suspended": " (搁置)"
 }

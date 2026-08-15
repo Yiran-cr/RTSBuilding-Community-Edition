@@ -24,6 +24,8 @@
   "key.rtsbuilding.cycle_mode": "Cycle Mode",
   "key.rtsbuilding.place_offset": "Offset Target (Face-Outside Block)",
   "key.rtsbuilding.line_flat": "Flat Line Mode (Hold)",
+  "key.rtsbuilding.cycle_fill_mode": "Cycle Fill Mode (Solid/Hollow/Frame)",
+  "key.rtsbuilding.ultimine": "Ultimine (Hold)",
 
   "button.rtsbuilding.fluid_occlusion": "Fluid Occlusion",
 
@@ -88,7 +90,7 @@
   "tooltip.rtsbuilding.left.item_pickup": "Item Pickup",
   "tooltip.rtsbuilding.left.item_pickup.desc": "Pick up items from world",
   "tooltip.rtsbuilding.left.ultimine": "Ultimine",
-  "tooltip.rtsbuilding.left.ultimine.desc": "Mine connected matching blocks in one go (placeholder)",
+  "tooltip.rtsbuilding.left.ultimine.desc": "Hold the ultimine key to mine connected matching blocks in one go (indicator)",
 
   "tooltip.rtsbuilding.left.construction": "Construction",
   "tooltip.rtsbuilding.left.construction.desc": "Place blocks",
@@ -136,5 +138,58 @@
 
   "tooltip.rtsbuilding.rightdown.no_search_results": "No matching items",
 
-  "screen.rtsbuilding.workflow.none": "No active workflows"
+  "screen.rtsbuilding.workflow.none": "No active workflows",
+
+  "screen.rtsbuilding.resume.title": "Workflow Resume",
+  "screen.rtsbuilding.resume.remaining": "%d remaining",
+  "screen.rtsbuilding.resume.conflict": " · %d conflicts",
+  "screen.rtsbuilding.resume.missing": " · missing %d",
+  "screen.rtsbuilding.resume.no_materials": "No materials",
+  "screen.rtsbuilding.resume.start": "Start",
+  "screen.rtsbuilding.resume.skip": "Skip",
+  "screen.rtsbuilding.resume.overwrite": "Overwrite",
+  "screen.rtsbuilding.resume.material_avail_req": "have %s / need %d",
+  "screen.rtsbuilding.resume.material_missing_item": "missing %d",
+
+  "ui.rtsbuilding.adjuster.funnel_radius": "Funnel radius:",
+  "ui.rtsbuilding.adjuster.ultimine_limit": "Ultimine limit:",
+  "ui.rtsbuilding.adjuster.none": "No adjusters",
+  "ui.rtsbuilding.adjuster.shape_mode": "Shape mode:",
+  "ui.rtsbuilding.adjuster.single_block": "Single block",
+  "ui.rtsbuilding.adjuster.replace": "Replace",
+
+  "ui.rtsbuilding.mode.solid": "Solid",
+  "ui.rtsbuilding.mode.hollow": "Hollow",
+  "ui.rtsbuilding.mode.frame": "Frame",
+  "ui.rtsbuilding.mode.connected": "Connected",
+  "ui.rtsbuilding.mode.separated": "Separated",
+
+  "screen.rtsbuilding.container_panel": "Container Panel",
+  "screen.rtsbuilding.container.opening": "Opening container…",
+  "screen.rtsbuilding.container.click_tab": "Click a tab above to open",
+
+  "screen.rtsbuilding.settings.ui_scale.auto": "Auto",
+
+  "message.rtsbuilding.blueprint.prefix": "§a[Blueprint] ",
+  "message.rtsbuilding.blueprint.prefix.error": "§c[Blueprint] ",
+  "message.rtsbuilding.blueprint.prefix.info": "§7[Blueprint] ",
+
+  "message.rtsbuilding.workflow.resumed": "§7[Workflow] §a▶ Resumed",
+  "message.rtsbuilding.workflow.paused": "§7[Workflow] §e⏸ Paused",
+  "message.rtsbuilding.workflow.waiting_items": "Waiting for items...",
+  "message.rtsbuilding.workflow.full": "§cWorkflow slots full (%d/%d), cannot start a new operation!",
+  "message.rtsbuilding.shape.truncated_place": "§cShape too large (limit %d), placement truncated!",
+  "message.rtsbuilding.shape.truncated_break": "§cShape too large (limit %d), break truncated!",
+
+  "screen.rtsbuilding.workflow.type.idle": "Idle",
+  "screen.rtsbuilding.workflow.type.mine_single": "Mining",
+  "screen.rtsbuilding.workflow.type.ultimine": "Chain Mining",
+  "screen.rtsbuilding.workflow.type.area_mine": "Area Mining",
+  "screen.rtsbuilding.workflow.type.area_destroy": "Destroy",
+  "screen.rtsbuilding.workflow.type.place_single": "Place",
+  "screen.rtsbuilding.workflow.type.place_batch": "Batch Place",
+  "screen.rtsbuilding.workflow.type.quick_build": "Quick Build",
+  "screen.rtsbuilding.workflow.type.blueprint_build": "Blueprint",
+  "screen.rtsbuilding.workflow.type.stop_mining": "Stop Mining",
+  "screen.rtsbuilding.workflow.suspended": " (suspended)"
 }

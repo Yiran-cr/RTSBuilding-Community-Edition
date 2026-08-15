@@ -265,7 +265,7 @@ public final class RtsClientPacketGateway {
         if (min == null || max == null) return;
         Level level = Minecraft.getInstance().level;
         if (level == null) return;
-        List<Long> positions = collectAreaPositions(level, min, max, false);
+        List<Long> positions = collectAreaPositions(level, min, max, false, false);
         if (positions.isEmpty()) return;
         sendAreaDestroyTag(positions, toolSlot, toolItemId, toolProtectionEnabled);
     }
@@ -309,7 +309,7 @@ public final class RtsClientPacketGateway {
         if (min == null || max == null || itemId == null || itemId.isBlank()) return;
         Level level = Minecraft.getInstance().level;
         if (level == null) return;
-        List<Long> positions = collectAreaPositions(level, min, max, true);
+        List<Long> positions = collectAreaPositions(level, min, max, true, forcePlace);
         if (positions.isEmpty()) return;
         sendBatchTag(positions, rotateSteps, forcePlace, skipIfOccupied, itemId,
                 true, rayOrigin, rayDir);
@@ -359,9 +359,11 @@ public final class RtsClientPacketGateway {
     /**
      * 遍历框选区域 [min, max) 收集目标位置，最多 {@link NetworkConstants#MAX_POSITIONS} 个。
      *
-     * @param place {@code true} 收集可替换位置（批量放置），{@code false} 收集可破坏方块位置（批量破坏）
+     * @param place   {@code true} 收集可替换位置（批量放置），{@code false} 收集可破坏方块位置（批量破坏）
+     * @param replace 仅 place=true 时有效：为 {@code true} 时收集区域内全部位置（替换模式，覆盖已有方块）
      */
-    private static List<Long> collectAreaPositions(Level level, BlockPos min, BlockPos max, boolean place) {
+    private static List<Long> collectAreaPositions(Level level, BlockPos min, BlockPos max,
+                                                   boolean place, boolean replace) {
         List<Long> positions = new ArrayList<>();
         for (int y = min.getY(); y < max.getY(); y++) {
             for (int z = min.getZ(); z < max.getZ(); z++) {
@@ -370,7 +372,7 @@ public final class RtsClientPacketGateway {
                     BlockState state = level.getBlockState(pos);
                     boolean match;
                     if (place) {
-                        match = state.isAir() || state.canBeReplaced();
+                        match = replace || state.isAir() || state.canBeReplaced();
                     } else {
                         match = !state.isAir() && state.getDestroySpeed(level, pos) >= 0.0F;
                     }
@@ -393,6 +395,27 @@ public final class RtsClientPacketGateway {
     public static void sendSetFunnelEnabled(boolean enabled) {
         var t = tag(); t.putBoolean("enabled", enabled);
         PacketDistributor.sendToServer(act(ActionType.SET_FUNNEL, t));
+    }
+
+    /**
+     * 同步漏斗（物品拾取）吸取范围半径（格）到服务端。
+     * 客户端右面板下嵌层调节器拖动时发送，服务端按玩家保存半径。
+     */
+    public static void sendSetFunnelRadius(double radius) {
+        var t = tag(); t.putDouble("radius", radius);
+        PacketDistributor.sendToServer(act(ActionType.SET_FUNNEL_RADIUS, t));
+    }
+
+    // ── 工作流恢复 ──
+
+    /** 请求扫描暂停工作流的恢复数据（服务端回 S2CResumeScanPayload）。 */
+    public static void sendRequestResumeScan(int workflowEntryId) {
+        PacketDistributor.sendToServer(new com.rtsbuilding.rtsbuilding.network.resume.C2SRequestResumeScanPayload(workflowEntryId));
+    }
+
+    /** 对暂停工作流执行恢复动作：0=开始，1=跳过，2=覆盖。 */
+    public static void sendResumeAction(int workflowEntryId, byte strategy) {
+        PacketDistributor.sendToServer(new com.rtsbuilding.rtsbuilding.network.resume.C2SResumeActionPayload(workflowEntryId, strategy));
     }
 
     /**

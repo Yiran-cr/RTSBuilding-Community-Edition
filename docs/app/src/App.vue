@@ -1,19 +1,25 @@
 <template>
   <div class="wrap">
-    <!-- 顶部 Tab 切换 -->
-    <div class="view-tabs">
-      <button class="filter-chip" :class="{ active: view === 'reports' }" @click="switchView('reports')">链路检查报告</button>
-      <button class="filter-chip" :class="{ active: view === 'worklog' }" @click="switchView('worklog')">工作日志</button>
-    </div>
+    <!-- 顶部横幅：蓝色渐变 hero + Tab 切换 -->
+    <header class="hero">
+      <div class="hero-kicker">RTS BUILDING · COMMUNITY EDITION</div>
+      <h1>链路检查报告</h1>
+      <p class="hero-sub">逐条走查 RTS 建造模组的完整数据流 —— 定位问题、修复并沉淀为可追溯的结构化报告</p>
+      <div class="hero-tabs">
+        <button class="chip" :class="{ active: view === 'features' }" @click="switchView('features')">功能总览</button>
+        <button class="chip" :class="{ active: view === 'reports' }" @click="switchView('reports')">链路检查报告</button>
+        <button class="chip" :class="{ active: view === 'worklog' }" @click="switchView('worklog')">工作日志</button>
+      </div>
+    </header>
+
+    <!-- ================= 功能总览页 ================= -->
+    <template v-if="view === 'features'">
+      <FeaturesView />
+    </template>
 
     <!-- ================= 报告列表页 ================= -->
-    <template v-if="view === 'reports'">
+    <template v-else-if="view === 'reports'">
       <div v-if="!selected">
-        <div class="list-header">
-          <h1>RTS Building <span class="dot">·</span> 链路检查报告</h1>
-          <p>全部走查报告 · 点击进入查看详情</p>
-        </div>
-
         <div class="search-row">
           <input v-model="keyword" placeholder="搜索报告标题 / 类 / 路径 / 问题..." />
           <div class="filter-group">
@@ -57,6 +63,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { loadReports } from './reports'
+import FeaturesView from './FeaturesView.vue'
 import DetailView from './DetailView.vue'
 import WorkLog from './WorkLog.vue'
 
@@ -90,11 +97,3 @@ function issueCount(r) { return r.issues.length }
 function fixedCount(r) { return r.issues.filter((i) => i.status === 'fixed').length }
 function keptCount(r) { return r.issues.filter((i) => i.status === 'kept').length }
 </script>
-
-<style scoped>
-.view-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-</style>

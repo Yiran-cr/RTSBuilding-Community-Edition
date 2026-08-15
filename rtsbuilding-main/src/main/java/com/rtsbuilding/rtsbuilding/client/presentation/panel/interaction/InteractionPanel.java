@@ -51,7 +51,7 @@ public final class InteractionPanel extends RtsPanel {
     private static final int MIN_WINDOW_WIDTH = 88;
     private static final int DEFAULT_W = 320;
     private static final int DEFAULT_H = 120;
-    private static final Component FIXED_TITLE = Component.literal("容器面板");
+    private static final Component FIXED_TITLE = Component.translatable("screen.rtsbuilding.container_panel");
 
     private static final int TAB_BAR_H = PageTabBar.TAB_BAR_H;
 
@@ -102,6 +102,9 @@ public final class InteractionPanel extends RtsPanel {
     private List<PageTabBar.Tab> tabsCache;
     private List<SelectableEntry> tabsCacheEntries = List.of();
     private boolean tabsCacheExternalTab;
+    /** 标签缓存时的外部容器屏幕实例：外部容器切换（activeId 恒 null）时标签名需随屏幕刷新。 */
+    @Nullable
+    private AbstractContainerScreen<?> tabsCacheScreen;
 
     /**
      * 渲染期标志：当本面板将容器屏幕作为子覆盖层渲染时置位，供
@@ -165,10 +168,10 @@ public final class InteractionPanel extends RtsPanel {
         boolean firstOpen = !wasOpen || panelReopened;
         this.inputForwarder = new ContainerInputForwarder(containerScreen);
 
-        // 先提交打开结果（active = 等待中的归一化键；tick 探测已转正时沿用其 activeId；
-        // 两者皆无则为外部打开的容器，active = null），再按活动条目解析图标
+        // 先提交打开结果：优先取等待键；tick 已把等待键转正（consumePendingPromotion）时沿用 activeId；
+        // 两者皆无则为外部打开的容器，active = null（渲染外部标签），再按活动条目解析图标
         Object openedId = pageState.getPendingId();
-        if (openedId == null && pageState.isPageOpen() && pageState.getActiveId() != null) {
+        if (openedId == null && pageState.consumePendingPromotion()) {
             openedId = pageState.getActiveId();
         }
         pageState.opened(openedId);
@@ -392,8 +395,10 @@ public final class InteractionPanel extends RtsPanel {
     private List<PageTabBar.Tab> buildTabs() {
         boolean externalTab = pageState.isPageOpen() && pageState.getActiveId() == null
                 && inputForwarder != null && inputForwarder.hasScreen();
-        // 缓存命中：entries 引用未变且外部标签可见性未变（entries 每次修改都会替换引用）
-        if (tabsCache != null && tabsCacheEntries == entries && tabsCacheExternalTab == externalTab) {
+        AbstractContainerScreen<?> currentScreen = inputForwarder != null ? inputForwarder.getScreen() : null;
+        // 缓存命中：entries 引用未变、外部标签可见性与当前屏幕实例均未变（entries 每次修改都会替换引用）
+        if (tabsCache != null && tabsCacheEntries == entries && tabsCacheExternalTab == externalTab
+                && tabsCacheScreen == currentScreen) {
             return tabsCache;
         }
 
@@ -412,13 +417,25 @@ public final class InteractionPanel extends RtsPanel {
                     ContainerIconResolver.resolveForEntry(entry), Component.literal(label), i));
         }
         if (externalTab) {
-            tabs.add(new PageTabBar.Tab(null, containerIcon, FIXED_TITLE, -1));
+            // 外部打开容器：标签名取容器屏幕的真实标题，避免固定文案"容器面板"
+            String name = externalContainerName();
+            Component tabTitle = name == null ? FIXED_TITLE : Component.literal(name);
+            tabs.add(new PageTabBar.Tab(null, containerIcon, tabTitle, -1));
         }
 
         this.tabsCache = tabs;
         this.tabsCacheEntries = entries;
         this.tabsCacheExternalTab = externalTab;
+        this.tabsCacheScreen = currentScreen;
         return tabs;
+    }
+
+    /** 外部打开容器的真实标题（标签名用）；无屏幕或标题为空白时返回 null（由调用方兜底固定文案）。 */
+    @Nullable
+    private String externalContainerName() {
+        if (inputForwarder == null || !inputForwarder.hasScreen()) return null;
+        String title = inputForwarder.getScreen().getTitle().getString();
+        return title != null && !title.isBlank() ? title : null;
     }
 
     private void handleTabClick(PageTabBar.Tab tab) {
@@ -558,7 +575,9 @@ public final class InteractionPanel extends RtsPanel {
     private void renderContainerPage(GuiGraphics g, int mouseX, int mouseY, float partialTick,
                                      int cx, int cy, int cw) {
         if (inputForwarder == null || !inputForwarder.hasScreen()) {
-            String msg = pageState.hasPending() ? "正在打开容器…" : "点击上方标签打开容器";
+            String msg = pageState.hasPending()
+                    ? Component.translatable("screen.rtsbuilding.container.opening").getString()
+                    : Component.translatable("screen.rtsbuilding.container.click_tab").getString();
             int tx = cx + Math.max(0, (cw - Minecraft.getInstance().font.width(msg)) / 2);
             int ty = cy + Math.max(0, (containerAreaHeight() - Minecraft.getInstance().font.lineHeight) / 2);
             TextRenderer.draw(g, msg, tx, ty, ThemeManager.getTextColor());

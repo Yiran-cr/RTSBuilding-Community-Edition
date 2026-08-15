@@ -48,4 +48,10 @@ public enum ActionType {
      * 仅在枚举末尾追加（ordinal 编码协议，禁止插入到已有值之前）。
      */
     REMOVE_RECENT_ENTRY,
+    /**
+     * 客户端右面板下嵌层调节器把漏斗（物品拾取）吸取半径（格）同步到服务端，
+     * 服务端按玩家保存半径供球心吸取任务使用。
+     * 仅在枚举末尾追加（ordinal 编码协议，禁止插入到已有值之前）。
+     */
+    SET_FUNNEL_RADIUS,
 }

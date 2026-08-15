@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.client.render.pass;
 
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.AdjustKind;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.FillMode;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.Phase;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.PhaseAdvance;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.ShapeInput;
@@ -10,6 +11,7 @@ import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import net.minecraft.core.BlockPos;
 
 import javax.annotation.Nullable;
+import java.util.EnumMap;
 import java.util.List;
 
 /**
@@ -38,6 +40,12 @@ public final class LineBrushSelector {
     /** 各形状共享的可变几何参数。 */
     private final ShapeParams params = new ShapeParams();
 
+    /** 各形状独立的填充模式（体/球/圆柱分别记忆，默认实心）；选新起点不重置。 */
+    private final EnumMap<BuildShape, FillMode> fillModes = new EnumMap<>(BuildShape.class);
+
+    /** 方块替换开关（所有建造形状共享）：开启后放置可替换已有方块，建造光束变黄。 */
+    private boolean replaceBlocks;
+
     private Phase phase = Phase.IDLE;
     private BlockPos start;
     private BlockPos hover;
@@ -59,6 +67,52 @@ public final class LineBrushSelector {
     /** 当前建造形状。 */
     public BuildShape getShape() {
         return shape;
+    }
+
+    /** 指定形状的填充模式，未设置过时返回该形状的默认模式（线默认断点，其余实心）。 */
+    public FillMode getFillModeFor(BuildShape shape) {
+        if (shape == null) return FillMode.SOLID;
+        return fillModes.getOrDefault(shape, FillMode.defaultFor(shape));
+    }
+
+    /** 设置指定形状的填充模式。 */
+    public void setFillModeFor(BuildShape shape, FillMode mode) {
+        if (shape != null && mode != null) {
+            fillModes.put(shape, mode);
+        }
+    }
+
+    /** 循环指定形状的填充模式（按该形状支持的模式子集循环）。 */
+    public FillMode cycleFillModeFor(BuildShape shape) {
+        FillMode next = FillMode.nextFor(getFillModeFor(shape), shape);
+        setFillModeFor(shape, next);
+        return next;
+    }
+
+    /** 当前画笔形状的填充模式（实心/空心/框架）。 */
+    public FillMode getFillMode() {
+        return getFillModeFor(shape);
+    }
+
+    /** 直接设置当前画笔形状的填充模式。 */
+    public void setFillMode(FillMode mode) {
+        setFillModeFor(shape, mode);
+    }
+
+    /** 循环切换当前画笔形状的填充模式：实心 → 空心 → 框架 → 实心。 */
+    public FillMode cycleFillMode() {
+        return cycleFillModeFor(shape);
+    }
+
+    /** 方块替换开关状态（所有形状共享）。 */
+    public boolean isReplaceEnabled() {
+        return replaceBlocks;
+    }
+
+    /** 切换方块替换开关：开启后放置可替换已有方块。 */
+    public boolean toggleReplaceBlocks() {
+        this.replaceBlocks = !this.replaceBlocks;
+        return replaceBlocks;
     }
 
     /** 是否处于起点选择/画线预览阶段。 */
@@ -217,7 +271,7 @@ public final class LineBrushSelector {
         return cachedPositions;
     }
 
-    /** 输入快照 hash：形状/阶段/端点/全部扩展参数/平直标志任一变化都会改变。 */
+    /** 输入快照 hash：形状/阶段/端点/全部扩展参数/填充模式/平直标志任一变化都会改变。 */
     private long inputStamp() {
         long s = shape.ordinal() * 31L + phase.ordinal();
         s = s * 31 + (start == null ? 0 : start.asLong());
@@ -229,6 +283,7 @@ public final class LineBrushSelector {
         s = s * 31 + params.getFaceWidth();
         s = s * 31 + params.getFaceDown();
         s = s * 31 + params.getSphereRadius();
+        s = s * 31 + getFillModeFor(shape).ordinal();
         s = s * 31 + (RtsKeyMappings.isLineFlatDown() ? 1 : 0);
         return s;
     }
@@ -238,7 +293,7 @@ public final class LineBrushSelector {
         return new ShapeInput(start, hover, params.getStartDy(), params.getEndDy(),
                 params.getWallHeight(), params.getWallDown(),
                 params.getFaceWidth(), params.getFaceDown(),
-                params.getSphereRadius(), RtsKeyMappings.isLineFlatDown());
+                params.getSphereRadius(), RtsKeyMappings.isLineFlatDown(), getFillModeFor(shape));
     }
 
     /**

@@ -107,7 +107,8 @@ public final class RtsBlueprintJobService {
         long missingItems = Math.max(0, neededItems - bottleneckAvailable);
 
         RtsResumeScanResult result = new RtsResumeScanResult(
-                "blueprint", "蓝图",
+                "blueprint", net.minecraft.network.chat.Component
+                        .translatable("screen.rtsbuilding.workflow.type.blueprint_build").getString(),
                 totalRemaining, alreadyPlacedCount, conflictCount,
                 bottleneckAvailable, neededItems, missingItems, workflowEntryId);
 
@@ -209,7 +210,8 @@ public final class RtsBlueprintJobService {
         return new ItemStack(BuiltInRegistries.ITEM.get(id)).getHoverName().getString();
     }
 
-    private static long countMaterial(ServerPlayer player, ResourceLocation itemId) {
+    /** 统计玩家背包 + 链接存储中该物品的可用数量。 */
+    public static long countMaterial(ServerPlayer player, ResourceLocation itemId) {
         if (itemId == null || !BuiltInRegistries.ITEM.containsKey(itemId)) return 0;
         ItemStack template = new ItemStack(BuiltInRegistries.ITEM.get(itemId));
         long available = 0;

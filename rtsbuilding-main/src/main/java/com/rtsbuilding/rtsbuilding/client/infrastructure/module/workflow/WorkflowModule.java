@@ -42,7 +42,7 @@ public final class WorkflowModule implements FeatureModule {
                     ? RtsWorkflowPriority.values()[pri] : RtsWorkflowPriority.NORMAL;
             arr[idx] = RtsWorkflowStatus.fromRaw(type, priority, payload.totalBlocks(),
                     payload.completedBlocks(), payload.failedBlocks(), payload.missingItems(),
-                    payload.detailMessage(), payload.onHold() != 0, payload.workflowEntryId());
+                    payload.detailMessage(), payload.holdType(), payload.workflowEntryId());
         } else {
             arr[idx] = RtsWorkflowStatus.idle();
         }

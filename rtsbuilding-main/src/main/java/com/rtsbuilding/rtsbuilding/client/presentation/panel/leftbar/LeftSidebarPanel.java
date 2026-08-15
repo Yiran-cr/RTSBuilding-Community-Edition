@@ -1,4 +1,5 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar;
+import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.ActionButtonGroup;
@@ -38,7 +39,8 @@ public final class LeftSidebarPanel implements RtsPanelApi {
     private final ActionButtonGroup actionGroup = new ActionButtonGroup();
     
     private final BuildDestroyButtonGroup buildDestroyGroup = new BuildDestroyButtonGroup();
-    
+
+    /** 连锁挖掘（Ultimine）状态指示灯按钮：点亮跟随按住 {@code RtsKeyMappings.ULTIMINE_KEY}。 */
     private final UltimineButtonGroup ultimineGroup = new UltimineButtonGroup();
 
     /** 建造形状按钮组：绘制在世界画面右侧、右面板左侧边缘。 */
@@ -112,8 +114,11 @@ public final class LeftSidebarPanel implements RtsPanelApi {
     }
 
     
+    /**
+     * 连锁挖掘是否激活：按住 {@link RtsKeyMappings#ULTIMINE_KEY}（默认 `` ` ``/~ 键）时启用，松开即停用。
+     */
     public boolean isUltimineActive() {
-        return ultimineGroup.isSelected(0);
+        return RtsKeyMappings.isUltimineDown();
     }
 
     
@@ -232,11 +237,13 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         
         boolean buildMode = screen != null && screen.isBuildMode();
         buildDestroyGroup.setShow(buildMode);
+        // 连锁挖掘指示灯：点亮状态每帧同步按住 ULTIMINE_KEY 的按键状态
         ultimineGroup.setShow(buildMode);
-        // 建造模式 + 连锁挖掘启用 → 禁用选择（点击/框选）模式按钮，并显示覆盖层
-        selectGroup.setDisabled(buildMode && ultimineGroup.isSelected(0));
+        ultimineGroup.setActive(buildMode && isUltimineActive());
+        // 建造模式 + 连锁挖掘启用（按住 ULTIMINE_KEY）→ 禁用选择（点击/框选）模式按钮，并显示覆盖层
+        selectGroup.setDisabled(buildMode && isUltimineActive());
         // 建造模式 + 框选模式启用，或连锁挖掘启用 → 直接禁用建造/破坏按钮组
-        buildDestroyGroup.setDisabled(buildMode && (ultimineGroup.isSelected(0) || !isClickButtonSelected()));
+        buildDestroyGroup.setDisabled(buildMode && (isUltimineActive() || !isClickButtonSelected()));
         // 形状按钮组：仅建造模式且启用了建造或破坏模式时显示（框选模式下建造/破坏被禁用，随之隐藏）；
         // 激活模式跟随建造/破坏按钮选中态，启用某模式时另一模式形状强制回到单方块
         boolean shapeVisible = buildMode
@@ -245,6 +252,10 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         if (shapeVisible) {
             shapeGroup.setActiveMode(buildDestroyGroup.isConstructionSelected()
                     ? ShapeButtonGroup.MODE_CONSTRUCTION : ShapeButtonGroup.MODE_DESTRUCTION);
+        }
+        // 连锁挖掘启用：禁用破坏模式下所有形状功能（破坏侧强制回落单方块，与交互层 activeBreakShape 一致）
+        if (isUltimineActive()) {
+            shapeGroup.resetModeShape(ShapeButtonGroup.MODE_DESTRUCTION);
         }
 
         

@@ -6,6 +6,7 @@ import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
 import com.rtsbuilding.rtsbuilding.client.render.util.ActionRadiusFilter;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import com.rtsbuilding.rtsbuilding.client.render.util.UltimineBlockMerger;
+import com.rtsbuilding.rtsbuilding.client.util.state.FeatureAdjusterState;
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -26,26 +27,24 @@ import java.util.Set;
  * 合并为 AABB，用当前项目 {@link CornerBracketRenderer} 角括号风格渲染
  * 边框（深度 pass + 无深度 pass）。</p>
  *
+ * <p>收集上限取自右面板下嵌层调节器 {@link FeatureAdjusterState#getUltimineLimit()}，
+ * 与点击时发送给服务端的连锁挖掘数量一致。</p>
+ *
  * <p>渲染链路参考连锁破坏（FTB Ultimine 风格）实现：
  * 收集 → 外周过滤 → AABB 合并 → 边框渲染。</p>
  */
 public final class UltiminePreviewPass implements RenderPass {
 
-    
-    private static final int ULTIMINE_LIMIT = 256;
-
-    
+    /** 硬度比上限：目标硬度不超过种子方块的 1.5 倍（与服务端对齐）。 */
     private static final float HARDNESS_RATIO_LIMIT = 1.5F;
 
-    
     private static final float BORDER_R = 1.00F;
     private static final float BORDER_G = 0.72F;
     private static final float BORDER_B = 0.24F;
 
-    
-    private static final float EDGE_ALPHA = 0.92F;
+    /** 深度测试线框透明度（100% 完全不透明）。 */
+    private static final float EDGE_ALPHA = 1.0F;
 
-    
     private static final BlockPos[] FACE_OFFSETS = {
             new BlockPos(1, 0, 0), new BlockPos(-1, 0, 0),
             new BlockPos(0, 1, 0), new BlockPos(0, -1, 0),
@@ -75,7 +74,9 @@ public final class UltiminePreviewPass implements RenderPass {
         if (seedState.isAir()) return;
 
         boolean creative = mc.player != null && mc.player.isCreative();
-        List<BlockPos> targets = RtsUltimineCollector.collect(level, seed, ULTIMINE_LIMIT,
+        // 连锁挖掘上限取自右面板下嵌层调节器（与启动请求一致），默认 256
+        List<BlockPos> targets = RtsUltimineCollector.collect(level, seed,
+                FeatureAdjusterState.getUltimineLimit(),
                 (pos, state, original) -> {
                     if (state.isAir() || state.getBlock() != original.getBlock()) return false;
                     if (!creative && state.getDestroySpeed(level, pos) < 0.0F) return false;
@@ -129,7 +130,6 @@ public final class UltiminePreviewPass implements RenderPass {
                 r, g, b, CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA, distance);
     }
 
-    
     private static List<BlockPos> filterOuterBlocks(List<BlockPos> blocks) {
         Set<BlockPos> allBlocks = new HashSet<>(blocks);
         List<BlockPos> outerBlocks = new ArrayList<>();

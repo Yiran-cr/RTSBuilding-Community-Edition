@@ -205,6 +205,14 @@ public final class RightSidebarPanel implements RtsPanelApi {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button != 0) return false;
+        int mx = (int) mouseX;
+        int my = (int) mouseY;
+        if (upperLayer.contains(mx, my) && upperLayer.mouseReleased(mouseX, mouseY, button)) {
+            return true;
+        }
+        if (lowerLayer.contains(mx, my) && lowerLayer.mouseReleased(mouseX, mouseY, button)) {
+            return true;
+        }
         if (isDraggingOverlayDivider) {
             isDraggingOverlayDivider = false;
             return true;
@@ -219,8 +227,16 @@ public final class RightSidebarPanel implements RtsPanelApi {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (button != 0) return false;
+        int mx = (int) mouseX;
+        int my = (int) mouseY;
+        // 下层调节器滑块拖动优先：divider/resize 仅在未命中 layer 时接管
+        if (upperLayer.contains(mx, my) && upperLayer.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+            return true;
+        }
+        if (lowerLayer.contains(mx, my) && lowerLayer.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+            return true;
+        }
         if (isDraggingOverlayDivider) {
-            int my = (int) mouseY;
             int deltaY = my - dragOverlayDividerStartY;
             int newUpperH = dragOverlayDividerStartUpperH + deltaY;
             RightSidebarLayoutHelper.Rect sb = layoutRect();
@@ -233,6 +249,29 @@ public final class RightSidebarPanel implements RtsPanelApi {
         if (!resizeHandler.isActive()) return false;
         this.currentWidth = resizeHandler.computeNewSize(mouseX);
         return true;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        int mx = (int) mouseX;
+        int my = (int) mouseY;
+        if (upperLayer.contains(mx, my) && upperLayer.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+            return true;
+        }
+        return lowerLayer.contains(mx, my)
+                && lowerLayer.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (upperLayer.keyPressed(keyCode, scanCode, modifiers)) return true;
+        return lowerLayer.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (upperLayer.charTyped(codePoint, modifiers)) return true;
+        return lowerLayer.charTyped(codePoint, modifiers);
     }
 
     

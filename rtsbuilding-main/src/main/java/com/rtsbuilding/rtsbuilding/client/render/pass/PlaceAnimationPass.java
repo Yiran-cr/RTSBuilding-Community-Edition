@@ -57,6 +57,8 @@ public final class PlaceAnimationPass implements RenderPass {
         if (mc.level == null) return;
         long now = System.currentTimeMillis();
         GhostRingBuffer buffer = RingBufferHolder.INSTANCE;
+        // 补入等待队列中的动画（环形区释放出空间后生效），保证批量放置动画不丢失
+        buffer.drainPending();
 
         Vec3 cameraPos = mc.getCameraEntity() != null
                 ? mc.getCameraEntity().getEyePosition(partialTick) : Vec3.ZERO;

@@ -114,6 +114,9 @@ public final class RenderPipeline {
         this.ultiminePreviewPass = new UltiminePreviewPass();
         registerPass(this.ultiminePreviewPass);
 
+        // 工作流恢复预览：剩余位置绿线框 / 冲突位置橙线框
+        registerPass(new ResumePreviewPass());
+
         var lbrp = new LineBrushRenderPass(lineBrush);
         this.lineBrushRenderPass = lbrp;
         registerPass(lbrp);

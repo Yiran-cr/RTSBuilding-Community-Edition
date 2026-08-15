@@ -16,24 +16,38 @@ import net.minecraft.world.level.block.state.BlockState;
  * <p>The client treats this as a purely visual cue. It must not drive gameplay
  * state, inventory counts, undo history, or placement retries; those stay
  * authoritative on the server-side placement path.
+ *
+ * <p>{@code serverTick}/{@code seq} 由服务端填充：前者是放置发生的服务端 tick，
+ * 后者是同 tick 内该玩家的递增序号。客户端当前不据此错峰——动画启动时刻锚定到
+ * 方块状态实际变化的瞬间（BlockUpdate 触发），两者保留供将来与服务端时间的精确对齐。</p>
  */
-public record S2CRtsPlaceAnimationPayload(BlockPos pos, BlockState state) implements CustomPacketPayload {
+public record S2CRtsPlaceAnimationPayload(BlockPos pos, BlockState state, long serverTick, int seq) implements CustomPacketPayload {
     public static final Type<S2CRtsPlaceAnimationPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "s2c_rts_place_animation"));
 
     public S2CRtsPlaceAnimationPayload {
         pos = pos == null ? BlockPos.ZERO : pos;
         state = state == null ? Blocks.AIR.defaultBlockState() : state;
+        serverTick = Math.max(0L, serverTick);
+        seq = Math.max(0, seq);
+    }
+
+    public S2CRtsPlaceAnimationPayload(BlockPos pos, BlockState state) {
+        this(pos, state, 0L, 0);
     }
 
     public static final StreamCodec<RegistryFriendlyByteBuf, S2CRtsPlaceAnimationPayload> STREAM_CODEC = StreamCodec.of(
             (buf, payload) -> {
                 buf.writeBlockPos(payload.pos());
                 buf.writeVarInt(Block.getId(payload.state()));
+                buf.writeVarLong(payload.serverTick());
+                buf.writeVarInt(payload.seq());
             },
             (buf) -> new S2CRtsPlaceAnimationPayload(
                     buf.readBlockPos(),
-                    Block.stateById(buf.readVarInt())));
+                    Block.stateById(buf.readVarInt()),
+                    buf.readVarLong(),
+                    buf.readVarInt()));
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

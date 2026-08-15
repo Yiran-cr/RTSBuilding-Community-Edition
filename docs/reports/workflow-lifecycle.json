@@ -1,0 +1,98 @@
+{
+  "id": "workflow-lifecycle",
+  "title": "工作流生命周期链路（创建 / 移除 / 搁置 / 继续）",
+  "subtitle": "NeoForge 1.21.1 · 工作流的创建、删除、挂起/暂停、恢复扫描与动作的完整数据流，断点修复与边界分析",
+  "tags": {
+    "module": "rtsbuilding-main + rtsbuilding-common",
+    "status": "已走查并修复",
+    "counts": "问题 4 · 修复 3 · 保留 1",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "RtsWorkflowEngine", "path": "server/workflow/core/", "desc": "工作流引擎单例：<code>start</code> 创建条目、<code>from</code> 重建令牌、<code>deleteWorkflow</code> 删除、<code>notifyPlayer</code> 脏标记 + <code>flushDirty</code> 每 tick 合并发包。" },
+    { "name": "RtsWorkflowSlotManager", "path": "server/workflow/service/", "desc": "每玩家每维度 8 槽管理：条目按优先级排序，immutable id 保证删除后索引偏移不失效。" },
+    { "name": "RtsWorkflowEntry", "path": "server/workflow/core/", "desc": "条目状态：<code>suspended</code>/<code>paused</code>/<code>completed/failed/total</code>；<code>snapshot</code> 生成 holdType（0=运行，1=暂停，2=挂起）。" },
+    { "name": "RtsWorkflowToken", "path": "server/workflow/core/", "desc": "操作句柄：<code>suspend/pause/resume/unpause/complete/updateProgress</code>。" },
+    { "name": "RtsWorkflowSyncService", "path": "server/workflow/service/", "desc": "状态同步：遍历条目生成 <code>S2CRtsWorkflowProgressPayload</code>（本次 holdType 取代 onHold 布尔）。" },
+    { "name": "ServerActionHandler", "path": "network/handler/", "desc": "工作流动作：<code>PAUSE_WORKFLOW</code>（toggle，挂起走完整恢复）、<code>DELETE_WORKFLOW</code>。" },
+    { "name": "WorkflowInputHandler", "path": "client/presentation/plugin/workflow/", "desc": "客户端行按钮：挂起（holdType=2）→ 恢复扫描；暂停/运行 → <code>PAUSE_WORKFLOW</code> toggle；删除 → <code>DELETE_WORKFLOW</code>。" },
+    { "name": "WorkflowModule / WorkflowRenderer", "path": "client/", "desc": "客户端工作流状态与行渲染：holdType=2 显示橙色搁置进度条与 play 图标。" },
+    { "name": "ResumeWorkflowService", "path": "server/service/", "desc": "恢复扫描/动作分发：蓝图 → 放置作业 → 破坏作业；<code>apply</code> 把挂起作业移回活跃队列并 <code>token.resume()</code>。" },
+    { "name": "RtsPlacementBatch / RtsDestructionBatch", "path": "server/service/", "desc": "批量放置/破坏作业：缺货/工具耐久不足时 <code>token.suspend()</code> 并把作业移入挂起队列。" },
+    { "name": "RtsWorkflowStatus", "path": "server/workflow/model/ (common)", "desc": "客户端状态快照：<code>holdType</code> 区分运行/暂停/挂起，<code>onHold()</code> 兼容方法保留。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 创建 / 启动链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "客户端操作（放置/破坏/蓝图）发送动作 → 服务端 pipeline（WorkflowStartPipe 等）" },
+        { "side": "srv", "text": "<code>RtsWorkflowEngine.start(player, type, priority, totalBlocks)</code> → <code>SlotManager.addEntry</code>（满 8 槽拒绝）→ 返回 <code>RtsWorkflowToken</code>" },
+        { "side": "srv", "text": "<code>token.setTotalBlocks</code>（作业入队后按实际目标数刷新）→ <code>notifyPlayer</code> 标记脏" },
+        { "side": "srv", "text": "服务端 tick 末 <code>flushDirty()</code> 合并发包 → 客户端 <code>WorkflowModule.applyWorkflowProgress</code> → <code>WorkflowRenderer</code> 显示行" }
+      ]
+    },
+    {
+      "title": "2.2 移除（删除）链路",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "行尾 X → <code>sendDeleteWorkflow(entryId)</code> → C2S <code>DELETE_WORKFLOW</code>" },
+        { "side": "srv", "text": "<code>RtsWorkflowEngine.deleteWorkflow</code>：先清理挂起作业队列（本次修复）→ <code>removeEntryById</code> → 同步剩余/空状态" },
+        { "side": "cli", "text": "客户端收到新状态 → 该行消失（slot 前移，immutable id 不失效）" }
+      ]
+    },
+    {
+      "title": "2.3 搁置链路（挂起 vs 暂停）",
+      "type": "table",
+      "headers": ["类型", "触发", "状态", "作业去向"],
+      "rows": [
+        ["挂起 suspended", "放置缺货 / 破坏工具耐久不足 → <code>token.suspend()</code>", "entry.suspended=true，holdType=2", "<code>pendingJobs</code> / <code>pendingDestroyJobs</code>（挂起队列）"],
+        ["暂停 paused", "玩家手动点 toggle → <code>token.pause()</code>", "entry.paused=true，holdType=1", "活跃队列（checkPausedOrCancelled 轮转到队尾不处理）"],
+        ["运行中", "正常执行", "holdType=0", "活跃队列（正常 tick 处理）"]
+      ]
+    },
+    {
+      "title": "2.4 继续链路（本次修复断点）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "挂起（holdType=2）点「继续」→ <code>sendRequestResumeScan</code> → 服务端 <code>ResumeWorkflowService.scan</code>（蓝图→放置→破坏）→ 回 <code>S2CResumeScanPayload</code>" },
+        { "side": "cli", "text": "<code>ResumeWorkflowPanel</code> 弹出（材料/冲突/开始/跳过/覆盖）→ 点按钮 → <code>sendResumeAction</code> → <code>apply</code>：作业移回活跃队列 + <code>token.resume()</code>" },
+        { "side": "cli", "text": "暂停（holdType=1）或运行中点 toggle → <code>PAUSE_WORKFLOW</code>：服务端 toggle（paused→unpause，运行→pause，挂起→完整恢复）" }
+      ]
+    },
+    {
+      "title": "2.5 状态同步与 holdType 区分",
+      "type": "note",
+      "note": "<code>RtsWorkflowEntry.snapshot()</code> 生成 <code>holdType</code>（suspended?2:paused?1:0），经 <code>S2CRtsWorkflowProgressPayload.holdType</code> 同步到客户端 <code>RtsWorkflowStatus.holdType()</code>；客户端据此决定「继续」走恢复面板还是解除暂停，<code>onHold()</code> 兼容方法供渲染层使用。"
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 客户端把「暂停」与「挂起」混为 onHold，暂停的工作流点「继续」无法恢复",
+      "status": "fixed",
+      "why": "根因：<code>WorkflowInputHandler.isOnHold</code> 把 <code>suspended || paused</code> 合并判断，两者都发 <code>sendRequestResumeScan</code>；但 <code>ResumeWorkflowService.scan</code> 只查挂起队列，手动暂停的作业在活跃队列 → scan 返回 null → 面板不弹 → 暂停的工作流永远无法通过「继续」恢复。修复：<code>RtsWorkflowStatus</code> 增加 <code>holdType</code>（0=运行/1=暂停/2=挂起），同步链路（snapshot/payload/WorkflowModule）透传；<code>WorkflowInputHandler</code> 挂起才发 scan，暂停/运行发 <code>PAUSE_WORKFLOW</code> toggle。"
+    },
+    {
+      "title": "② PAUSE_WORKFLOW 对挂起工作流只 resume 条目、不恢复作业",
+      "status": "fixed",
+      "why": "根因：<code>ServerActionHandler</code> 的 <code>PAUSE_WORKFLOW</code> 对 suspended 只调 <code>token.resume()</code>，仅重置 entry 状态；作业仍在挂起队列不会回到活跃队列，工作流显示「运行中」但实际卡死。修复：挂起分支改用 <code>ResumeWorkflowService.apply</code> 完整恢复（作业移回活跃队列 + 状态恢复），失败才兜底 <code>token.resume()</code>。"
+    },
+    {
+      "title": "③ 删除工作流不清理挂起作业队列",
+      "status": "fixed",
+      "why": "根因：<code>deleteWorkflow</code> 只 <code>removeEntryById</code>，挂起作业（<code>pendingJobs</code>/<code>pendingDestroyJobs</code>）残留，可能被后续 <code>resumeAllPendingJobs</code>/存储变化恢复误拉回。修复：删除前按 entryId 清理两个挂起队列（幂等、会话不存在静默）。"
+    },
+    {
+      "title": "④ 破坏作业挂起后 scan 定位待确认",
+      "status": "kept",
+      "why": "破坏作业挂起（工具耐久不足）后作业应位于 <code>pendingDestroyJobs</code>，<code>scanDestroyJob</code> 已接入；但用户反馈点击「继续」仍不弹面板，疑似为 ①（暂停场景）或作业未进入挂起队列。已加调试日志（<code>[Resume] scan request / scan / scanDestroyJob</code>），需复现后依据日志确认是否仍存在定位断点。"
+    }
+  ],
+  "boundaries": [
+    "<b>挂起与暂停语义分离</b>：挂起（等待材料/工具）走恢复面板（scan + apply），暂停（手动）走 toggle 解除；客户端以 holdType 区分。",
+    "<b>脏标记合并发包</b>：工作流状态变化只标记玩家，<code>flushDirty</code> 每服务端 tick 合并发送一次全量包，避免批量操作发包风暴。",
+    "<b>删除即清理</b>：删除工作流同时清理挂起作业，防止残留作业被误恢复。",
+    "<b>immutable entry id</b>：slot 删除后索引前移，但 id 不变，客户端/作业引用不受影响。",
+    "<b>PAUSE_WORKFLOW 为 toggle</b>：暂停/恢复共用同一动作，服务端按当前状态切换；挂起走完整恢复而非仅状态翻转。"
+  ]
+}

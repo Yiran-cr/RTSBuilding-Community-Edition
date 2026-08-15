@@ -324,10 +324,13 @@ public final class RtsDestructionBatch {
                 RtsToolLeaseManager.returnMiningTool(player, session, session.mining.miningToolLease);
                 session.mining.miningToolLease = RtsToolLease.empty();
 
-                // 尝试借用新工具（使用第一个 pending job 的 toolSlot）
+                // 尝试借用新工具（使用第一个 pending job 的 toolSlot）。
+                // skipNearBreak=true：跳过耐久 ≤5% 的即将损坏工具——否则会把刚归还的
+                // 同类型低耐久工具又借回来，恢复后立即再次判定 near-break 重新挂起，
+                // 造成「恢复→挂起」死循环、作业永远无法恢复。
                 byte toolSlot = session.destruction.pendingDestroyJobs.peekFirst().toolSlot();
                 RtsToolLease newLease = RtsToolLeaseManager.borrowMiningTool(
-                        player, session, toolItemId, currentTool, toolSlot);
+                        player, session, toolItemId, currentTool, toolSlot, true);
                 if (!newLease.isEmpty()) {
                     session.mining.miningToolLease = newLease;
                     toolAvailable = true;
@@ -498,6 +501,11 @@ public final class RtsDestructionBatch {
 
         int totalCount() {
             return this.positions.size();
+        }
+
+        /** 返回剩余（未处理）位置的不可变视图，供恢复扫描遍历。 */
+        public List<BlockPos> remainingPositions() {
+            return this.positions.subList(this.index, this.positions.size());
         }
 
         // ── Accessors ─────────────────────────────────────────────────────

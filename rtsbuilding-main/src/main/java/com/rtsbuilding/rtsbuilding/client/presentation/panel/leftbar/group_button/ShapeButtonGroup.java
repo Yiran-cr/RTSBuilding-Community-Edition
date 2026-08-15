@@ -158,6 +158,17 @@ public final class ShapeButtonGroup extends AbstractButtonGroup {
         return modeShapes[MODE_DESTRUCTION] == SINGLE_BLOCK;
     }
 
+    /**
+     * 将指定模式（建造/破坏）的形状选择重置为单方块。
+     * 连锁挖掘启用时用于禁用破坏侧所有形状（强制回落单方块）。
+     */
+    public void resetModeShape(int mode) {
+        if (mode != MODE_CONSTRUCTION && mode != MODE_DESTRUCTION) return;
+        if (modeShapes[mode] == SINGLE_BLOCK) return;
+        modeShapes[mode] = SINGLE_BLOCK;
+        syncSelectionToActiveMode();
+    }
+
     @Override
     protected void onButtonClick(int index) {
         super.onButtonClick(index);

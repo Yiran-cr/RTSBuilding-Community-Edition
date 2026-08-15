@@ -6,6 +6,7 @@ import com.rtsbuilding.rtsbuilding.PerformanceConfig;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
+import com.rtsbuilding.rtsbuilding.client.util.state.FeatureAdjusterState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -14,16 +15,14 @@ import net.minecraft.world.phys.HitResult;
  * 漏斗（物品拾取）收集范围显示 pass。
  *
  * <p>当处于<b>交互、建造或蓝图模式</b>、已启用<b>点击模式</b>且开启<b>物品拾取（漏斗）</b>时，
- * 以鼠标指针指向的方块为中心绘制球形收集范围，与服务端 {@code RtsFunnelService}
- * 的球心吸取范围（半径 2 格）保持一致；指针移动时球体平滑跟随。
+ * 以鼠标指针指向的方块为中心绘制球形收集范围，半径取自右面板下嵌层调节器
+ * {@link FeatureAdjusterState#getFunnelRadius()}（默认 2 格，与服务端 RtsFunnelService 一致）；
+ * 指针移动时球体平滑跟随。</p>
  *
  * <p>球体渲染：三条两两垂直的赤道大圆线框（LINES 细线）
- * + 半透明球壳面片（QUADS，增强体积感）。
+ * + 半透明球壳面片（QUADS，增强体积感）。</p>
  */
 public final class FunnelRangePass implements RenderPass {
-
-    /** 球体半径（格），与服务端 RtsFunnelService 的吸取半径保持一致。 */
-    public static final double SPHERE_RADIUS = 2.0D;
 
     /** 每条大圆的分段数（7.5° 步长，弦长约 0.26 格，视觉上足够圆滑）。 */
     private static final int SEGMENTS = 48;
@@ -85,7 +84,7 @@ public final class FunnelRangePass implements RenderPass {
         double cx = hit.getBlockPos().getX() + 0.5D;
         double cy = hit.getBlockPos().getY() + 0.5D;
         double cz = hit.getBlockPos().getZ() + 0.5D;
-        double r = SPHERE_RADIUS;
+        double r = FeatureAdjusterState.getFunnelRadius();
         smoothTarget.update(cx - r, cy - r, cz - r, cx + r, cy + r, cz + r);
 
         cx = (smoothTarget.minX() + smoothTarget.maxX()) / 2;

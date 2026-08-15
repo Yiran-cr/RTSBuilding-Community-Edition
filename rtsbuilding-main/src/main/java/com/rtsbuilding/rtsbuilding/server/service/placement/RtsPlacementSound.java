@@ -50,21 +50,54 @@ public final class RtsPlacementSound {
     private static final Map<UUID, Integer> PER_PLAYER_SOUNDS_THIS_TICK = new HashMap<>();
     private static long SOUND_RESET_TICK = -1L;
 
+    /** 放置动画同 tick 序号：每 tick 每玩家递增，用于客户端错峰启动批量动画。 */
+    private static final Map<UUID, Integer> PER_PLAYER_PLACE_SEQ = new HashMap<>();
+    private static long PLACE_SEQ_RESET_TICK = -1L;
+
     private RtsPlacementSound() {
     }
 
     /**
      * 向玩家发送给定位置的方块放置动画数据包。
-     * <p>同时广播一条建造蓝光（无人机摄像头 → 目标方块）给其他玩家。</p>
+     * <p>数据包携带服务端 tick 与同 tick 内序号（{@code seq}）。当前客户端不再据此错峰，
+     * 而是以「方块状态实际变化的瞬间」作为动画启动时刻——因此快速建造路径在
+     * {@code setBlock} 之前调用本方法（预知目标 state），让动画包先于 BlockUpdate 到达，
+     * 消除网络 RTT 造成的动画滞后。
+     * 同时广播一条建造蓝光（无人机摄像头 → 目标方块）给其他玩家。</p>
      */
     public static void playRemotePlacedBlockAnimation(ServerPlayer player, BlockPos pos) {
         if (player == null || pos == null) {
             return;
         }
-        BlockState state = player.serverLevel().getBlockState(pos);
-        Platform.sendPacket(player, new S2CRtsPlaceAnimationPayload(pos.immutable(), state));
+        playRemotePlacedBlockAnimation(player, pos, player.serverLevel().getBlockState(pos));
+    }
+
+    /**
+     * 使用预知的目标方块状态发送放置动画数据包（快速建造路径在 {@code setBlock} 之前调用）。
+     */
+    public static void playRemotePlacedBlockAnimation(ServerPlayer player, BlockPos pos, BlockState state) {
+        if (player == null || pos == null) {
+            return;
+        }
+        ServerLevel level = player.serverLevel();
+        long tick = level.getGameTime();
+        int seq = nextPlaceSeq(player, tick);
+        Platform.sendPacket(player, new S2CRtsPlaceAnimationPayload(pos.immutable(), state, tick, seq));
         // 建造光束：只对其他玩家可见（主控不接收），两端追踪方块位置与无人机摄像头位置
         RtsDroneBeamService.broadcastPlace(player, pos);
+    }
+
+    /**
+     * 获取本玩家本 tick 的放置动画序号并递增；tick 变化时序号从 0 重新计数。
+     */
+    private static int nextPlaceSeq(ServerPlayer player, long tick) {
+        if (tick != PLACE_SEQ_RESET_TICK) {
+            PLACE_SEQ_RESET_TICK = tick;
+            PER_PLAYER_PLACE_SEQ.clear();
+        }
+        int seq = PER_PLAYER_PLACE_SEQ.getOrDefault(player.getUUID(), 0);
+        PER_PLAYER_PLACE_SEQ.put(player.getUUID(), seq + 1);
+        return seq;
     }
 
     /**

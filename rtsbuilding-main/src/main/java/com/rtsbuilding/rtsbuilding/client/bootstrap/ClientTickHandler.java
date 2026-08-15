@@ -21,6 +21,9 @@ public final class ClientTickHandler {
         RtsClientKernel kernel = RtsClientKernel.get();
         if (!kernel.isInitialized()) return;
 
+        // 放置/破坏动画的等待超时兜底：状态变化始终未到的登记项延迟播放，避免动画永久丢失
+        com.rtsbuilding.rtsbuilding.client.render.RtsEffectStateTracker.tick();
+
         
         kernel.tickPre();
         kernel.inputPipeline().onTickPre();

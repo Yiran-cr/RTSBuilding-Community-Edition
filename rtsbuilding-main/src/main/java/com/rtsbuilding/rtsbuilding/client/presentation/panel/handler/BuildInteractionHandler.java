@@ -18,9 +18,9 @@ import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelector;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster.CursorRay;
+import com.rtsbuilding.rtsbuilding.client.util.state.FeatureAdjusterState;
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
-import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningValidator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -403,7 +403,7 @@ public final class BuildInteractionHandler {
                 return true;
             }
             miningModule.startUltimine(hit.getBlockPos(), hit.getDirection().get3DDataValue(),
-                    toolSlot, RtsMiningValidator.ULTIMINE_MAX_BLOCKS, ULTIMINE_MODE,
+                    toolSlot, FeatureAdjusterState.getUltimineLimit(), ULTIMINE_MODE,
                     toolItemId, false);
             return true;
         }
@@ -458,6 +458,8 @@ public final class BuildInteractionHandler {
         if (leftSidebarPanel == null || screen == null || !screen.isClickButtonSelected()) return null;
         BuildingModule bm = kernel.module(BuildingModule.class);
         if (bm == null || bm.getMode() != BuilderMode.BUILD) return null;
+        // 连锁挖掘启用：破坏侧形状批量破坏被禁用（形状画笔与连锁挖掘互斥，左键必须走连锁挖掘）
+        if (leftSidebarPanel.isUltimineActive()) return null;
         return leftSidebarPanel.getBreakShape();
     }
 
@@ -477,6 +479,11 @@ public final class BuildInteractionHandler {
      */
     private boolean tryStartLineBrush(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel, boolean leftClick) {
         var lineBrush = kernel.renderPipeline().lineBrush;
+        // 连锁挖掘启用：破坏侧形状画笔被禁用，若存在启用前残留的已激活破坏画笔直接重置，
+        // 避免左键点击被破坏画笔抢占而无法触发连锁挖掘
+        if (leftSidebarPanel != null && leftSidebarPanel.isUltimineActive() && lineBrush.isBreakActive()) {
+            lineBrush.reset();
+        }
         // 任一确认阶段：由驱动键推进（体从宽度进入高度），进入建造阶段后确认建造
         if (lineBrush.isAdjusting() || lineBrush.isWidthAdjusting() || lineBrush.isHeightAdjusting()
                 || lineBrush.isRadiusAdjusting()) {
@@ -557,7 +564,14 @@ public final class BuildInteractionHandler {
         if (hit == null) return;
         BuildingModule bm = kernel.module(BuildingModule.class);
         if (bm == null) return;
-        bm.placeSelected(hit, isShiftDown(), ray.origin(), ray.direction());
+        bm.placeSelected(hit, isReplaceModeActive(), ray.origin(), ray.direction());
+    }
+
+    /**
+     * 替换模式是否生效：按住 Shift 或开启「方块替换」开关（下嵌层按钮，所有形状共享）。
+     */
+    private boolean isReplaceModeActive() {
+        return isShiftDown() || kernel.renderPipeline().lineBrush.isReplaceEnabled();
     }
 
     /** 在鼠标指向处触发一次单方块挖掘（含 Ctrl 面偏移）。 */
@@ -604,8 +618,7 @@ public final class BuildInteractionHandler {
         // 形状达到单包位置上限（BuildShape 在生成时已按上限截断）：明确提示已截断
         if (positions.size() >= NetworkConstants.MAX_POSITIONS && mc.player != null) {
             mc.player.displayClientMessage(
-                    net.minecraft.network.chat.Component.literal(
-                            "§c形状过大（达到上限 " + NetworkConstants.MAX_POSITIONS + " 格），已截断放置前一部分！"), true);
+                    net.minecraft.network.chat.Component.translatable("message.rtsbuilding.shape.truncated_place", NetworkConstants.MAX_POSITIONS), true);
         }
         Vec3 rayOrigin = Vec3.ZERO;
         Vec3 rayDir = Vec3.ZERO;
@@ -617,7 +630,7 @@ public final class BuildInteractionHandler {
             }
         }
         RtsClientPacketGateway.sendLinePlace(positions,
-                (byte) bm.getPlaceRotateSteps(), isShiftDown(), true,
+                (byte) bm.getPlaceRotateSteps(), isReplaceModeActive(), true,
                 bm.getSelectedItemId(), rayOrigin, rayDir);
         return CONSUMED;
     }
@@ -632,8 +645,7 @@ public final class BuildInteractionHandler {
         // 形状达到单包位置上限：明确提示已截断
         if (positions.size() >= NetworkConstants.MAX_POSITIONS && mc.player != null) {
             mc.player.displayClientMessage(
-                    net.minecraft.network.chat.Component.literal(
-                            "§c形状过大（达到上限 " + NetworkConstants.MAX_POSITIONS + " 格），已截断破坏前一部分！"), true);
+                    net.minecraft.network.chat.Component.translatable("message.rtsbuilding.shape.truncated_break", NetworkConstants.MAX_POSITIONS), true);
         }
         int toolSlot = mc.player != null ? mc.player.getInventory().selected : 0;
         RtsClientPacketGateway.sendShapeAreaDestroy(positions, toolSlot, "", false);
@@ -654,7 +666,6 @@ public final class BuildInteractionHandler {
         BuildingModule buildingModule = kernel.module(BuildingModule.class);
         if (buildingModule == null) return PASS;
 
-        boolean shiftDown = isShiftDown();
         boolean isBuildMode = buildingModule.getMode() == BuilderMode.BUILD;
 
         // 框选模式（非点击模式）：框选完成后，在框内右键 = 对整个框选区域批量放置，
@@ -665,13 +676,13 @@ public final class BuildInteractionHandler {
                 && isPosInSelection(hit.getBlockPos(), boxSelector)) {
             if (!isBuildMode) return PASS;
             if (buildingModule.hasSelectedFluid()) {
-                buildingModule.placeFluid(hit, shiftDown, ray.origin(), ray.direction());
+                buildingModule.placeFluid(hit, isReplaceModeActive(), ray.origin(), ray.direction());
                 return CONSUMED;
             }
             if (buildingModule.hasSelectedItem()) {
                 RtsClientPacketGateway.sendAreaBoxPlace(
                         boxSelector.getMinCorner(), boxSelector.getMaxCorner(),
-                        (byte) buildingModule.getPlaceRotateSteps(), shiftDown, true,
+                        (byte) buildingModule.getPlaceRotateSteps(), isReplaceModeActive(), true,
                         buildingModule.getSelectedItemId(), ray.origin(), ray.direction());
                 return CONSUMED;
             }
@@ -680,7 +691,7 @@ public final class BuildInteractionHandler {
 
         if (buildingModule.hasSelectedFluid()) {
             if (!isBuildMode) return PASS;
-            buildingModule.placeFluid(hit, shiftDown, ray.origin(), ray.direction());
+            buildingModule.placeFluid(hit, isReplaceModeActive(), ray.origin(), ray.direction());
             return CONSUMED;
         }
 
@@ -692,7 +703,7 @@ public final class BuildInteractionHandler {
             if (leftSidebarPanel != null && !leftSidebarPanel.isSingleBlockBuildShapeSelected()) {
                 return CONSUMED;
             }
-            buildingModule.placeSelected(hit, shiftDown, ray.origin(), ray.direction());
+            buildingModule.placeSelected(hit, isReplaceModeActive(), ray.origin(), ray.direction());
             return CONSUMED;
         }
 

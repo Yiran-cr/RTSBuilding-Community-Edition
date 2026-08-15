@@ -9,6 +9,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.Overla
 import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
 import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
 import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
+import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
@@ -322,13 +323,7 @@ public final class BindingRenderer {
 
     private void renderItemIcon(GuiGraphics g, ItemStack stack, int centerX, int centerY) {
         if (stack.isEmpty()) return;
-        var pose = g.pose();
-        pose.pushPose();
-        float scale = (float) ICON_SIZE / 16.0f;
-        pose.translate(centerX, centerY, 0);
-        pose.scale(scale, scale, 1.0f);
-        g.renderItem(stack, -8, -8);
-        pose.popPose();
+        GuiItemRenderer.drawItemCentered(g, stack, centerX, centerY, (float) ICON_SIZE / 16.0f);
     }
 
     private void renderScrollbar(GuiGraphics g, int x, int y, int h) {

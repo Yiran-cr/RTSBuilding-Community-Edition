@@ -25,7 +25,7 @@ public final class BoxSelectionPass implements RenderPass {
     private static final double OFFSET = 0.01D;
     
     private static final double OVERLAY_OFFSET = 0.02D;
-    private static final float DEPTH_ALPHA = 0.9f;
+    private static final float DEPTH_ALPHA = 1.0f;
     
     private static final double FLOW_SPEED = 0.02D;
 
@@ -357,7 +357,7 @@ public final class BoxSelectionPass implements RenderPass {
                     entitySelColor.r,
                     entitySelColor.g,
                     entitySelColor.b,
-                    0.9f, 0);
+                    1.0f, 0);
             if (depthTestEnabled) {
                 CornerBracketRenderer.renderCornerBrackets(poseStack, alloc.noDepth(),
                         bounds.minX, bounds.minY, bounds.minZ,
@@ -417,7 +417,7 @@ public final class BoxSelectionPass implements RenderPass {
                     CornerBracketRenderer.renderCornerBrackets(poseStack, alloc.brackets(),
                             pos.getX() - 0.01, pos.getY() - 0.01, pos.getZ() - 0.01,
                             pos.getX() + 1.01, pos.getY() + 1.01, pos.getZ() + 1.01,
-                            r, g, b, 0.6f, camDist);
+                            r, g, b, 1.0f, camDist);
                     
                     if (depthTestEnabled) {
                         CornerBracketRenderer.renderCornerBrackets(poseStack, alloc.noDepth(),

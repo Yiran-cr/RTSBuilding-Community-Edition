@@ -9,6 +9,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.BlockEn
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.EntityEntry;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.InteractionPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.SelectableEntry;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.TargetProbe;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.LeftSidebarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelector;
@@ -149,8 +150,23 @@ public final class EntityInteractionHandler {
 
             int entityId = target.getId();
             Vec3 hitLocation = hit.entityHit().getLocation();
-            RtsClientPacketGateway.sendInteractEntityEmptyHand(
-                    entityId, hitLocation, null, ray.origin(), ray.direction());
+            // 实体容器（村民/马/载具等）：与方块容器一致，先记录到标签面板（统一切换管理）
+            // 再发交互包。否则实体菜单打开时不经过 pageState.openRequested，openContainerPage
+            // 会把新菜单错误关联到旧 activeId（方块标签高亮但内容为实体菜单），且实体无标签可点。
+            if (TargetProbe.hasEntityGui(target)) {
+                interactionPanel = screen.getOrCreateInteractionPanel();
+                boolean shouldInteract = interactionPanel.recordDirectInteract(
+                        new EntityEntry(entityId, target,
+                                target.getDisplayName().getString(), hitLocation),
+                        ray.origin(), ray.direction(), (int) mouseX, (int) mouseY);
+                if (shouldInteract) {
+                    RtsClientPacketGateway.sendInteractEntityEmptyHand(
+                            entityId, hitLocation, null, ray.origin(), ray.direction());
+                }
+            } else {
+                RtsClientPacketGateway.sendInteractEntityEmptyHand(
+                        entityId, hitLocation, null, ray.origin(), ray.direction());
+            }
             return CONSUMED;
         }
 

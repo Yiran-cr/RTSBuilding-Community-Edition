@@ -55,6 +55,16 @@ public final class RtsToolLeaseManager {
      */
     public static RtsToolLease borrowMiningTool(ServerPlayer player, RtsStorageSession session, String toolItemId,
             ItemStack toolPrototype, int selectedToolSlot) {
+        return borrowMiningTool(player, session, toolItemId, toolPrototype, selectedToolSlot, false);
+    }
+
+    /**
+     * 带 {@code skipNearBreak} 的借用：跳过耐久 ≤5% 的即将损坏工具。
+     * <p>供挂起破坏作业恢复路径使用——避免把刚归还的同类型低耐久工具又借回来，
+     * 造成「恢复→立即再挂起」的死循环（见 {@code RtsDestructionBatch#tryResumePendingDestroyJobs}）。</p>
+     */
+    public static RtsToolLease borrowMiningTool(ServerPlayer player, RtsStorageSession session, String toolItemId,
+            ItemStack toolPrototype, int selectedToolSlot, boolean skipNearBreak) {
         if (player == null || session == null || toolItemId == null || toolItemId.isBlank()) {
             return RtsToolLease.empty();
         }
@@ -77,7 +87,7 @@ public final class RtsToolLeaseManager {
         }
         prototype.setCount(1);
 
-        RtsToolLease playerLease = borrowMiningToolFromPlayerInventory(player, prototype, selectedToolSlot);
+        RtsToolLease playerLease = borrowMiningToolFromPlayerInventory(player, prototype, selectedToolSlot, skipNearBreak);
         if (!playerLease.isEmpty()) {
             return playerLease;
         }
@@ -88,7 +98,7 @@ public final class RtsToolLeaseManager {
             return RtsToolLease.empty();
         }
         for (LinkedHandler linked : activeLinked) {
-            RtsToolLease linkedLease = borrowMiningToolFromLinkedHandler(linked.handler(), prototype);
+            RtsToolLease linkedLease = borrowMiningToolFromLinkedHandler(linked.handler(), prototype, skipNearBreak);
             if (!linkedLease.isEmpty()) {
                 return linkedLease;
             }
@@ -100,12 +110,13 @@ public final class RtsToolLeaseManager {
      * 扫描玩家主背包（排除选中的快捷栏槽位）寻找匹配的工具，
      * 然后检查剩余的快捷栏槽位。
      */
-    private static RtsToolLease borrowMiningToolFromPlayerInventory(ServerPlayer player, ItemStack prototype, int selectedToolSlot) {
+    private static RtsToolLease borrowMiningToolFromPlayerInventory(ServerPlayer player, ItemStack prototype,
+            int selectedToolSlot, boolean skipNearBreak) {
         int selected = RtsMiningValidator.clampHotbarSlot(selectedToolSlot);
         int start = RtsStoragePageBuilder.getPlayerMainInventoryStart(player);
         int end = RtsStoragePageBuilder.getPlayerMainInventoryEndExclusive(player);
         for (int slot = start; slot < end; slot++) {
-            RtsToolLease lease = borrowMiningToolFromPlayerSlot(player, prototype, slot);
+            RtsToolLease lease = borrowMiningToolFromPlayerSlot(player, prototype, slot, skipNearBreak);
             if (!lease.isEmpty()) {
                 return lease;
             }
@@ -114,7 +125,7 @@ public final class RtsToolLeaseManager {
             if (slot == selected) {
                 continue;
             }
-            RtsToolLease lease = borrowMiningToolFromPlayerSlot(player, prototype, slot);
+            RtsToolLease lease = borrowMiningToolFromPlayerSlot(player, prototype, slot, skipNearBreak);
             if (!lease.isEmpty()) {
                 return lease;
             }
@@ -125,12 +136,14 @@ public final class RtsToolLeaseManager {
     /**
      * 尝试从给定的玩家背包槽位分割出一个物品。
      */
-    private static RtsToolLease borrowMiningToolFromPlayerSlot(ServerPlayer player, ItemStack prototype, int slot) {
+    private static RtsToolLease borrowMiningToolFromPlayerSlot(ServerPlayer player, ItemStack prototype, int slot,
+            boolean skipNearBreak) {
         if (slot < 0 || slot >= player.getInventory().getContainerSize()) {
             return RtsToolLease.empty();
         }
         ItemStack current = player.getInventory().getItem(slot);
-        if (current.isEmpty() || !matchesMiningToolPrototype(current, prototype)) {
+        if (current.isEmpty() || !matchesMiningToolPrototype(current, prototype)
+                || (skipNearBreak && isTooDamagedToBorrow(current))) {
             return RtsToolLease.empty();
         }
         ItemStack borrowed = current.split(1);
@@ -147,13 +160,15 @@ public final class RtsToolLeaseManager {
      * 在链接的 {@link IItemHandler} 中搜索匹配的工具并提取一个物品。
      * 如果提取产生不匹配的物品，则重新插入。
      */
-    private static RtsToolLease borrowMiningToolFromLinkedHandler(IItemHandler handler, ItemStack prototype) {
+    private static RtsToolLease borrowMiningToolFromLinkedHandler(IItemHandler handler, ItemStack prototype,
+            boolean skipNearBreak) {
         if (handler == null || prototype == null || prototype.isEmpty()) {
             return RtsToolLease.empty();
         }
         for (int slot = 0; slot < handler.getSlots(); slot++) {
             ItemStack stack = handler.getStackInSlot(slot);
-            if (stack.isEmpty() || !matchesMiningToolPrototype(stack, prototype)) {
+            if (stack.isEmpty() || !matchesMiningToolPrototype(stack, prototype)
+                    || (skipNearBreak && isTooDamagedToBorrow(stack))) {
                 continue;
             }
             ItemStack borrowed = handler.extractItem(slot, 1, false);
@@ -165,6 +180,24 @@ public final class RtsToolLeaseManager {
             }
         }
         return RtsToolLease.empty();
+    }
+
+    /**
+     * 判断工具是否已处于即将损坏状态（耐久 ≤ 最大耐久的 5%，与
+     * {@link RtsMiningValidator#isToolNearBreak} 阈值一致）。近损坏工具不应被借用用于恢复，
+     * 否则借回后作业会立即再次挂起。
+     */
+    private static boolean isTooDamagedToBorrow(ItemStack stack) {
+        if (stack == null || stack.isEmpty() || !stack.isDamageableItem()) {
+            return false;
+        }
+        int maxDamage = stack.getMaxDamage();
+        if (maxDamage <= 0) {
+            return false;
+        }
+        int remaining = maxDamage - stack.getDamageValue();
+        int threshold = Math.max(1, (int) Math.ceil(maxDamage * 0.05D));
+        return remaining <= threshold;
     }
 
     /**

@@ -31,7 +31,7 @@ public record S2CRtsWorkflowProgressBatchPayload(
             buf.writeInt(entry.totalBlocks());
             buf.writeInt(entry.completedBlocks());
             buf.writeInt(entry.failedBlocks());
-            buf.writeByte(entry.onHold());
+            buf.writeByte(entry.holdType());
             buf.writeInt(entry.workflowEntryId());
             List<String> items = entry.missingItems();
             buf.writeInt(items.size());
@@ -53,7 +53,7 @@ public record S2CRtsWorkflowProgressBatchPayload(
             int totalBlocks = buf.readInt();
             int completedBlocks = buf.readInt();
             int failedBlocks = buf.readInt();
-            byte onHold = buf.readByte();
+            byte holdType = buf.readByte();
             int workflowEntryId = buf.readInt();
             int missingCount = buf.readInt();
             List<String> missingItems = new ArrayList<>(missingCount);
@@ -64,7 +64,7 @@ public record S2CRtsWorkflowProgressBatchPayload(
             entries.add(new S2CRtsWorkflowProgressPayload(
                     workflowIndex, workflowCount, workflowType, priority,
                     totalBlocks, completedBlocks, failedBlocks,
-                    missingItems, detailMessage, onHold, workflowEntryId));
+                    missingItems, detailMessage, holdType, workflowEntryId));
         }
         return new S2CRtsWorkflowProgressBatchPayload(entries);
     }

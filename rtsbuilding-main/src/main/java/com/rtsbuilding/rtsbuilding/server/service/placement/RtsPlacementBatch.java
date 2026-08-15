@@ -165,14 +165,19 @@ public final class RtsPlacementBatch {
                     // 快速建造路径：记录放置前的状态，用于批撤回
                     BlockPos trackedPos = clickedPos;
                     BlockState beforeState = player.serverLevel().getBlockState(trackedPos);
-                    keepGoing = RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, statePlan);
-                    if (keepGoing && (beforeState.isAir() || beforeState.canBeReplaced())
-                            && !player.serverLevel().getBlockState(trackedPos).isAir()) {
-                        job.placedPositions.add(trackedPos);
-                        RtsBuildEnergy.consumePlacement(player);
-                    } else if (keepGoing) {
-                        // keepGoing=true 但方块状态未变化（已存在/放置在其他位置）→ 计为跳过
-                        job.skippedWhileProcessing++;
+                    keepGoing = RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, statePlan, job.forcePlace());
+                    if (keepGoing) {
+                        // 替换模式（forcePlace）允许覆盖已有方块：放置成功判定不依赖 beforeState 的空气性
+                        BlockState afterState = player.serverLevel().getBlockState(trackedPos);
+                        boolean actuallyPlaced = !afterState.isAir()
+                                && (beforeState.isAir() || beforeState.canBeReplaced() || job.forcePlace());
+                        if (actuallyPlaced) {
+                            job.placedPositions.add(trackedPos);
+                            RtsBuildEnergy.consumePlacement(player);
+                        } else {
+                            // keepGoing=true 但方块状态未变化（已存在/放置在其他位置）→ 计为跳过
+                            job.skippedWhileProcessing++;
+                        }
                     }
                 } else {
                     Vec3 hitLocation = new Vec3(

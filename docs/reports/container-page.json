@@ -1,0 +1,90 @@
+{
+  "id": "container-page",
+  "title": "容器网页标签面板链路",
+  "subtitle": "NeoForge 1.21.1 · 单点/框选 → 服务端远程打开菜单 → setScreen 拦截 → 容器页状态机，含实体容器（村民）与方块容器冲突分析",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 4 · 修复 4 · 保留 0",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "EntityInteractionHandler", "path": "client/presentation/panel/handler/", "desc": "单点/框选右键入口：<code>handleDirectInteract</code>（单点）与 <code>handleBoxSelectInteract</code>（框选）收集目标并驱动面板打开。" },
+    { "name": "BoxTargetCollector", "path": "client/presentation/panel/handler/", "desc": "框选目标收集：<code>collectEntities</code>（含村民/马/载具）、<code>collectGuiBlocks</code>、<code>collectNonGuiBlocks</code>。" },
+    { "name": "InteractionPanel", "path": "client/presentation/panel/interaction/", "desc": "容器标签面板：网页式多标签承载全部框选/单点容器；协调 <code>openContainerEntry</code>（切换）与 <code>openContainerPage</code>（提交打开结果）。" },
+    { "name": "ContainerPageState", "path": "client/presentation/panel/interaction/", "desc": "容器页状态机：<code>pendingId</code>（等待打开）→ <code>activeId</code>（已打开）→ 超时/关闭；区分 <code>pendingPromoted</code> 转正与外部打开。" },
+    { "name": "TargetProbe", "path": "client/presentation/panel/interaction/", "desc": "目标 GUI 能力探测：实体（村民有职业/马/容器实体/<code>MenuProvider</code>）与方块（菜单提供者/use 覆写）。" },
+    { "name": "ContainerInputForwarder", "path": "client/presentation/panel/interaction/", "desc": "容器 screen 子覆盖层：输入转发、尺寸重建、<code>clear()</code> 释放旧 screen。" },
+    { "name": "ContainerIconResolver", "path": "client/presentation/panel/interaction/", "desc": "标签图标解析：按 <code>MenuType</code> 映射（村民→绿宝石）→ 条目自身图标 → 箱子兜底。" },
+    { "name": "ScreenCoordinator", "path": "client/application/service/", "desc": "协调 InteractionPanel 生命周期，<code>showContainerScreen</code> 把容器 screen 提交给面板。" },
+    { "name": "MinecraftSetScreenMixin", "path": "mixin/", "desc": "拦截 <code>Minecraft.setScreen</code>：当前为 BuilderScreen 时接管容器 screen 到面板；非 BuilderScreen 时孤儿重建 BuilderScreen 再接管。" },
+    { "name": "RtsEmptyHandInteractor", "path": "server/service/interaction/", "desc": "服务端远程空手交互：实体 <code>player.interactOn</code>（村民 startTrading）/ 方块 <code>useItemOn</code> 打开菜单，随后发 OpenScreenPacket。" },
+    { "name": "RtsRemoteMenuService", "path": "server/service/", "desc": "远程菜单管理：反射替换 <code>Container.stillValid</code>/<code>ContainerLevelAccess</code> 为恒真包装，防相机远离导致菜单被距离校验关闭。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 触发路径",
+      "type": "table",
+      "headers": ["路径", "调用点", "记录标签", "切换管理"],
+      "rows": [
+        ["单点·实体容器（村民等）", "<span class='path'>EntityInteractionHandler.handleDirectInteract</span>", "✅ 修复后记录", "✅ 修复后统一"],
+        ["单点·方块容器", "<span class='path'>EntityInteractionHandler.handleDirectInteract</span>", "✅", "✅"],
+        ["框选·实体+方块", "<span class='path'>handleBoxSelectInteract → showTargets</span>", "✅", "✅"],
+        ["外部打开（非面板请求）", "<span class='path'>MinecraftSetScreenMixin</span>", "❌ 外部标签", "❌ 归为外部容器"]
+      ]
+    },
+    {
+      "title": "2.2 时序（单点/框选打开容器）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "右键命中 → <code>recordDirectInteract</code> 记录条目 → <code>openContainerEntry</code>：同键跳过 / 切键先关旧容器 → <code>pageState.openRequested(key)</code>" },
+        { "side": "cli", "text": "<code>interactWithEntry</code> → <code>sendInteractEntityEmptyHand</code>（实体 id 或 <code>NO_ENTITY</code>+方块 hit）" },
+        { "side": "srv", "text": "<code>ServerActionHandler(INTERACT_BLOCK)</code> → <code>RtsEmptyHandInteractor</code>：实体 <code>interactOn</code> / 方块 <code>useItemOn</code> → 打开菜单" },
+        { "side": "srv", "text": "<code>markRemoteMenuOpen</code>：放松距离校验并记录 <code>remoteMenuContainerId</code> → 发 OpenScreenPacket" },
+        { "side": "cli", "text": "<code>Minecraft.setScreen</code> 被 mixin 拦截 → <code>InteractionPanel.openContainerPage</code>" },
+        { "side": "cli", "text": "openedId = <code>pendingId</code>（或 <code>consumePendingPromotion</code> 后的 <code>activeId</code>，否则外部 null）→ <code>pageState.opened(openedId)</code>" },
+        { "side": "cli", "text": "<code>buildTabs</code>：activeId 命中条目标签高亮；null 时渲染外部容器标签（标题=屏幕真实标题）" }
+      ]
+    },
+    {
+      "title": "2.3 实体容器与方块容器打开差异（冲突根源）",
+      "type": "note",
+      "note": "方块单点走 <code>recordDirectInteract → openContainerEntry → pageState.openRequested</code> 全链路；<strong>实体单点原先直接发交互包</strong>，绕过状态机。服务端 OpenScreenPacket 返回后 <code>openContainerPage</code> 的 openedId 推导只能回退旧 <code>activeId</code>，把实体菜单错误挂到旧方块 key 上 → 标签高亮方块但内容为实体菜单。"
+    },
+    {
+      "title": "2.4 外部容器标签",
+      "type": "note",
+      "note": "非面板请求打开的容器（activeId=null）渲染为外部标签：<strong>修复后</strong>标题取 <code>inputForwarder.getScreen().getTitle()</code>（真实容器名），无标题时才兜底固定文案「容器面板」。来源：孤儿 BuilderScreen 重建、其他 mod 打开、历史遗留外部容器。"
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 实体容器（村民）与方块容器冲突",
+      "status": "fixed",
+      "why": "根因：<code>handleDirectInteract</code> 实体分支直接发交互包，不经过 <code>recordDirectInteract/openContainerEntry</code>。面板已打开方块容器时单点村民，OpenScreenPacket 回来 <code>openContainerPage</code> 无 pendingId，回退旧 <code>activeId</code> → 村民菜单被关联到箱子 key。修复：实体满足 <code>TargetProbe.hasEntityGui</code> 时与方块一致先记录标签再发交互包，切换走同一关闭/等待流程。"
+    },
+    {
+      "title": "② 容器网页中标签没有容器名字",
+      "status": "fixed",
+      "why": "根因：外部容器标签固定 <code>FIXED_TITLE=「容器面板」</code>，不显示容器真实名字（单点实体、孤儿重建都会落入该分支）。修复：<code>buildTabs</code> 外部标签标题改取 <code>inputForwarder.getScreen().getTitle()</code>，空白才兜底固定文案。"
+    },
+    {
+      "title": "③ openedId 回退无法区分「转正」与「外部打开」",
+      "status": "fixed",
+      "why": "根因：<code>openContainerPage</code> 中 <code>openedId = pendingId ?? activeId</code>，<code>tickPending</code> 已转正时该回退正确，但面板开着时外部打开新容器也会误沿用旧 activeId。修复：<code>ContainerPageState</code> 新增 <code>pendingPromoted</code> 标记，仅 tick 转正过才回退 activeId，否则归为外部容器（null）。"
+    },
+    {
+      "title": "④ buildTabs 缓存未含屏幕实例",
+      "status": "fixed",
+      "why": "根因：缓存条件只比较 <code>entries</code> 引用与 externalTab 可见性，外部容器 A→B 切换（activeId 恒 null、entries 不变）时标签名不刷新。修复：缓存条件与记录加入 <code>tabsCacheScreen</code>（当前转发器屏幕实例）。"
+    }
+  ],
+  "boundaries": [
+    "<b>服务端远程菜单防关闭</b>：<code>RtsRemoteMenuService</code> 反射替换 <code>Container.stillValid</code> 与 <code>ContainerLevelAccess.evaluate</code> 为恒真包装，否则相机远离目标时原版距离校验会即时关闭菜单。",
+    "<b>外部容器语义</b>：非面板请求打开的容器（activeId=null）渲染为外部标签，无关闭按钮（entryIndex=-1），点击不触发切换。",
+    "<b>孤儿容器重建</b>：current 非 BuilderScreen 时，mixin 重建 BuilderScreen 并把孤儿容器提交到全新面板（activeId=null → 外部标签）。",
+    "<b>等待超时兜底</b>：<code>pendingTicks &gt; 40</code>（约 2 秒）时关闭面板，防服务端未响应导致标签页卡死。",
+    "<b>同键幂等</b>：<code>openContainerEntry</code> 对同 active/pending 键分别走尺寸同步与等待跳过的幂等路径，重复右键不会重复发包。",
+    "<b>tick 转正窗口</b>：<code>tickPending</code> 探测到容器打开（containerId≠0）即把 pending 转正为 active，避免探测与打开回调之间的窗口把 activeId 误置 null。"
+  ]
+}

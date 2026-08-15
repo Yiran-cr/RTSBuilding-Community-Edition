@@ -1,6 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.render.GuiRenderTypes;
 import com.rtsbuilding.rtsbuilding.client.util.render.model.SpriteRegion;
 import com.rtsbuilding.rtsbuilding.client.util.render.model.TextureInfo;
@@ -71,18 +72,10 @@ public final class GridSlotRenderer {
     public static void drawIcon(GuiGraphics g, ItemStack stack, int slotX, int slotY) {
         if (stack == null || stack.isEmpty()) return;
 
-        RenderSystem.disableDepthTest();
         int iconX = slotX + ICON_OFFSET;
         int iconY = slotY + ICON_OFFSET;
-        var pose = g.pose();
-        pose.pushPose();
-        pose.translate(iconX, iconY, 0);
-        g.renderItem(stack, 0, 0);
-        pose.popPose();
-
-        RenderSystem.enableDepthTest();
-        g.renderItemDecorations(Minecraft.getInstance().font, stack, iconX, iconY);
-        RenderSystem.disableDepthTest();
+        // 批量路径：物品网格会一次性绘制大量图标，深度污染由 GridRenderer 统一清理
+        GuiItemRenderer.drawItemBatch(g, stack, iconX, iconY);
     }
 
     

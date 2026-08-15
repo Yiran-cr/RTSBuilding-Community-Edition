@@ -19,7 +19,7 @@ public record S2CRtsWorkflowProgressPayload(
         int failedBlocks,
         List<String> missingItems,
         String detailMessage,
-        byte onHold,
+        byte holdType,
         int workflowEntryId) implements CustomPacketPayload {
 
     public static final Type<S2CRtsWorkflowProgressPayload> TYPE = new Type<>(
@@ -37,7 +37,7 @@ public record S2CRtsWorkflowProgressPayload(
         buf.writeVarInt(payload.totalBlocks());
         buf.writeVarInt(payload.completedBlocks());
         buf.writeVarInt(payload.failedBlocks());
-        buf.writeByte(payload.onHold());
+        buf.writeByte(payload.holdType());
         buf.writeVarInt(payload.workflowEntryId());
         List<String> items = payload.missingItems();
         buf.writeVarInt(items.size());
@@ -55,7 +55,7 @@ public record S2CRtsWorkflowProgressPayload(
         int totalBlocks = buf.readVarInt();
         int completedBlocks = buf.readVarInt();
         int failedBlocks = buf.readVarInt();
-        byte onHold = buf.readByte();
+        byte holdType = buf.readByte();
         int workflowEntryId = buf.readVarInt();
         int missingCount = buf.readVarInt();
         List<String> missingItems = new ArrayList<>(missingCount);
@@ -66,7 +66,7 @@ public record S2CRtsWorkflowProgressPayload(
         return new S2CRtsWorkflowProgressPayload(
                 workflowIndex, workflowCount, workflowType, priority,
                 totalBlocks, completedBlocks, failedBlocks,
-                missingItems, detailMessage, onHold, workflowEntryId);
+                missingItems, detailMessage, holdType, workflowEntryId);
     }
 
     public static S2CRtsWorkflowProgressPayload idle() {

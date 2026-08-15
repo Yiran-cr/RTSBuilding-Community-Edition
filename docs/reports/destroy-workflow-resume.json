@@ -1,0 +1,87 @@
+{
+  "id": "destroy-workflow-resume",
+  "title": "破坏工作流恢复链路",
+  "subtitle": "NeoForge 1.21.1 · 区域破坏（AREA_DESTROY）作业因工具耐久不足挂起后的自动恢复链路、死循环根因与修复",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 2 · 修复 2",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "RtsDestructionBatch", "path": "server/service/destruction/", "desc": "区域破坏批处理：<code>tickDestroyJobs</code> 每 tick 处理，工具近损坏时把作业移入 <code>pendingDestroyJobs</code> 并 <code>token.suspend()</code>；<code>tryResumePendingDestroyJobs</code> 自动恢复。" },
+    { "name": "RtsDestructionState", "path": "server/storage/state/", "desc": "纯数据容器：<code>destroyJobs</code>（活跃）+ <code>pendingDestroyJobs</code>（因工具耐久不足挂起）。" },
+    { "name": "RtsMiningValidator", "path": "server/service/mining/", "desc": "<code>isToolNearBreak</code>：活跃工具（lease 优先，否则回退槽位）耐久 ≤ 最大耐久的 5% 即判定近损坏。" },
+    { "name": "RtsToolLeaseManager", "path": "server/service/mining/", "desc": "工具租赁：<code>borrowMiningTool</code>（本次新增 skipNearBreak 选项）/ <code>returnMiningTool</code> / 原型匹配（允许耐久差异）。" },
+    { "name": "RtsMiningStateMachine", "path": "server/service/mining/", "desc": "<code>destroyMinedBlock</code>：用租赁或临时切换主手破坏目标方块，破坏成功后发送破坏动画包。" },
+    { "name": "ServerTickOrchestrator", "path": "server/service/", "desc": "<code>onPlayerTickPost</code> 每 tick 调 <code>tickDestroyJobs</code>（开头即尝试恢复）；存储变化时也触发 <code>tryResumePendingDestroyJobs</code>。" },
+    { "name": "RtsWorkflowEngine / RtsWorkflowToken", "path": "server/workflow/core/", "desc": "工作流生命周期：挂起时 <code>token.suspend()</code>，恢复时 <code>token.resume()</code>。" },
+    { "name": "ResumeWorkflowService", "path": "server/service/", "desc": "恢复扫描/动作分发：蓝图 → 放置作业 → <b>破坏作业</b>（本次接入 <code>pendingDestroyJobs</code>）。" },
+    { "name": "RtsResumePackets", "path": "network/resume/", "desc": "网络：<code>C2SRequestResumeScanPayload</code> 触发 scan，<code>C2SResumeActionPayload</code> 触发 apply。" },
+    { "name": "WorkflowInputHandler / ResumeWorkflowPanel", "path": "client/presentation/", "desc": "客户端：挂起工作流行点击「继续」→ 请求扫描弹出恢复面板；「开始/跳过/覆盖」按钮发送恢复动作。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 挂起触发（工具保护开启）",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "<code>enqueueDestroyBatch</code> 入队 <code>DestructionJob</code>（携带 toolProtectionEnabled）" },
+        { "side": "srv", "text": "<code>tickDestroyJobs</code> 每 tick：处理前先 <code>tryResumePendingDestroyJobs</code>，再逐格破坏" },
+        { "side": "srv", "text": "破坏前或破坏后检测 <code>job.toolProtectionEnabled && isToolNearBreak</code> → 作业移入 <code>pendingDestroyJobs</code> + <code>token.suspend()</code>" }
+      ]
+    },
+    {
+      "title": "2.2 自动恢复触发",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "<code>tryResumePendingDestroyJobs</code> 每 tick 被调用（tickDestroyJobs 开头 / 存储变化事件）" },
+        { "side": "srv", "text": "判定 <code>toolAvailable = !保护启用 || !isToolNearBreak</code>" },
+        { "side": "srv", "text": "工具仍近损坏且存在 lease → 归还旧工具 → <code>borrowMiningTool</code> 借新工具" },
+        { "side": "srv", "text": "工具可用 → 全部挂起作业移回 <code>destroyJobs</code> + <code>token.resume()</code>" }
+      ]
+    },
+    {
+      "title": "2.3 死循环根因（本次修复）",
+      "type": "note",
+      "note": "<code>borrowMiningTool</code> 用 <code>toolItemId</code> 匹配，<code>matchesMiningToolPrototype</code> 对可损坏工具做<b>标准化组件匹配（允许耐久差异）</b>。恢复路径归还旧 lease 后，若玩家只有这一把低耐久工具，borrow 会把<b>刚归还的同类型低耐久工具又借回来</b> → 恢复后 <code>tickDestroyJobs</code> 立即再判定 <code>isToolNearBreak</code> → 再次挂起 → 「恢复→挂起」无限循环，作业永远无法完成。"
+    },
+    {
+      "title": "2.4 修复后恢复时序",
+      "type": "flow",
+      "nodes": [
+        { "side": "srv", "text": "恢复路径借用 <code>borrowMiningTool(..., skipNearBreak=true)</code>：跳过耐久 ≤5% 的即将损坏工具" },
+        { "side": "srv", "text": "有可用高耐久工具 → 借用成功 → 恢复作业，正常继续破坏" },
+        { "side": "srv", "text": "无可用工具（借到低耐久的被跳过）→ 保持挂起，等待玩家提供/修复工具后下 tick 再试" }
+      ]
+    },
+    {
+      "title": "2.5 手动「继续」恢复链路（本次修复断点）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "挂起的工作流行点击「继续」→ <code>WorkflowInputHandler</code> 判断 onHold → <code>sendRequestResumeScan(entryId)</code>" },
+        { "side": "srv", "text": "<code>ResumeWorkflowService.scan</code>：蓝图 → 放置作业（<code>placement.pendingJobs</code>）→ 均未命中则 <b>scanDestroyJob</b>（<code>destruction.pendingDestroyJobs</code>，本次新增）" },
+        { "side": "srv", "text": "返回 <code>S2CResumeScanPayload</code>（无材料；工具近损坏时 missingItems=1 使按钮灰化）" },
+        { "side": "cli", "text": "<code>handleResumeScan</code> → <code>ResumeWorkflowPanel.open</code> → 显示「开始」按钮（无冲突）" },
+        { "side": "cli", "text": "点击「开始」→ <code>sendResumeAction(entryId, 0)</code> → <code>ResumeWorkflowService.apply</code> → 放置作业未命中则 <b>applyDestroyJob</b> → <code>RtsDestructionBatch.tryResumePendingDestroyJobs</code> 恢复" }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 恢复时借回同一把低耐久工具导致「恢复→挂起」死循环",
+      "status": "fixed",
+      "why": "根因：<code>tryResumePendingDestroyJobs</code> 归还旧 lease 后调用 <code>borrowMiningTool</code>，原型匹配允许耐久差异，会把刚归还的同类型低耐久（≤5%）工具又借回来，<code>miningToolLease</code> 被赋值为低耐久工具后 <code>toolAvailable=true</code> 恢复作业；但 <code>tickDestroyJobs</code> 继续处理时再次判定 <code>isToolNearBreak=true</code> 立即重新挂起，形成无限循环，破坏工作流永远无法恢复。修复：<code>RtsToolLeaseManager.borrowMiningTool</code> 新增 <code>skipNearBreak</code> 选项（跳过耐久 ≤5% 工具，阈值与 <code>isToolNearBreak</code> 一致），<code>tryResumePendingDestroyJobs</code> 恢复路径传 <code>true</code>——借用不到低耐久工具，玩家提供新工具后才能恢复，死循环消除；初始借用路径（<code>ToolBorrowPipe</code>）保持原行为不变。"
+    },
+    {
+      "title": "② 恢复面板「继续」按钮对破坏工作流无效",
+      "status": "fixed",
+      "why": "根因：破坏工作流挂起后作业在 <code>session.destruction.pendingDestroyJobs</code>，但 <code>ResumeWorkflowService.scan</code>/<code>apply</code> 只查询 <code>placement.pendingJobs</code>（放置作业）——scan 找不到作业返回 null（<code>RtsResumePackets</code> 不发 <code>S2CResumeScanPayload</code>，面板打不开），apply 直接返回 false（点了「继续」无反应）。修复：scan 增加 <code>scanDestroyJob</code> 分支（统计剩余未破坏位置、工具近损坏时置 missingItems=1 使按钮灰化），apply 增加 <code>applyDestroyJob</code> 分支（交给 <code>RtsDestructionBatch.tryResumePendingDestroyJobs</code> 借还工具并恢复）；<code>DestructionJob</code> 补 <code>remainingPositions()</code> 公开访问器。"
+    }
+  ],
+  "boundaries": [
+    "<b>恢复是自动的</b>：破坏作业挂起后无需手动操作，每 tick（或存储变化时）自动尝试恢复，工具修复/更换/保护关闭后即继续执行。",
+    "<b>skipNearBreak 仅作用于恢复路径</b>：初始借用（ToolBorrowPipe）保持原行为，避免改变「玩家想用尽工具耐久」的正常挖掘语义。",
+    "<b>近损坏阈值统一 5%</b>：借用跳过判定与 <code>RtsMiningValidator.isToolNearBreak</code> 的阈值一致（≤ maxDamage×5%）。",
+    "<b>无可用工具则保持挂起</b>：恢复路径借不到高耐久工具时作业继续等待，不强行恢复导致破坏失败或刷屏。"
+  ]
+}

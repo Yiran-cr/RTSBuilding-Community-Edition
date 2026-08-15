@@ -8,6 +8,7 @@ import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneAnimPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneBeamPayload;
 import com.rtsbuilding.rtsbuilding.network.feedback.S2CRtsDamageFeedbackPayload;
+import com.rtsbuilding.rtsbuilding.network.resume.S2CResumeScanPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsCarriedSyncPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStorageDirtyPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
@@ -113,6 +114,19 @@ public final class ClientPayloadDispatcher {
         switch (payload) {
             case S2CBlueprintStatusPayload p ->
                     RtsClientNetworkHandlers.handleBlueprintStatus(p, ctx);
+            default -> {}
+        }
+    }
+
+    // ======================================================================
+    //  Resume (workflow) domain
+    // ======================================================================
+
+    public static void dispatchResume(Object payload, IPayloadContext ctx) {
+        if (!IS_CLIENT) return;
+        switch (payload) {
+            case S2CResumeScanPayload p ->
+                    RtsClientNetworkHandlers.handleResumeScan(p, ctx);
             default -> {}
         }
     }

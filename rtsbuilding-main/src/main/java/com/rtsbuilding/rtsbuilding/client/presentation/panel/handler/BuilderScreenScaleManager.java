@@ -15,6 +15,9 @@ public final class BuilderScreenScaleManager {
     
 
     
+    /** 是否自动跟随原版 GUI 缩放（默认）：窗口尺寸变化时 UI 与原版一致地缩放重排。 */
+    private boolean autoRtsGuiScale = true;
+
     private double fixedRtsGuiScale = BuilderScreenConstants.DEFAULT_RTS_GUI_SCALE;
 
     
@@ -27,10 +30,32 @@ public final class BuilderScreenScaleManager {
     
 
     public double getRtsGuiScale() {
+        // 自动模式：跟随原版当前 GUI 缩放（Minecraft 窗口 resize 时自动更新）
+        if (this.autoRtsGuiScale) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getWindow() != null && mc.getWindow().getGuiScale() > 0.0D) {
+                return mc.getWindow().getGuiScale();
+            }
+            return BuilderScreenConstants.DEFAULT_RTS_GUI_SCALE;
+        }
         return this.fixedRtsGuiScale;
     }
 
+    /** 是否处于自动跟随原版 GUI 缩放状态。 */
+    public boolean isAutoRtsGuiScale() {
+        return this.autoRtsGuiScale;
+    }
+
+    /** 恢复到自动跟随原版 GUI 缩放。 */
+    public void resetToAutoRtsGuiScale() {
+        this.autoRtsGuiScale = true;
+    }
+
     public String rtsGuiScaleLabel() {
+        if (this.autoRtsGuiScale) {
+            return net.minecraft.network.chat.Component
+                    .translatable("screen.rtsbuilding.settings.ui_scale.auto").getString();
+        }
         double scale = sanitizeRtsGuiScale(this.fixedRtsGuiScale);
         if (Math.abs(scale - Math.rint(scale)) < 0.001D) {
             return String.format(Locale.ROOT, "%.0fx", scale);
@@ -38,11 +63,15 @@ public final class BuilderScreenScaleManager {
         return String.format(Locale.ROOT, "%.1fx", scale);
     }
 
+    /** 手动调节缩放：退出自动模式，使用固定缩放。 */
     public void adjustRtsGuiScale(double delta) {
+        this.autoRtsGuiScale = false;
         this.fixedRtsGuiScale = sanitizeRtsGuiScale(this.fixedRtsGuiScale + delta);
     }
 
+    /** 手动设置缩放：退出自动模式，使用固定缩放。 */
     public void setRtsGuiScale(double scale) {
+        this.autoRtsGuiScale = false;
         this.fixedRtsGuiScale = sanitizeRtsGuiScale(scale);
     }
 

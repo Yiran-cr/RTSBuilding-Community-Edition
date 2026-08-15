@@ -8,6 +8,7 @@ import com.rtsbuilding.rtsbuilding.network.feedback.RtsFeedbackPackets;
 import com.rtsbuilding.rtsbuilding.network.handler.ServerActionHandler;
 import com.rtsbuilding.rtsbuilding.network.message.C2SAction;
 import com.rtsbuilding.rtsbuilding.network.message.C2SCameraPosePayload;
+import com.rtsbuilding.rtsbuilding.network.resume.RtsResumePackets;
 import com.rtsbuilding.rtsbuilding.network.storage.RtsStoragePackets;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -40,5 +41,6 @@ public final class RtsPayloadRegistrar {
         RtsBuilderPackets.register(registrar);
         RtsFeedbackPackets.register(registrar);
         BlueprintPayloadRegistrar.register(registrar);
+        RtsResumePackets.register(registrar);
     }
 }

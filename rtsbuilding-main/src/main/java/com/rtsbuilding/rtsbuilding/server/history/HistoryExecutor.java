@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.server.history;
 
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
+import com.rtsbuilding.rtsbuilding.server.service.beam.RtsDroneBeamService;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
@@ -35,6 +36,7 @@ import java.util.List;
  *   <li>跳过已被占用的位置（部分恢复）</li>
  *   <li>破坏时只删除与记录类型相同的方块（防止误破坏）</li>
  *   <li>单次撤销受预算限制，超大批次分多次完成（防单 tick 卡顿）</li>
+ *   <li>撤回同样广播无人机光束：撤回破坏（恢复放置）发建造蓝光，撤回放置（破坏方块）发破坏红光</li>
  * </ul>
  */
 public final class HistoryExecutor {
@@ -128,6 +130,9 @@ public final class HistoryExecutor {
                     }
                 }
             }
+
+            // 撤回破坏（重新放置）：向其他玩家广播建造蓝光
+            RtsDroneBeamService.broadcastPlace(player, pos);
 
             restoredCount++;
         }
@@ -244,6 +249,9 @@ public final class HistoryExecutor {
             if (placedByRts) {
                 tracker.clear(pos);
             }
+
+            // 撤回放置（破坏方块）：向其他玩家广播破坏红光
+            RtsDroneBeamService.broadcastBreak(player, pos);
 
             // 生存模式：优先返还到链接储存空间，然后玩家背包，最后掉落物
             if (!isCreative) {

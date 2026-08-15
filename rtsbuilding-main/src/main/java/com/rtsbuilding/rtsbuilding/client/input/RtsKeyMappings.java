@@ -158,6 +158,29 @@ public final class RtsKeyMappings {
     );
 
     /**
+     * 循环切换形状填充模式（实心 → 空心 → 框架 → 实心），仅对体/圆柱/球生效。
+     */
+    public static final KeyMapping CYCLE_FILL_MODE_KEY = new KeyMapping(
+            "key.rtsbuilding.cycle_fill_mode",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_X,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 按住时启用连锁挖掘（Ultimine），松开即停用。默认 `` ` ``（~）键。
+     * 启用期间破坏侧形状画笔被禁用，左键直接触发连锁挖掘。
+     */
+    public static final KeyMapping ULTIMINE_KEY = new KeyMapping(
+            "key.rtsbuilding.ultimine",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_GRAVE_ACCENT,
+            CATEGORY_FUNCTION
+    );
+
+    /**
      * 检查 {@link #LINE_FLAT_KEY} 绑定的按键当前是否按下。
      * <p>直接读取绑定键的 GLFW 状态（键盘或鼠标），不依赖每 tick 的
      * {@code KeyMappingState} 更新（后者在自定义 Screen 中不可靠），
@@ -181,6 +204,21 @@ public final class RtsKeyMappings {
      */
     public static boolean isPlaceOffsetDown() {
         InputConstants.Key bound = PLACE_OFFSET_KEY.getKey();
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        if (window == 0L) return false;
+        if (bound.getType() == InputConstants.Type.MOUSE) {
+            return GLFW.glfwGetMouseButton(window, bound.getValue()) == GLFW.GLFW_PRESS;
+        }
+        return GLFW.glfwGetKey(window, bound.getValue()) == GLFW.GLFW_PRESS;
+    }
+
+    /**
+     * 检查 {@link #ULTIMINE_KEY} 绑定的按键当前是否按住。
+     * <p>直接读取绑定键的 GLFW 状态，不依赖每 tick 的 {@code KeyMappingState} 更新
+     * （后者在自定义 Screen 中不可靠），同时跟随玩家在设置中的自定义绑定。</p>
+     */
+    public static boolean isUltimineDown() {
+        InputConstants.Key bound = ULTIMINE_KEY.getKey();
         long window = Minecraft.getInstance().getWindow().getWindow();
         if (window == 0L) return false;
         if (bound.getType() == InputConstants.Type.MOUSE) {

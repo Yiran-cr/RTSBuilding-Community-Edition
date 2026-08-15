@@ -313,6 +313,14 @@ public final class BuilderScreenEventRouter {
             lb.toggleItemPickupMode();
             return CONSUMED;
         }
+        if (keyMatches(RtsKeyMappings.CYCLE_FILL_MODE_KEY, event)) {
+            // 只循环当前激活形状（体/球/圆柱）的填充模式，各形状独立记忆
+            com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape shape = screen.getActiveBuildShape();
+            if (shape != null) {
+                kernel.renderPipeline().lineBrush.cycleFillModeFor(shape);
+            }
+            return CONSUMED;
+        }
         if (keyMatches(RtsKeyMappings.CYCLE_MODE_KEY, event)) {
             topBar.cycleMode();
             return CONSUMED;

@@ -8,7 +8,8 @@ public final class RtsWorkflowProgressProcessor {
         if (status == null || !status.isActive()) return "";
         String label = status.typeLabel();
         if (status.onHold()) {
-            label += " (搁置)";
+            label += net.minecraft.network.chat.Component
+                    .translatable("screen.rtsbuilding.workflow.suspended").getString();
         }
         return label;
     }

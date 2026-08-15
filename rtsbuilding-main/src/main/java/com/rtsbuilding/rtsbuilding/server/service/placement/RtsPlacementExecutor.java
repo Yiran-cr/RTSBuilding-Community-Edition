@@ -26,6 +26,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -114,6 +115,15 @@ public final class RtsPlacementExecutor {
             // 1.1.3 的普通右键依赖主手路径；itemId 为空时必须继续模拟原版 useItemOn/useItem。
             return placeWithMainHand(player, session, level, clickedPos, face, hit, interactionPos, rayContext,
                     skipIfOccupied, forcePlace, refreshStoragePage);
+        }
+
+        // 单方块替换（forcePlace 且不跳过已占用）：改为快速建造式可靠放置——
+        // 先确认物品可提取 → 再逐个破坏目标 → 再放置，避免“挖空但没放上”的失效
+        if (forcePlace && !skipIfOccupied) {
+            BlockState current = level.getBlockState(clickedPos);
+            if (!current.isAir() && !current.canBeReplaced()) {
+                return placeReplaceAt(player, session, level, clickedPos, face, rotateSteps, itemId, itemPrototype);
+            }
         }
 
         return placeWithStorageItem(player, session, level, clickedPos, face, hit, interactionPos, rayContext,
@@ -403,6 +413,30 @@ public final class RtsPlacementExecutor {
                         1L);
             }
         }
+    }
+
+    /**
+     * 单方块替换的可靠放置：构建快速建造放置计划并走 {@link RtsPlacementQuickBuild#placeStateBatchEntry}
+     * （先提取物品确认可用 → 原生破坏 → 放置，掉落物存入 RTS 存储）。目标无法解析放置状态时返回
+     * {@code true} 跳过（不破坏）。
+     */
+    private static boolean placeReplaceAt(ServerPlayer player, RtsStorageSession session, ServerLevel level,
+                                         BlockPos clickedPos, Direction face, byte rotateSteps,
+                                         String itemId, ItemStack itemPrototype) {
+        ResourceLocation id = ResourceLocation.tryParse(itemId);
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return true;
+        net.minecraft.world.item.Item item = BuiltInRegistries.ITEM.get(id);
+        if (!(item instanceof net.minecraft.world.item.BlockItem blockItem)) return true;
+        ItemStack template = RtsPlacementExtractor.sanitizePrototype(itemId, itemPrototype);
+        if (template.isEmpty()) template = new ItemStack(item);
+        template.setCount(1);
+        BlockPlaceContext ctx = new BlockPlaceContext(level, player, net.minecraft.world.InteractionHand.MAIN_HAND,
+                template, new BlockHitResult(Vec3.atCenterOf(clickedPos), face, clickedPos, false));
+        BlockState state = blockItem.getBlock().getStateForPlacement(ctx);
+        if (state == null) return true; // 无法放置，跳过（不破坏）
+        BlockState rotated = RtsPlacementHelper.rotateState(state, rotateSteps);
+        var plan = new RtsPlacementQuickBuild.StatePlacementPlan(item, template, rotated, itemId);
+        return RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, plan, true);
     }
 
 }

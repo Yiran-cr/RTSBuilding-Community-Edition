@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.common.entity.RtsDroneEntity;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsDroneBeamPayload;
 import net.minecraft.client.Minecraft;
@@ -70,6 +71,9 @@ public final class DroneBeamRenderer {
     /** 建造蓝光颜色（RGB，0-1）。 */
     private static final float[] PLACE_COLOR = {0.30F, 0.70F, 1.0F};
 
+    /** 替换模式建造黄光颜色（RGB，0-1）。 */
+    private static final float[] REPLACE_COLOR = {1.0F, 0.85F, 0.20F};
+
     /** 破坏红光颜色（RGB，0-1）。 */
     private static final float[] BREAK_COLOR = {1.0F, 0.32F, 0.30F};
 
@@ -98,6 +102,13 @@ public final class DroneBeamRenderer {
     public void addBeam(S2CRtsDroneBeamPayload payload) {
         this.beams.add(new Beam(payload.droneEntityId(), payload.targetPos(), payload.place(),
                 new Vec3(payload.originX(), payload.originY(), payload.originZ())));
+    }
+
+    /** 客户端「方块替换」开关是否开启（所有形状共享）；内核未初始化时按关闭处理。 */
+    private static boolean isReplaceEnabled() {
+        RtsClientKernel kernel = RtsClientKernel.get();
+        if (kernel == null || kernel.renderPipeline() == null) return false;
+        return kernel.renderPipeline().lineBrush.isReplaceEnabled();
     }
 
     /**
@@ -135,7 +146,9 @@ public final class DroneBeamRenderer {
             }
             Vec3 target = Vec3.atCenterOf(beam.targetPos);
             if (beam.place) {
-                drawBeam(builder, pose, origin, target, PLACE_COLOR, age);
+                // 替换模式开启时建造光束改为黄色（标识放置将覆盖已有方块）
+                drawBeam(builder, pose, origin, target,
+                        isReplaceEnabled() ? REPLACE_COLOR : PLACE_COLOR, age);
             } else {
                 drawBeam(builder, pose, target, origin, BREAK_COLOR, age);
             }

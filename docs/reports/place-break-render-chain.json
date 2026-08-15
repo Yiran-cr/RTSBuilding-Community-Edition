@@ -1,135 +1,125 @@
 {
   "id": "place-break-render-chain",
-  "title": "放置 / 破坏渲染链路",
-  "subtitle": "NeoForge 1.21.1 · 远程建造/破坏的形状预览与成功反馈渲染链路、断点修复与边界分析",
+  "title": "放置 / 破坏渲染链路（动画跟随方块状态）",
+  "subtitle": "NeoForge 1.21.1 · 远程建造/破坏的放置与破坏动画链路：动画启动时刻锚定到客户端方块状态变化，与实况同步",
   "tags": {
     "module": "rtsbuilding-main",
     "status": "已走查并修复",
-    "counts": "问题 3 · 修复 3",
+    "counts": "问题 5 · 修复 5",
     "result": "BUILD SUCCESSFUL"
   },
   "classes": [
-    { "name": "ClientRenderHandler", "path": "client/bootstrap/", "desc": "渲染入口：<code>RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS</code> 触发 <code>kernel.onRenderFrame</code>。" },
-    { "name": "RenderPipeline", "path": "client/render/", "desc": "渲染管线调度：reset → 各 pass <code>shouldRender/render</code> → flush；注册形状预览、放置动画等全部 pass。" },
-    { "name": "LineBrushSelector", "path": "client/render/pass/", "desc": "画笔状态机：<code>start/pickEnd/advancePhase/computePositions</code>，不感知具体形状。" },
-    { "name": "BuildShape", "path": "client/build/shape/", "desc": "形状几何计算：LINE/WALL/FACE/SOLID/CIRCLE/SPHERE，按阶段渲染形态 <code>renderShape()</code>。" },
-    { "name": "LineBrushRenderPass", "path": "client/render/pass/", "desc": "形状画笔预览：放置侧蓝/紫（重叠），破坏侧红/紫（不可破坏）/灰（空气）；本次接入动作半径过滤。" },
-    { "name": "PlaceAnimationPass", "path": "client/render/pass/", "desc": "放置成功动画（本次新增）：消费 <code>GhostRingBuffer</code>，白色线框随年龄淡出，渲染后 <code>prune</code>。" },
-    { "name": "GhostRingBuffer", "path": "client/render/", "desc": "放置动画环形缓冲：<code>handlePlaceAnimation</code> 写入；本次修正 <code>forEach</code> 全槽遍历与 <code>prune</code> 计数。" },
-    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "收包处理：<code>handlePlaceAnimation</code>（写缓冲）、<code>handleBreakAnimation</code>（清裂纹+本地破坏音）、<code>handleMineProgress</code>（裂纹）。" },
-    { "name": "MiningState", "path": "client/infrastructure/module/mining/", "desc": "破坏裂纹渲染状态：<code>destroyBlockProgress(0x525453, ...)</code> 驱动原版裂纹。" },
-    { "name": "UltiminePreviewPass", "path": "client/render/pass/", "desc": "连锁挖掘预览：客户端 BFS 收集 + 动作半径过滤 + <code>UltimineBlockMerger</code> 合并外轮廓边框。" },
-    { "name": "ActionRadiusFilter", "path": "client/render/util/", "desc": "动作半径过滤工具（本次新增）：客户端预览与服务端 <code>RtsCameraManager.isWithinActionRange</code> 对齐。" },
-    { "name": "RtsPlacementSound", "path": "server/service/placement/", "desc": "放置动画/声音包发送：<code>playRemotePlacedBlockAnimation</code> 发 <code>S2CRtsPlaceAnimationPayload</code>。" },
-    { "name": "RtsMiningNetworkHelper", "path": "server/service/mining/", "desc": "破坏反馈包发送：<code>sendBreakAnimation</code>、<code>sendMineProgress</code>、<code>sendUltimineBatchProgress</code>。" },
-    { "name": "CornerBracketRenderer", "path": "client/render/util/", "desc": "角支架线框渲染（深度 + 无深度双层），供形状预览/放置动画/连锁挖掘共用。" },
-    { "name": "ClientPacketListenerMixin / ClientLevelMixin", "path": "mixin/", "desc": "RTS 模式下吞掉 2001 破坏事件与 <code>addDestroyBlockEffect</code> 破坏粒子，双兜底静默。" }
+    { "name": "RtsPlacementSound", "path": "server/service/placement/", "desc": "放置成功反馈：<code>playRemotePlacedBlockAnimation</code> 发送 <code>S2CRtsPlaceAnimationPayload</code>（携带 serverTick+seq），并广播建造蓝光。" },
+    { "name": "RtsMiningNetworkHelper", "path": "server/service/mining/", "desc": "破坏成功反馈：<code>sendBreakAnimation</code> 发送 <code>S2CRtsBreakAnimationPayload</code>（破坏前/后状态 + serverTick+seq）。" },
+    { "name": "RtsPlacementExecutor / RtsPlacementQuickBuild / RtsInteractionServiceImpl", "path": "server/service/placement/", "desc": "放置执行：<code>setBlock(pos, state, 3)</code> 广播单格 BlockUpdate，成功后调用 <code>playRemotePlacedBlockAnimation</code>。" },
+    { "name": "RtsMiningStateMachine", "path": "server/service/mining/", "desc": "破坏执行：<code>destroyMinedBlock</code> 原版破坏广播 BlockUpdate，成功后 <code>sendBreakAnimation</code>。" },
+    { "name": "RtsClientNetworkHandlers", "path": "client/network/", "desc": "收包处理：<code>handlePlaceAnimation</code>/<code>handleBreakAnimation</code> 仅登记「预期变化」交给 <code>RtsEffectStateTracker</code>；破坏另清裂纹 + 本地破坏音。" },
+    { "name": "RtsEffectStateTracker", "path": "client/render/", "desc": "状态绑定器（核心）：登记预期动画，动画启动时刻 = 客户端实际看到状态变化的时刻（<code>onBlockChanged</code> 触发 / register 立即检查 / tick 超时兜底）。" },
+    { "name": "ClientPacketListenerMixin", "path": "mixin/", "desc": "<code>handleBlockUpdate</code> HEAD 注入：读取变化前状态调 <code>onBlockChanged</code>，匹配预期动画并触发；同时拦截 2001 破坏事件静默。" },
+    { "name": "GhostRingBuffer", "path": "client/render/", "desc": "特效环形缓冲：<code>schedule</code>/<code>drainPending</code> 两级背压（满则排队不丢），同位置重复写入保留播放进度。" },
+    { "name": "RingBufferHolder", "path": "client/render/", "desc": "缓冲实例持有：<code>INSTANCE</code>（放置 256）+ <code>BREAK_EFFECTS</code>（破坏 256）。" },
+    { "name": "PlaceAnimationPass", "path": "client/render/pass/", "desc": "放置动画渲染：角支架线框从目标上方 2 格下落 350ms + 落定淡出 250ms，颜色取方块地图色。" },
+    { "name": "BreakEffectPass", "path": "client/render/pass/", "desc": "破坏动画渲染：3 个实心半透明小碎块上飘 600ms，颜色取被破坏方块地图色。" },
+    { "name": "ClientTickHandler", "path": "client/bootstrap/", "desc": "每 client tick 调用 <code>RtsEffectStateTracker.tick()</code>，处理就绪/超时兜底，避免动画永久丢失。" },
+    { "name": "ClientLevelMixin", "path": "mixin/", "desc": "拦截 <code>addDestroyBlockEffect</code> 破坏粒子，与 ClientPacketListenerMixin 双兜底静默。" }
   ],
   "sections": [
     {
-      "title": "2.1 渲染触发入口",
+      "title": "2.1 服务端执行与广播",
       "type": "flow",
       "nodes": [
-        { "side": "cli", "text": "<code>ClientRenderHandler.onRenderLevel</code>（AFTER_TRANSLUCENT_BLOCKS）" },
-        { "side": "cli", "text": "<code>RtsClientKernel.onRenderFrame</code>" },
-        { "side": "cli", "text": "<code>RenderPipeline.onRenderFrame</code>：reset → 逐 pass <code>shouldRender/render</code> → flush" }
+        { "side": "srv", "text": "放置（快速建造，主要批量路径）：<code>playRemotePlacedBlockAnimation(player, pos, state)</code> <b>先发动画包</b>（预知目标 state）→ 再 <code>setBlock</code> 广播单格 BlockUpdate——动画包先于状态变化到达客户端" },
+        { "side": "srv", "text": "交互式放置：<code>RtsPlacementExecutor</code> / <code>RtsInteractionServiceImpl</code> 放置后检测 placedPos 再发动画包（晚于 BlockUpdate，延迟一个 RTT 可接受）" },
+        { "side": "srv", "text": "破坏：<code>RtsMiningStateMachine.destroyMinedBlock</code> 原版 <code>gameMode.destroyBlock</code> 广播 BlockUpdate，破坏成功后 <code>sendBreakAnimation</code>（晚于 BlockUpdate，碎块上飘对 RTT 不敏感）" }
       ]
     },
     {
-      "title": "2.2 形状画笔预览链路（放置 / 破坏共用）",
-      "type": "flow",
-      "nodes": [
-        { "side": "cli", "text": "<code>BuildInteractionHandler.handleTick</code> 每 tick <code>updateLineBrushHover</code> 更新悬停点（状态源）" },
-        { "side": "cli", "text": "<code>LineBrushSelector.computePositions()</code> → <code>BuildShape.renderShape(phase).compute(ShapeInput)</code> 几何计算" },
-        { "side": "cli", "text": "<code>LineBrushRenderPass.render</code>：动作半径过滤 + 按归属着色（放置蓝/紫、破坏红/紫/灰）" },
-        { "side": "cli", "text": "<code>CornerBracketRenderer.renderCornerBrackets</code>：深度层 + 穿透层双线框" },
-        { "side": "cli", "text": "<code>BuilderScreen.renderLineBrushHint</code>：<code>lineBrush.currentHint()</code> 提示文案（破坏侧已替换为左键文案）" }
-      ]
-    },
-    {
-      "title": "2.3 形状预览着色对比",
+      "title": "2.2 动画确认包（预期声明）",
       "type": "table",
-      "headers": ["场景", "着色", "说明"],
+      "headers": ["数据包", "载荷", "用途"],
       "rows": [
-        ["放置侧 · 空气位置", "蓝色 <code>lineBrushColor</code>", "可放置位置"],
-        ["放置侧 · 已有方块", "紫色 <code>lineBrushOverlapColor</code>", "冲突提示"],
-        ["破坏侧 · 可破坏方块", "红色 <code>lineBrushBreakColor</code>", "破坏目标"],
-        ["破坏侧 · 不可破坏方块", "紫色 <code>lineBrushOverlapColor</code>", "破坏速度 &lt; 0（如基岩）"],
-        ["破坏侧 · 空气位置", "灰色 <code>lineBrushAirColor</code>", "形状覆盖但无目标方块"],
-        ["超出动作半径", "不渲染", "<code>ActionRadiusFilter</code> 与服务端一致"]
+        ["<code>S2CRtsPlaceAnimationPayload</code>", "pos + 放置后 state + serverTick + seq", "声明「该位置放置已发生，需播放建造动画」"],
+        ["<code>S2CRtsBreakAnimationPayload</code>", "pos + 破坏前 state + 破坏后 resultState + serverTick + seq", "声明「该位置破坏已发生，需播放破坏动画」（碎块颜色用破坏前 state）"]
       ]
     },
     {
-      "title": "2.4 放置成功反馈链路（本次修复断点）",
+      "title": "2.3 客户端登记（不直接播放）",
       "type": "flow",
       "nodes": [
-        { "side": "srv", "text": "放置成功：<code>RtsPlacementExecutor</code> / <code>RtsPlacementQuickBuild</code> / <code>RtsInteractionServiceImpl</code>" },
-        { "side": "srv", "text": "<code>RtsPlacementSound.playRemotePlacedBlockAnimation</code> 发 <code>S2CRtsPlaceAnimationPayload</code>" },
-        { "side": "cli", "text": "<code>handlePlaceAnimation</code> → <code>GhostRingBuffer.INSTANCE.add</code>（写入）" },
-        { "side": "cli", "text": "<code>PlaceAnimationPass</code>（新增）：<code>forEach</code> 消费，白色线框 500ms 淡出，渲染后 <code>prune</code>" }
+        { "side": "cli", "text": "<code>handlePlaceAnimation</code> → <code>registerPlace(pos, targetState)</code>：当前状态 <code>cur.equals(targetState)</code> 则立即播放（交互式路径，状态已就绪），否则入等待集合（快速建造路径动画包先到，等待状态变化精确触发）" },
+        { "side": "cli", "text": "<code>handleBreakAnimation</code> → <code>registerBreak(pos, breakBeforeState)</code>：已变空气则立即写缓冲，否则入等待集合；同时清裂纹 + 本地破坏音" }
       ]
     },
     {
-      "title": "2.5 破坏成功反馈链路",
+      "title": "2.4 状态变化触发（核心：动画跟随状态）",
       "type": "flow",
       "nodes": [
-        { "side": "srv", "text": "<code>destroyMinedBlock</code> 破坏成功 → 广播 <code>levelEvent(2001)</code>" },
-        { "side": "cli", "text": "<code>ClientPacketListenerMixin</code> 拦截 2001（静默）" },
-        { "side": "srv", "text": "<code>RtsMiningNetworkHelper.sendBreakAnimation</code> 发 <code>S2CRtsBreakAnimationPayload</code>" },
-        { "side": "cli", "text": "<code>handleBreakAnimation</code>：清残留裂纹 + 主相机位置本地播放破坏音（限流 1/tick）" }
+        { "side": "cli", "text": "客户端收到 BlockUpdate → <code>ClientPacketListener.handleBlockUpdate</code>" },
+        { "side": "cli", "text": "<code>ClientPacketListenerMixin</code> HEAD 注入：<code>getLevel().getBlockState(pos)</code> 取变化前状态 → <code>RtsEffectStateTracker.onBlockChanged(old, new)</code>" },
+        { "side": "cli", "text": "放置方向（变非空气）命中等待集合 → <code>INSTANCE.schedule(pos, newState, now)</code>" },
+        { "side": "cli", "text": "破坏方向（变空气）命中等待集合 → <code>BREAK_EFFECTS.schedule(pos, breakBeforeState, now)</code>" }
       ]
     },
     {
-      "title": "2.6 破坏进度裂纹链路",
+      "title": "2.5 缓冲与渲染",
       "type": "flow",
       "nodes": [
-        { "side": "srv", "text": "<code>sendMineProgress</code> / <code>sendUltimineBatchProgress</code> 发 <code>S2CRtsMineProgressPayload</code>（带变化检测）" },
-        { "side": "cli", "text": "<code>handleMineProgress</code> → <code>MiningModule.applyMineProgress</code>" },
-        { "side": "cli", "text": "<code>MiningState.applyMineProgress</code> → <code>mc.level.destroyBlockProgress(0x525453, pos, stage)</code> 原版裂纹（0-9 阶段）" }
+        { "side": "cli", "text": "<code>GhostRingBuffer.schedule</code>：先补入等待队列（drainPending），再写环形区；满则排队不丢" },
+        { "side": "cli", "text": "<code>PlaceAnimationPass.render</code> / <code>BreakEffectPass.render</code>：drainPending → forEach 按年龄推进动画 → prune 过期" }
       ]
     },
     {
-      "title": "2.7 连锁挖掘预览链路（破坏另一路径）",
-      "type": "flow",
-      "nodes": [
-        { "side": "cli", "text": "<code>UltiminePreviewPass.render</code>：鼠标方块为种子" },
-        { "side": "cli", "text": "<code>RtsUltimineCollector.collect</code> 客户端 BFS 收集同类型连通方块（硬度比 ≤1.5x 过滤）" },
-        { "side": "cli", "text": "<code>ActionRadiusFilter</code> 动作半径过滤 + <code>filterOuterBlocks</code> 外周提取" },
-        { "side": "cli", "text": "<code>UltimineBlockMerger.getEdgeLines</code> 合并外轮廓边 → <code>CornerBracketRenderer.renderEdges</code> 金色边框" }
-      ]
-    },
-    {
-      "title": "2.8 破坏粒子静默（双 mixin 兜底）",
+      "title": "2.6 顺序容错（启动时刻统一为触发时刻）",
       "type": "cards",
       "cards": [
-        { "title": "ClientPacketListenerMixin · 网络层", "text": "拦截 <code>handleLevelEvent</code>，RTS 激活且类型 2001 时 <code>ci.cancel()</code>，阻断服务端广播的原版破坏音与粒子。" },
+        { "title": "动画包先到（快速建造常态，零延迟）", "text": "服务端在 <code>setBlock</code> 前发动画包 → <code>register</code> 入等待集合 → BlockUpdate 到达时 <code>onBlockChanged</code> 命中 → startMs = 状态变化时刻，无论网络 RTT 多大动画都与方块同帧启动。" },
+        { "title": "BlockUpdate 先到（交互式/破坏路径）", "text": "动画包到达时状态已就绪：<code>register</code> 用 <code>cur.equals(targetState)</code>（放置）/ <code>cur.isAir()</code>（破坏）检查命中 → 直接写缓冲，startMs = 此刻（差一个网络 RTT，交互式单格/破坏碎块对延迟不敏感）。" },
+        { "title": "状态一直未到", "text": "<code>ClientTickHandler</code> 每 tick <code>tick()</code>：就绪立即播；超过 2s 超时兜底延迟播放，保证不丢失。" }
+      ]
+    },
+    {
+      "title": "2.7 破坏粒子静默（双 mixin 兜底）",
+      "type": "cards",
+      "cards": [
+        { "title": "ClientPacketListenerMixin · 网络层", "text": "拦截 <code>handleLevelEvent</code>，RTS 激活且类型 2001 时 <code>ci.cancel()</code>，阻断原版破坏音与粒子。" },
         { "title": "ClientLevelMixin · 渲染层", "text": "拦截 <code>addDestroyBlockEffect</code>，RTS 激活时跳过粒子生成，兜底阻断本地触发路径。" }
       ]
     }
   ],
   "issues": [
     {
-      "title": "① 放置动画断点：GhostRingBuffer 无消费者",
+      "title": "① 动画滞后于方块（不对齐主因）",
       "status": "fixed",
-      "why": "根因：<code>handlePlaceAnimation</code> 收到放置动画包后仅写入 <code>GhostRingBuffer.INSTANCE</code>，但 <code>forEach/prune/clear</code> 无任何调用者，放置成功动画永不渲染，且缓冲条目永不过期（泄漏隐患）。修复：新增 <code>PlaceAnimationPass</code> 消费缓冲（白色线框 500ms 淡出）并注册到 <code>RenderPipeline</code>；同时修正 <code>GhostRingBuffer.forEach</code> 为全槽遍历（prune 产生空洞后不漏项）与 <code>prune</code> 计数重算。"
+      "why": "根因：动画包晚于 BlockUpdate 到达，<code>register</code> 走「立即播放」路径时 startMs = now + seq×25ms，同 tick 最多 64 格时 seq 达 63，动画最多滞后 1.5s——方块已全部就位，线框却逐个迟到；且跨 tick seq 重置导致 startMs 乱序、动画跳变。修复：彻底移除 seq 错峰，所有播放路径的启动时刻统一为「状态就绪/变化的当前时刻」。"
     },
     {
-      "title": "② 形状预览无动作半径过滤",
+      "title": "② 状态绑定路径实际失效",
       "status": "fixed",
-      "why": "根因：<code>LineBrushRenderPass</code> 渲染全部形状位置，而服务端 <code>canAccessWorldTarget → RtsCameraManager.isWithinActionRange</code> 会拒绝半径外目标，造成“高亮但点了没反应”。修复：新增公共 <code>ActionRadiusFilter</code> 工具，<code>LineBrushRenderPass</code> 与 <code>UltiminePreviewPass</code> 共用同一过滤逻辑（此前仅连锁挖掘预览对齐了半径）。"
+      "why": "根因：由于动画包总是晚于 BlockUpdate（服务端先 setBlock/destroyBlock 再发动画包，TCP 保序），<code>register</code> 几乎总是命中「立即播放」，等待集合基本为空，<code>onBlockChanged</code> 形同虚设。修复：语义修正为「启动时刻 = 触发时刻」，立即播放路径同样以触发时刻启动，动画与实况同步；等待集合仅作为乱序兜底。"
     },
     {
-      "title": "③ 过时注释“其余破坏/建造形状尚未实现”",
+      "title": "③ 等待集合兜底用过期的 startMs 导致动画被跳过",
       "status": "fixed",
-      "why": "根因：<code>LeftSidebarPanel</code> 与 <code>BuildInteractionHandler</code> 中残留“其余破坏/建造形状（线/墙/面/体/圆/球）尚未实现”的注释，与已实现的 <code>BuildShape</code> 全形状 + <code>LineBrushSelector</code> 状态机不符。修复：改写为描述当前实际行为（非单方块形状走形状画笔批量操作）。"
+      "why": "根因：<code>onBlockChanged</code> 沿用登记时的 startMs，若状态等待超过 600ms，渲染 pass 按 age ≥ LIFETIME 跳过，动画不显示。修复：<code>onBlockChanged</code> 与 <code>tick</code> 兜底均改用触发时刻作为 startMs。"
+    },
+    {
+      "title": "④ ClientLevel 上注入 setBlock/@Shadow getBlockState 启动崩溃",
+      "status": "fixed",
+      "why": "根因：<code>setBlock</code>/<code>getBlockState</code> 定义在父类 <code>Level</code>，<code>ClientLevel</code> 未重写，dev 环境无 refMap 时 Mixin 只按目标类直接解析导致 <code>InvalidMixinException</code> 启动崩溃。修复：改为在 <code>ClientPacketListenerMixin</code> 注入 <code>handleBlockUpdate</code>（该方法定义在目标类上），用 <code>@Shadow getLevel()</code> 读取变化前状态。"
+    },
+    {
+      "title": "⑤ 动画包晚于 BlockUpdate 导致动画滞后一个网络 RTT",
+      "status": "fixed",
+      "why": "根因：动画确认包总是在 <code>setBlock</code>/<code>destroyBlock</code> 之后发送，客户端 <code>register</code> 只能走「状态已就绪 → 立即播」路径，startMs 比状态变化晚一个网络往返，联网时用户可感知轻微延迟。修复：快速建造路径改为在 <code>setBlock</code> 之前发送动画包（<code>RtsPlacementSound</code> 新增带预知 state 的重载，动画包先于 BlockUpdate 到达），客户端 <code>registerPlace</code> 用 <code>cur.equals(targetState)</code> 精确匹配（未就绪入等待集合），由 <code>onBlockChanged</code> 在状态变化时刻触发，实现零延迟；替换模式用精确状态匹配避免旧方块被误判为已就绪。"
     }
   ],
   "boundaries": [
-    "<b>放置与破坏反馈链路分离</b>：放置动画走 <code>S2CRtsPlaceAnimationPayload</code> + 客户端缓冲渲染；破坏反馈走 <code>S2CRtsBreakAnimationPayload</code> + 本地破坏音，互不干扰。",
-    "<b>破坏粒子静默是刻意设计</b>：远程高频破坏（连锁/区域/回收）会触发大量 2001 破坏粒子造成闪烁，RTS 模式下统一静默，只保留本地破坏音。",
-    "<b>动作半径过滤客户端与服务端一致</b>：预览过滤由 <code>ActionRadiusFilter</code> 统一处理，服务端由 <code>isWithinActionRange</code> 兜底校验，所见即所得。",
-    "<b>放置动画限流为刻意取舍</b>：蓝图批量放置静默动画避免网络过载；单格/形状放置播放 500ms 白色线框动画。",
-    "<b>幽灵缓冲容量与生命周期</b>：<code>CAPACITY = 32</code>、<code>LIFETIME_MS = 500</code>，超龄条目由 <code>prune</code> 清理，避免长期累积。",
-    "<b>其他玩家音效保留</b>：原版 2001 仅对 RTS 玩家自身拦截，其他玩家在方块附近仍能听到真实破坏音与粒子。"
+    "<b>动画启动时刻 = 客户端看到方块状态变化的时刻</b>：由 <code>handleBlockUpdate</code> 的 BlockUpdate 驱动，与方块实况严格同帧对齐。",
+    "<b>不做逐格错峰</b>：批量操作中方块是同一 tick 同时变化的，动画同帧启动才符合「跟随状态」；逐格延迟会制造「方块已就位、动画迟到」的错位。",
+    "<b>动画确认包是「预期声明」而非播放信号</b>：它标记「该位置状态变化属于 RTS 操作需要播放动画」，真正的触发点是 BlockUpdate。",
+    "<b>两级背压防丢</b>：<code>GhostRingBuffer</code> 满则排队（drainPending 补入），动画只延迟不丢失；同位置重复写入保留播放进度避免跳变。",
+    "<b>快速建造动画包先于 BlockUpdate</b>：服务端用预知 state 在 <code>setBlock</code> 前发动画包，客户端据此在状态变化时刻触发动画，联网下也零延迟；交互式放置与破坏路径保持后发（延迟一个 RTT，单格/碎块不敏感）。",
+    "<b>seq/serverTick 字段保留</b>：协议已带，客户端当前不使用（不做错峰），保留供将来与服务端时间精确对齐。",
+    "<b>破坏粒子静默为刻意设计</b>：远程高频破坏会触发大量 2001 粒子造成闪烁，RTS 模式下统一静默，只保留本地破坏音。"
   ]
 }

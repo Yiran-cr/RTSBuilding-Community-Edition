@@ -24,12 +24,15 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.rightbar.RightSideb
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayoutHelper;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.client.render.ViewCaptureService;
+import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
+import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class BuilderScreen extends Screen {
 
@@ -365,6 +368,27 @@ public class BuilderScreen extends Screen {
         return leftSidebarPanel != null && leftSidebarPanel.isDestructionSelected();
     }
 
+    /**
+     * 当前激活的建造/破坏形状（单方块等返回 null），供下嵌层形状模式调节器与 X 键使用。
+     * 建造/破坏两侧共用同一套调节 UI，各自记忆形状模式。
+     */
+    @Nullable
+    public BuildShape getActiveBuildShape() {
+        if (leftSidebarPanel == null) return null;
+        if (leftSidebarPanel.isConstructionSelected()) return leftSidebarPanel.getBuildShape();
+        if (leftSidebarPanel.isDestructionSelected()) return leftSidebarPanel.getBreakShape();
+        return null;
+    }
+
+    /**
+     * 是否显示形状/单方块调节框（下嵌层）：仅顶栏处于「建造」模式且左栏建造或破坏侧激活时显示，
+     * 交互/蓝图模式不显示。建造/破坏两侧共用同一套调节 UI（替换开关 + 形状模式分段控件）。
+     */
+    public boolean isShapeAdjusterActive() {
+        return isBuildMode() && leftSidebarPanel != null
+                && (leftSidebarPanel.isConstructionSelected() || leftSidebarPanel.isDestructionSelected());
+    }
+
     
     public boolean isBindModeActive() {
         return leftSidebarPanel != null && leftSidebarPanel.isBindModeActive();
@@ -429,6 +453,11 @@ public class BuilderScreen extends Screen {
     
     public void setRtsGuiScale(double scale) {
         scaleManager.setRtsGuiScale(scale);
+    }
+
+    /** 重置 RTS GUI 缩放为自动跟随原版（窗口变化时 UI 与原版一致缩放）。 */
+    public void resetRtsGuiScale() {
+        scaleManager.resetToAutoRtsGuiScale();
     }
 
     
@@ -561,14 +590,7 @@ public class BuilderScreen extends Screen {
                 ? Minecraft.getInstance().player.containerMenu.getCarried()
                 : net.minecraft.world.item.ItemStack.EMPTY;
         if (!carried.isEmpty()) {
-            com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
-            var pose = guiGraphics.pose();
-            pose.pushPose();
-            pose.translate(mouseX - 8, mouseY - 8, 300);
-            guiGraphics.renderItem(carried, 0, 0);
-            guiGraphics.renderItemDecorations(Minecraft.getInstance().font, carried, 0, 0);
-            pose.popPose();
-            com.mojang.blaze3d.systems.RenderSystem.enableDepthTest();
+            GuiItemRenderer.drawItem(guiGraphics, carried, mouseX - 8, mouseY - 8, 300);
         }
 
         renderLineBrushHint(guiGraphics);

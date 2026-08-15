@@ -42,7 +42,7 @@ public final class RtsWorkflowSyncService {
                     status.failedBlocks(),
                     status.missingItems(),
                     status.detailMessage(),
-                    (byte) (status.onHold() ? 1 : 0),
+                    (byte) status.holdType(),
                     entry.id()));
         }
         Platform.sendPacket(player, new S2CRtsWorkflowProgressBatchPayload(entries));

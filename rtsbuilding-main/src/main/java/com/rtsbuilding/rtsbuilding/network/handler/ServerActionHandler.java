@@ -200,9 +200,25 @@ public final class ServerActionHandler {
                 var status = engine.getProgress(p, entryId);
                 if (!status.isActive()) return;
                 engine.from(p, entryId).ifPresent(token -> {
-                    if (token.isPaused()) { token.unpause(); p.displayClientMessage(Component.literal("§7[工作流] §a▶ 已恢复"), true); }
-                    else if (token.isSuspended()) { token.resume(); p.displayClientMessage(Component.literal("§7[工作流] §a▶ 已恢复"), true); }
-                    else { token.pause(); p.displayClientMessage(Component.literal("§7[工作流] §e⏸ 已暂停"), true); }
+                    if (token.isPaused()) {
+                        token.unpause();
+                        p.displayClientMessage(net.minecraft.network.chat.Component
+                                .translatable("message.rtsbuilding.workflow.resumed"), true);
+                    } else if (token.isSuspended()) {
+                        // 挂起恢复：完整恢复（作业移回活跃队列 + 状态恢复）。
+                        // 仅 token.resume() 只重置 entry 状态，作业仍在挂起队列不会继续执行。
+                        boolean recovered = com.rtsbuilding.rtsbuilding.server.service.ResumeWorkflowService
+                                .apply(p, entryId, (byte) 0);
+                        if (!recovered) {
+                            token.resume();
+                        }
+                        p.displayClientMessage(net.minecraft.network.chat.Component
+                                .translatable("message.rtsbuilding.workflow.resumed"), true);
+                    } else {
+                        token.pause();
+                        p.displayClientMessage(net.minecraft.network.chat.Component
+                                .translatable("message.rtsbuilding.workflow.paused"), true);
+                    }
                 });
             }
             case DELETE_WORKFLOW -> RtsWorkflowEngine.getInstance().deleteWorkflow(p, t.getInt("entryId"));
@@ -219,6 +235,7 @@ public final class ServerActionHandler {
                 RtsFunnelService.INSTANCE.onFunnelBoxPickupRequest(p, entityIds);
             }
             case SET_FUNNEL -> RtsFunnelService.INSTANCE.setFunnelEnabled(p, t.getBoolean("enabled"));
+            case SET_FUNNEL_RADIUS -> RtsFunnelService.INSTANCE.setFunnelRadius(p, t.getDouble("radius"));
             default -> LOG.debug("Unhandled: {} from {}", msg.actionType(), p.getName().getString());
         }
     }

@@ -13,6 +13,7 @@ import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
 import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
 import com.rtsbuilding.rtsbuilding.client.util.animate.Easing;
 import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
+import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.render.SpriteRenderer;
 import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
@@ -220,15 +221,7 @@ public final class GridRenderer {
                 DarkUiPalette.black(), itemFill, 1);
 
         if (!state.currentSelectedItem.isEmpty()) {
-            RenderSystem.disableDepthTest();
-            var pose = g.pose();
-            pose.pushPose();
-            pose.translate(itemDisplayX + 1, itemDisplayY + 1, 0);
-            g.renderItem(state.currentSelectedItem, 0, 0);
-            pose.popPose();
-            RenderSystem.enableDepthTest();
-            g.renderItemDecorations(mc.font, state.currentSelectedItem, itemDisplayX + 1, itemDisplayY + 1);
-            RenderSystem.disableDepthTest();
+            GuiItemRenderer.drawItem(g, state.currentSelectedItem, itemDisplayX + 1, itemDisplayY + 1);
         } else {
             RenderSystem.disableDepthTest();
             int iconWidth = NOTHING_TEX_W / 2;
@@ -507,7 +500,8 @@ public final class GridRenderer {
         if (hoveredSlot >= 0) lastHoveredMain = hoveredSlot;
         if (foundSelectedMain >= 0) lastSelectedMain = foundSelectedMain;
 
-        RenderSystem.clear(256, Minecraft.ON_OSX);
+        // 批量物品图标绘制结束：flush 并清空物品写入的深度缓冲，避免深度污染
+        GuiItemRenderer.finishItemBatch(g);
 
         if (state.selectedSlotIndex >= state.slotEntries.size() && !state.slotEntries.isEmpty()) {
             state.selectedSlotIndex = -1;

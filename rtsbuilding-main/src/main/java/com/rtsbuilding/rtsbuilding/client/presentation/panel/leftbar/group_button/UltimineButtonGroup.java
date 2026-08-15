@@ -12,6 +12,12 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
+/**
+ * 左侧栏连锁挖掘（Ultimine）按钮。
+ * <p>连锁挖掘的启用由按住 {@code RtsKeyMappings.ULTIMINE_KEY}（默认 `` ` ``/~ 键）控制，
+ * 本按钮仅作为<b>状态指示灯</b>：激活状态（选中点亮）每帧由 {@link #setActive} 同步按键状态，
+ * 点击不改变启用状态。</p>
+ */
 public final class UltimineButtonGroup extends AbstractButtonGroup {
 
     
@@ -44,6 +50,13 @@ public final class UltimineButtonGroup extends AbstractButtonGroup {
         return show;
     }
 
+    /**
+     * 同步连锁挖掘激活状态（指示灯点亮）：启用由按住按键控制，选中态仅反映按键状态。
+     */
+    public void setActive(boolean active) {
+        selected[0] = active;
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, int originX, int originY) {
         if (!show) return;
@@ -73,8 +86,8 @@ public final class UltimineButtonGroup extends AbstractButtonGroup {
 
     @Override
     protected void onButtonClick(int index) {
-        
-        selected[index] = !selected[index];
+        // 连锁挖掘启用由按住按键控制，按钮仅作状态指示灯，点击不改变启用状态。
+        // 选中态由 LeftSidebarPanel.render 每帧通过 setActive 同步按键状态。
     }
 
     

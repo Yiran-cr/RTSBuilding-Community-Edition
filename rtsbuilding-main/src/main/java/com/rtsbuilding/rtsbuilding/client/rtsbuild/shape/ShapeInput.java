@@ -9,7 +9,8 @@ import net.minecraft.core.BlockPos;
  * <p>字段含义与画笔参数一一对应：{@code start}/{@code hover} 为原始端点（不含高度偏移），
  * {@code startDy}/{@code endDy} 为两端高度偏移，{@code wallUp}/{@code wallDown} 为竖直扩展，
  * {@code faceWidth}/{@code faceDown} 为水平扩展，{@code sphereRadius} 为球半径，
- * {@code flatDown} 为画线平直锁定（V 键）标志。</p>
+ * {@code flatDown} 为画线平直锁定（V 键）标志，{@code fillMode} 为形状填充模式
+ * （体/圆柱/球的实心、空心、框架）。</p>
  */
 public record ShapeInput(
         BlockPos start,
@@ -21,7 +22,8 @@ public record ShapeInput(
         int faceWidth,
         int faceDown,
         int sphereRadius,
-        boolean flatDown) {
+        boolean flatDown,
+        FillMode fillMode) {
 
     /** 应用起点高度偏移后的实际起点。 */
     public BlockPos effectiveStart() {
