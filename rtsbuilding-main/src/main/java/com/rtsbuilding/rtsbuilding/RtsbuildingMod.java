@@ -327,6 +327,8 @@ public class RtsbuildingMod {
             ServerTickOrchestrator.getInstance().tickMining(event.getServer());
             // Drive per-tick consumption of funnel (item pickup) tasks
             com.rtsbuilding.rtsbuilding.server.service.RtsFunnelService.INSTANCE.onServerTick(event.getServer());
+            // Drive delayed placement commits（放置动画结束瞬间落位真实方块，BuildingGadgets2 语义）
+            com.rtsbuilding.rtsbuilding.server.service.placement.RtsBlockAnimationCommitter.tick();
             // Flush merged workflow progress notifications (one packet per player per tick)
             RtsWorkflowEngine.getInstance().flushDirty();
         }

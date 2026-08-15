@@ -98,6 +98,22 @@ public final class CameraModule implements FeatureModule {
     public boolean togglePlayerOrbitMode() { return modeController.togglePlayerOrbitMode(); }
     public boolean isPlayerOrbitMode() { return modeController.isPlayerOrbitMode(); }
 
+    /**
+     * 启动玩家环绕模式镜头自动回正（第三人称镜头回正）。
+     * <p>旋转拖拽结束松开鼠标时调用，镜头平滑转回玩家实体背后的默认观察方向。</p>
+     */
+    public void startPlayerOrbitAutoReturn() {
+        if (!state.enabled || !state.playerOrbitMode) return;
+        playerOrbit.startAutoReturn(state);
+    }
+
+    /**
+     * 取消镜头自动回正（玩家移动/手动操作相机时调用）。
+     */
+    public void cancelPlayerOrbitAutoReturn() {
+        state.playerOrbitAutoReturn = false;
+    }
+
     
     
     
@@ -223,6 +239,7 @@ public final class CameraModule implements FeatureModule {
 
     public void queuePanDrag(double dx, double dy) {
         viewSnapController.cancel();
+        state.playerOrbitAutoReturn = false;
         float panX = state.invertPanX ? (float) dx : -(float) dx;
         float panY = state.invertPanY ? (float) dy : -(float) dy;
         state.pendingPanX += panX;
@@ -231,6 +248,7 @@ public final class CameraModule implements FeatureModule {
 
     public void queueRotateDrag(double dx, double dy) {
         viewSnapController.cancel();
+        state.playerOrbitAutoReturn = false;
         state.pendingRawRotateX += (float) dx;
         state.pendingRawRotateY += (float) dy;
     }
@@ -270,6 +288,7 @@ public final class CameraModule implements FeatureModule {
      * @param negative true 表示从轴负方向观察
      */
     public void snapViewToAxis(int axis, boolean negative) {
+        state.playerOrbitAutoReturn = false;
         viewSnapController.snapViewToAxis(state, axis, negative);
     }
 

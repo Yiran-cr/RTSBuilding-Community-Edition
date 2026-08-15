@@ -7,7 +7,9 @@
     "ClientPacketListenerMixin",
     "KeyboardInputMixin",
     "LocalPlayerMixin",
+    "LocalPlayerStepAiMixin",
     "MinecraftSetScreenMixin",
+    "MinecraftTickMixin",
     "MouseInputMixin",
     "ScreenRenderBgMixin"
   ],

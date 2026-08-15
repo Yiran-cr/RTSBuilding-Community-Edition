@@ -11,6 +11,7 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.core.TickResult;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.TickablePipe;
 import com.rtsbuilding.rtsbuilding.server.service.impl.RtsBlueprintServiceImpl;
 import com.rtsbuilding.rtsbuilding.server.service.placement.BlockPlacer;
+import com.rtsbuilding.rtsbuilding.server.service.placement.RtsBlockAnimationCommitter;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
 import com.rtsbuilding.rtsbuilding.server.workflow.core.RtsWorkflowEngine;
 import net.minecraft.core.BlockPos;
@@ -243,28 +244,38 @@ public final class BlueprintTickPipe implements TickablePipe {
             }
         }
 
-        boolean placed = BlockPlacer.setBlock(level, plan.target(), plan.state());
-        if (!placed) {
-            if (!player.isCreative()) refundExtractedMaterials(player, extractedMaterials);
-            return PlaceResult.BLOCKED;
-        }
-
-        if (!player.isCreative() && plan.fluidCost() == Fluids.LAVA
-                && !bp.extractFluid(player, Fluids.LAVA,
-                        FluidType.BUCKET_VOLUME)) {
-            level.removeBlock(plan.target(), false);
-            refundExtractedMaterials(player, extractedMaterials);
-            return PlaceResult.UNSUPPORTED;
-        }
-
-        BlockPlacer.applyBlueprintBlockEntity(level, plan.target(), plan.blockEntityTag());
-        BlockPlacer.trackPlaced(level, plan.target());
-        for (Item item : plan.items()) {
-            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
-            if (itemId != null) {
-                bp.noteBlockPlaced(player, plan.target(), itemId.toString());
+        // 延迟落位（BuildingGadgets2「动画即落位」语义）：客户端播放生长动画，
+        // 服务端在动画周期结束后才真正 setBlock —— 方块"生长完成即出现"。
+        // 材料已在上面同步提取；落位失败时在延迟回调内退回。
+        var commitBp = bp;
+        RtsBlockAnimationCommitter.schedulePlace(player, plan.target(), plan.state(), () -> {
+            // 落位本身不依赖玩家：玩家下线时仍 setBlock，保证已扣材料的方块不丢失
+            boolean online = RtsBlockAnimationCommitter.isPlayerStillOnline(player);
+            boolean placed = BlockPlacer.setBlock(level, plan.target(), plan.state());
+            if (!placed) {
+                if (online && !player.isCreative()) refundExtractedMaterials(player, extractedMaterials);
+                return;
             }
-        }
+
+            if (online && !player.isCreative() && plan.fluidCost() == Fluids.LAVA
+                    && !commitBp.extractFluid(player, Fluids.LAVA,
+                            FluidType.BUCKET_VOLUME)) {
+                level.removeBlock(plan.target(), false);
+                refundExtractedMaterials(player, extractedMaterials);
+                return;
+            }
+
+            BlockPlacer.applyBlueprintBlockEntity(level, plan.target(), plan.blockEntityTag());
+            BlockPlacer.trackPlaced(level, plan.target());
+            if (online) {
+                for (Item item : plan.items()) {
+                    ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
+                    if (itemId != null) {
+                        commitBp.noteBlockPlaced(player, plan.target(), itemId.toString());
+                    }
+                }
+            }
+        });
         return PlaceResult.PLACED;
     }
 

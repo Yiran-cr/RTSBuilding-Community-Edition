@@ -100,6 +100,7 @@ public final class CameraModeController {
 
     public void disablePlayerOrbitMode() {
         state.playerOrbitMode = false;
+        state.playerOrbitAutoReturn = false;
         if (state.savedBlockOrbitMode && !state.orbitMode) {
             state.orbitTargetX = state.savedOrbitTargetX;
             state.orbitTargetY = state.savedOrbitTargetY;
@@ -128,6 +129,7 @@ public final class CameraModeController {
     public void clearModeState() {
         state.orbitMode = false;
         state.playerOrbitMode = false;
+        state.playerOrbitAutoReturn = false;
         state.savedBlockOrbitMode = false;
     }
 }

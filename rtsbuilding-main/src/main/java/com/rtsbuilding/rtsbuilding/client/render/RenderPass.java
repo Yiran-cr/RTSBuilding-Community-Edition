@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster.CursorRay;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.MultiBufferSource;
 
 import javax.annotation.Nullable;
 
@@ -29,6 +30,8 @@ public interface RenderPass {
             VertexConsumer brackets,
             VertexConsumer noDepth,
             VertexConsumer barrier,
-            @Nullable CursorRay cursorRay
+            @Nullable CursorRay cursorRay,
+            MultiBufferSource blockSource,
+            MultiBufferSource blockOpaqueSource
     ) {}
 }

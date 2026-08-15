@@ -4,44 +4,38 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.GhostRingBuffer;
 import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
+import com.rtsbuilding.rtsbuilding.client.render.RenderPipeline;
 import com.rtsbuilding.rtsbuilding.client.render.RingBufferHolder;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.block.BlockRenderDispatcher;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.model.data.ModelData;
 
 /**
  * 放置成功特效：消费 {@link GhostRingBuffer} 中由
  * {@code RtsClientNetworkHandlers.handlePlaceAnimation} 写入的放置位置，
- * 渲染"方块从天降落建造"——角支架线框方块从目标位置正上方
- * {@link #FALL_HEIGHT} 格处下落到目标位置，落定后快速淡出。
+ * 渲染"方块生长"——目标方块的真实模型从方块中心由 0 放大到 1（grow）。
  *
- * <p>线框颜色取自目标方块自身的 {@link MapColor}，随方块区分；
- * 批量放置时缓冲满由 {@link GhostRingBuffer#add} 覆盖最旧条目，自然限流。</p>
+ * <p>效果参考 BuildingGadgets2 的 {@code RenderBlock} grow 动画：以方块中心为基准缩放
+ * （{@code translate((1-scale)/2 ...) + scale(scale)}），<b>全程不透明纯缩放、无透明度变化</b>
+ * （对齐其 {@code RenderType.cutout()} 放置虚影），带真实纹理与光照。
+ * 非完整模型方块（流体等）回退为不透明色块，保证任何方块都有可见反馈。
+ *
+ * <p>动画时长与服务端落位周期（12 ticks=600ms）对齐：动画结束瞬间服务端落位、方块出现
+ * （BuildingGadgets2「动画即落位」触发/结束语义）。
  *
  * <p>每帧渲染后调用 {@link GhostRingBuffer#prune} 清理过期条目。</p>
  */
 public final class PlaceAnimationPass implements RenderPass {
 
-    /** 下落高度（格）：方块从目标位置正上方多少格开始落下。 */
-    private static final double FALL_HEIGHT = 2.0;
-
-    /** 下落动画时长（毫秒）。 */
-    private static final long FALL_DURATION_MS = 350L;
-
-    /** 落定后的淡出时长（毫秒）。 */
-    private static final long FADE_DURATION_MS = 250L;
-
-    /** 总生命周期 = 下落 + 淡出，超过后从缓冲清除。 */
-    private static final long LIFETIME_MS = FALL_DURATION_MS + FADE_DURATION_MS;
-
-    /** 下落/淡出阶段的线框不透明度。 */
-    private static final float BASE_ALPHA = 0.85F;
-
-    /** 线框相对方块的偏移量（向内略缩，避免与方块表面深度穿插）。 */
-    private static final double LINE_OFFSET = 0.01D;
+    /** 生长动画时长（毫秒）：方块从 0 放大到 1。与服务端落位周期（12 ticks=600ms）对齐。 */
+    private static final long GROW_DURATION_MS = 600L;
 
     private static final CornerBracketRenderer.Rgb color = new CornerBracketRenderer.Rgb();
 
@@ -60,52 +54,59 @@ public final class PlaceAnimationPass implements RenderPass {
         // 补入等待队列中的动画（环形区释放出空间后生效），保证批量放置动画不丢失
         buffer.drainPending();
 
-        Vec3 cameraPos = mc.getCameraEntity() != null
-                ? mc.getCameraEntity().getEyePosition(partialTick) : Vec3.ZERO;
+        BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
 
         buffer.forEach((key, state, addedAtMs) -> {
             long age = now - addedAtMs;
-            if (age < 0 || age >= LIFETIME_MS) return;
+            if (age < 0 || age >= GROW_DURATION_MS) return;
             BlockPos p = BlockPos.of(key);
 
-            // 下落进度：0 → 1
-            double fallT = Math.min(1.0, age / (double) FALL_DURATION_MS);
-            // 当前 Y：从 y + FALL_HEIGHT 线性下落到 y（落地后停在目标位置）
-            double yPos = p.getY() + FALL_HEIGHT * (1.0 - fallT);
+            // 生长进度 0 → 1（easeOutCubic，收尾柔和）
+            double growT = Math.min(1.0, age / (double) GROW_DURATION_MS);
+            float scale = (float) (1.0 - Math.pow(1.0 - growT, 3.0));
+            if (scale <= 0.01F) return;
 
-            // 透明度：下落中恒定，落定后线性淡出
-            float alpha;
-            if (fallT < 1.0) {
-                alpha = BASE_ALPHA;
-            } else {
-                double fadeT = (age - FALL_DURATION_MS) / (double) FADE_DURATION_MS;
-                alpha = BASE_ALPHA * (float) (1.0 - fadeT);
-            }
-
-            color.update(colorFor(state, mc.level, p));
-            float r = color.r, g = color.g, b = color.b;
-            double minX = p.getX() - LINE_OFFSET;
-            double minY = yPos - LINE_OFFSET;
-            double minZ = p.getZ() - LINE_OFFSET;
-            double maxX = p.getX() + 1.0D + LINE_OFFSET;
-            double maxY = yPos + 1.0D + LINE_OFFSET;
-            double maxZ = p.getZ() + 1.0D + LINE_OFFSET;
-            double distance = cameraPos.distanceTo(
-                    new Vec3(p.getX() + 0.5D, yPos + 0.5D, p.getZ() + 0.5D));
-
-            // 深度层：角支架线框
-            CornerBracketRenderer.renderCornerBrackets(poseStack, alloc.brackets(),
-                    minX, minY, minZ, maxX, maxY, maxZ, r, g, b, alpha, distance);
-            // 穿透层：深度测试开启时额外渲染半透明线框
-            if (BoxSelectionPass.depthTestEnabled) {
-                CornerBracketRenderer.renderCornerBrackets(poseStack, alloc.noDepth(),
-                        minX, minY, minZ, maxX, maxY, maxZ, r, g, b,
-                        CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA * alpha, distance);
-            }
+            renderScaledBlock(mc.level, p, state, scale, dispatcher, poseStack, alloc);
         });
 
         // 清理过期条目，避免缓冲累积
-        buffer.prune(now, LIFETIME_MS);
+        buffer.prune(now, GROW_DURATION_MS);
+    }
+
+    /**
+     * 以方块中心按 scale 缩放渲染真实方块模型（grow，不透明纯缩放）；
+     * 非完整模型方块回退为不透明色块。
+     */
+    private static void renderScaledBlock(Level level, BlockPos pos, BlockState state, float scale,
+                                          BlockRenderDispatcher dispatcher, PoseStack poseStack, BufferAllocator alloc) {
+        if (state == null || state.isAir()) return;
+        // 流体/特殊方块（renderShape 非 MODEL）无模型可渲染，回退为色块
+        if (state.getRenderShape() != RenderShape.MODEL) {
+            renderFallbackCube(level, pos, state, scale, poseStack, alloc);
+            return;
+        }
+        poseStack.pushPose();
+        poseStack.translate(pos.getX(), pos.getY(), pos.getZ());
+        // 以方块中心（0.5,0.5,0.5）为基准缩放，与 BuildingGadgets2 grow 动画一致
+        poseStack.translate((1.0F - scale) / 2.0F, (1.0F - scale) / 2.0F, (1.0F - scale) / 2.0F);
+        poseStack.scale(scale, scale, scale);
+        int light = LevelRenderer.getLightColor(level, pos);
+        dispatcher.renderSingleBlock(state, poseStack, alloc.blockOpaqueSource(), light, OverlayTexture.NO_OVERLAY,
+                ModelData.EMPTY, RenderPipeline.BLOCK_ANIMATION_OPAQUE);
+        poseStack.popPose();
+    }
+
+    /** 流体/特殊方块回退：以方块中心缩放的色块（不透明，与放置虚影一致）。 */
+    private static void renderFallbackCube(Level level, BlockPos pos, BlockState state, float scale,
+                                           PoseStack poseStack, BufferAllocator alloc) {
+        color.update(colorFor(state, level, pos));
+        float r = color.r, g = color.g, b = color.b;
+        double half = 0.5D * scale;
+        double cx = pos.getX() + 0.5D, cy = pos.getY() + 0.5D, cz = pos.getZ() + 0.5D;
+        CornerBracketRenderer.renderFilledFaces(alloc.brackets(), poseStack,
+                cx - half, cy - half, cz - half,
+                cx + half, cy + half, cz + half,
+                r, g, b, 1.0F);
     }
 
     /** 从方块状态的地图色提取 ARGB 颜色；空气/未知回退浅灰。 */

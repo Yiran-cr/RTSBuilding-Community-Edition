@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.server.history;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
 import com.rtsbuilding.rtsbuilding.server.service.beam.RtsDroneBeamService;
+import com.rtsbuilding.rtsbuilding.server.service.placement.RtsBlockAnimationCommitter;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
@@ -116,23 +117,29 @@ public final class HistoryExecutor {
                 }
             }
 
-            level.setBlock(pos, targetState, Block.UPDATE_ALL | Block.UPDATE_CLIENTS);
+            // 延迟落位（BuildingGadgets2「动画即落位」语义）：撤销恢复的方块播放生长动画后出现，
+            // 动画结束（服务端落位）时方块才真正到位。
+            RtsBlockAnimationCommitter.schedulePlace(player, pos, targetState, () -> {
+                level.setBlock(pos, targetState, Block.UPDATE_ALL | Block.UPDATE_CLIENTS);
 
-            // 创造模式：恢复方块实体 NBT 数据
-            // 生存模式不恢复 NBT，防止刷物品漏洞
-            if (isCreative) {
-                CompoundTag beData = record.blockEntityData();
-                if (beData != null) {
-                    BlockEntity blockEntity = level.getBlockEntity(pos);
-                    if (blockEntity != null) {
-                        blockEntity.loadWithComponents(beData, level.registryAccess());
-                        blockEntity.setChanged();
+                // 创造模式：恢复方块实体 NBT 数据
+                // 生存模式不恢复 NBT，防止刷物品漏洞
+                if (isCreative) {
+                    CompoundTag beData = record.blockEntityData();
+                    if (beData != null) {
+                        BlockEntity blockEntity = level.getBlockEntity(pos);
+                        if (blockEntity != null) {
+                            blockEntity.loadWithComponents(beData, level.registryAccess());
+                            blockEntity.setChanged();
+                        }
                     }
                 }
-            }
 
-            // 撤回破坏（重新放置）：向其他玩家广播建造蓝光
-            RtsDroneBeamService.broadcastPlace(player, pos);
+                // 撤回破坏（重新放置）：向其他玩家广播建造蓝光（玩家在线时）
+                if (RtsBlockAnimationCommitter.isPlayerStillOnline(player)) {
+                    RtsDroneBeamService.broadcastPlace(player, pos);
+                }
+            });
 
             restoredCount++;
         }

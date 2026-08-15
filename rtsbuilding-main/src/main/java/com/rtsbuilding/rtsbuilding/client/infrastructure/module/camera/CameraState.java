@@ -116,6 +116,27 @@ public final class CameraState {
 
     public boolean isPlayerOrbitMode() { return playerOrbitMode; }
 
+    /**
+     * 玩家实体环绕模式的镜头自动回正状态：
+     * 用户拖拽旋转相机后松开，镜头平滑转回"玩家实体当前朝向的反方向"（玩家背后）。
+     */
+    boolean playerOrbitAutoReturn;
+
+    /**
+     * 自动回正的目标水平角（弧度），即玩家背后对应的 orbitAngle。
+     */
+    double playerOrbitReturnTarget;
+
+    /**
+     * 自动回正插值的起始水平角（弧度）。
+     */
+    double playerOrbitReturnFrom;
+
+    /**
+     * 自动回正动画开始时间戳（毫秒）。
+     */
+    long playerOrbitReturnStartMs;
+
     void setBounds(double x, double y, double z, double r) {
         this.anchorX = x;
         this.anchorY = y;

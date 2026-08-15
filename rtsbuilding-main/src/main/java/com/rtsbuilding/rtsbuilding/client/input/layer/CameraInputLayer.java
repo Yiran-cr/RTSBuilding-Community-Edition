@@ -68,11 +68,18 @@ public final class CameraInputLayer implements InputLayer {
     public boolean onMouseReleased(double mouseX, double mouseY, int button) {
         if (this.pressedButton == button) {
             boolean wasDragged = this.draggedPastThreshold;
+            boolean wasPan = this.pressedPan;
             this.pressedButton = -1;
             this.pressedPan = false;
             this.accumulatedDragDistance = 0.0D;
             this.draggedPastThreshold = false;
-            
+            // 旋转拖拽（非平移）结束并确实拖拽过：触发玩家环绕镜头自动回正（第三人称镜头回正）
+            if (wasDragged && !wasPan) {
+                CameraModule cam = kernel.module(CameraModule.class);
+                if (cam != null) {
+                    cam.startPlayerOrbitAutoReturn();
+                }
+            }
             return wasDragged;
         }
         return false;

@@ -12,27 +12,22 @@ import java.util.Map;
 /**
  * 放置/破坏动画与客户端方块状态变化的绑定器。
  *
- * <p>服务端动画包（{@code S2CRtsPlaceAnimationPayload} / {@code S2CRtsBreakAnimationPayload}）
- * 到达时并不直接播放，而是把该位置登记为"预期变化"；动画的启动时刻始终锚定到
- * <b>客户端实际看到该位置状态变化的那一刻</b>（BlockUpdate 驱动
- * {@code ClientPacketListenerMixin#handleBlockUpdate} 调用 {@link #onBlockChanged}），
- * 线框下落/碎块上飘与方块实况严格同帧对齐，不依赖动画包到达时刻、也不做 seq 错峰
- * （同 tick 批量操作中方块是同时变化的，动画应同时启动，逐格延迟反而造成"动画滞后于
- * 方块"的错位）。</p>
+ * <p><b>放置</b>（BuildingGadgets2「动画即落位」语义）：服务端延迟落位，动画包先于方块落位到达，
+ * 客户端收到动画包立即播放生长动画，动画结束（服务端落位、BlockUpdate 到达）时方块出现。
+ * 不依赖状态变化命中，因此无等待集合。</p>
  *
- * <p><b>顺序容错：</b>
+ * <p><b>破坏</b>：服务端立即移除方块，动画启动时刻锚定到<b>客户端实际看到该位置变为空气的
+ * 那一刻</b>（BlockUpdate 驱动 {@code ClientPacketListenerMixin#handleBlockUpdate} 调用
+ * {@link #onBlockChanged}），缩小动画与方块实况同帧对齐。</p>
+ *
+ * <p><b>破坏顺序容错：</b>
  * <ul>
- *   <li>BlockUpdate 先于动画包到达（常态）：登记时检查当前世界状态，已就绪立即播放；</li>
- *   <li>动画包先到：登记入集合，等待后续 {@link #onBlockChanged} 命中触发；</li>
+ *   <li>BlockUpdate 先于动画包到达：登记时检查当前世界状态，已就绪立即播放；</li>
+ *   <li>动画包先到：登记入等待集合，等待后续 {@link #onBlockChanged} 命中触发；</li>
  *   <li>状态一直未到（BlockUpdate 丢失等极端情况）：{@link #tick} 超时兜底延迟播放，保证不丢失。</li>
  * </ul>
- * 所有播放路径均以触发时刻（{@link System#currentTimeMillis()}）作为动画启动时间，
- * 动画不滞后于方块。</p>
  */
 public final class RtsEffectStateTracker {
-
-    /** 等待状态就绪的放置动画：posKey → 登记时刻（仅需位置，颜色用状态就绪时的 cur）。 */
-    private static final Map<Long, Long> PENDING_PLACE = new HashMap<>();
 
     /** 等待状态就绪的破坏动画：posKey → (登记时刻, 破坏前状态)。 */
     private static final Map<Long, PendingBreak> PENDING_BREAK = new HashMap<>();
@@ -47,21 +42,17 @@ public final class RtsEffectStateTracker {
     }
 
     /**
-     * 登记一次放置动画。若目标位置当前状态已等于期望的放置后状态 {@code targetState}
-     * （BlockUpdate 先到，通常为交互式放置路径），立即播放；否则入等待集合，
-     * 由 {@link #onBlockChanged} 捕获到该位置变为目标方块时播放。
-     * 用精确状态匹配而非「非空气」，避免替换模式（原位置已有旧方块）下误判为已就绪而提前播放。
+     * 登记一次放置动画。
+     *
+     * <p>BuildingGadgets2 触发/结束语义：服务端在发送动画包后将真实方块落位延迟到动画周期结束，
+     * 因此动画包先于方块落位到达客户端。客户端收到动画包<b>立即播放生长动画</b>（不再等待
+     * 状态就绪），动画结束瞬间（服务端落位、BlockUpdate 到达）方块出现 —— 「生长完成即落位」。</p>
+     *
+     * <p>若因网络乱序 BlockUpdate 先到（方块已落位），立即播放仍成立（生长动画叠加在已落位
+     * 方块上，退化为旧行为，视觉可接受）。</p>
      */
     public static void registerPlace(BlockPos pos, BlockState targetState) {
-        Level level = Minecraft.getInstance().level;
-        if (level != null) {
-            BlockState cur = level.getBlockState(pos);
-            if (cur.equals(targetState)) {
-                RingBufferHolder.INSTANCE.schedule(pos, cur, System.currentTimeMillis());
-                return;
-            }
-        }
-        PENDING_PLACE.put(pos.asLong(), System.currentTimeMillis());
+        RingBufferHolder.INSTANCE.schedule(pos, targetState, System.currentTimeMillis());
     }
 
     /**
@@ -83,7 +74,7 @@ public final class RtsEffectStateTracker {
 
     /**
      * 由 {@code ClientPacketListenerMixin} 在 {@code ClientPacketListener.handleBlockUpdate} 时调用，
-     * 检查本次状态变化是否命中登记的预期动画，命中则立即播放（启动时刻 = 状态变化时刻）。
+     * 检查本次状态变化是否命中登记的预期破坏动画，命中则立即播放（启动时刻 = 状态变化时刻）。
      *
      * @param oldState 变化前的方块状态
      * @param newState 变化后的方块状态
@@ -92,19 +83,15 @@ public final class RtsEffectStateTracker {
         if (oldState.equals(newState)) {
             return;
         }
+        if (!newState.isAir() || oldState.isAir()) {
+            // 仅破坏方向（非空气 → 空气）会命中登记的破坏动画；放置由动画包直接驱动
+            return;
+        }
         long key = pos.asLong();
         long nowMs = System.currentTimeMillis();
-        if (!newState.isAir()) {
-            // 放置方向：变为非空气方块
-            if (PENDING_PLACE.remove(key) != null) {
-                RingBufferHolder.INSTANCE.schedule(pos, newState, nowMs);
-            }
-        } else if (!oldState.isAir()) {
-            // 破坏方向：变为空气
-            PendingBreak p = PENDING_BREAK.remove(key);
-            if (p != null) {
-                RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs);
-            }
+        PendingBreak p = PENDING_BREAK.remove(key);
+        if (p != null) {
+            RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs);
         }
     }
 
@@ -118,27 +105,7 @@ public final class RtsEffectStateTracker {
             clear();
             return;
         }
-        long nowMs = System.currentTimeMillis();
-        tickPlace(level, nowMs);
-        tickBreak(level, nowMs);
-    }
-
-    private static void tickPlace(Level level, long nowMs) {
-        Iterator<Map.Entry<Long, Long>> it = PENDING_PLACE.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<Long, Long> e = it.next();
-            BlockPos pos = BlockPos.of(e.getKey());
-            BlockState cur = level.getBlockState(pos);
-            if (!cur.isAir()) {
-                it.remove();
-                RingBufferHolder.INSTANCE.schedule(pos, cur, nowMs);
-            } else if (nowMs - e.getValue() > PENDING_TIMEOUT_MS) {
-                it.remove();
-                if (!cur.isAir()) {
-                    RingBufferHolder.INSTANCE.schedule(pos, cur, nowMs);
-                }
-            }
-        }
+        tickBreak(level, System.currentTimeMillis());
     }
 
     private static void tickBreak(Level level, long nowMs) {
@@ -159,7 +126,6 @@ public final class RtsEffectStateTracker {
     }
 
     public static void clear() {
-        PENDING_PLACE.clear();
         PENDING_BREAK.clear();
     }
 }

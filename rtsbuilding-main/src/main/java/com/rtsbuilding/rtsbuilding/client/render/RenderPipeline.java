@@ -9,6 +9,7 @@ import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster.CursorRay;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
@@ -30,12 +31,34 @@ public final class RenderPipeline {
     private static final RenderType LINES = RenderType.lines();
     private static final RenderType FILLED_BOX = RenderType.debugFilledBox();
 
+    /**
+     * 方块缩放动画（放置 grow / 破坏 shrink）专用 RenderType：
+     * 使用真实方块模型的顶点格式（纹理 + 光照 + 法线），半透明渲染便于淡入淡出。
+     */
+    public static final RenderType BLOCK_ANIMATION = createBlockAnimationType();
+
+    /**
+     * 放置动画（grow）专用 RenderType：不透明 + 写深度，纯缩放无透明度，
+     * 对齐 BuildingGadgets2 的 {@code RenderType.cutout()} 放置虚影效果。
+     */
+    public static final RenderType BLOCK_ANIMATION_OPAQUE = createBlockAnimationOpaqueType();
+
     
     
     
 
     private static final int KB = 1024;
-    private final Buf linesBuf, fill, brackets, noDepth, barrier;
+    private final Buf linesBuf, fill, brackets, noDepth, barrier, blockBuf, blockOpaqueBuf;
+
+    /**
+     * 将方块模型渲染请求路由到 {@link #blockBuf} 的 {@link MultiBufferSource}。
+     * 渲染 pass 通过 {@link RenderPass.BufferAllocator#blockSource()} 获取。
+     * 必须在构造器中（{@code blockBuf} 赋值之后）初始化，见 {@link RenderPipeline#RenderPipeline()}。
+     */
+    private final MultiBufferSource blockSource;
+
+    /** 放置动画不透明方块渲染的 {@link MultiBufferSource}，路由到 {@link #blockOpaqueBuf}。 */
+    private final MultiBufferSource blockOpaqueSource;
 
     
     private static final class Buf {
@@ -95,6 +118,14 @@ public final class RenderPipeline {
         this.brackets = new Buf(BRACKET_QUADS, 512);
         this.noDepth = new Buf(TARGET_NO_DEPTH, 512);
         this.barrier = new Buf(BOUNDARY_BARRIER, 64);
+        // 方块缩放动画缓冲容量较大：批量放置/破坏每 tick 最多 64 格，每格一个完整方块模型。
+        // 超出时 ByteBufferBuilder 会自动扩容，此容量仅作初始分配。
+        this.blockBuf = new Buf(BLOCK_ANIMATION, 2048);
+        // 放置动画不透明缓冲：与破坏动画（半透明）分离，各自独立 RenderType 与混合状态
+        this.blockOpaqueBuf = new Buf(BLOCK_ANIMATION_OPAQUE, 2048);
+        // blockSource 必须在 blockBuf 赋值之后初始化（lambda 运行时访问 blockBuf.builder）
+        this.blockSource = renderType -> this.blockBuf.builder;
+        this.blockOpaqueSource = renderType -> this.blockOpaqueBuf.builder;
 
         registerPass(new BoundaryPass());
         registerPass(new InteractionTargetPass());
@@ -155,7 +186,7 @@ public final class RenderPipeline {
 
         BufferAllocator alloc = new BufferAllocator(
                 linesBuf.builder, fill.builder, brackets.builder, noDepth.builder, barrier.builder,
-                cursorRay);
+                cursorRay, blockSource, blockOpaqueSource);
         for (RenderPass pass : passes) {
             if (!pass.shouldRender(mc)) continue;
             pass.render(mc, alloc, poseStack, partialTick, frameIndex);
@@ -170,14 +201,16 @@ public final class RenderPipeline {
     public void reset() {
         linesBuf.reset();    fill.reset();
         brackets.reset();    noDepth.reset();
-        barrier.reset();
+        barrier.reset();     blockBuf.reset();
+        blockOpaqueBuf.reset();
     }
 
     
     public void flush() {
         linesBuf.draw();     fill.draw();
         brackets.draw();     noDepth.draw();
-        barrier.draw();
+        barrier.draw();      blockBuf.draw();
+        blockOpaqueBuf.draw();
     }
 
     
@@ -243,6 +276,45 @@ public final class RenderPipeline {
                         .setOutputState(RenderStateShard.MAIN_TARGET)
                         .setWriteMaskState(RenderStateShard.COLOR_WRITE)
                         .setCullState(RenderStateShard.NO_CULL)
+                        .createCompositeState(false));
+    }
+
+    /**
+     * 方块缩放动画 RenderType：使用 {@link DefaultVertexFormat#BLOCK}（含纹理 UV / 光照 / 法线），
+     * 配合半透明混合与 LEQUAL 深度测试，让放置/破坏动画方块带真实光照并与世界正确遮挡。
+     * <p>渲染时机在 {@code AFTER_TRANSLUCENT_BLOCKS}（世界渲染完成后），因此深度缓冲中
+     * 已有世界内容，无需依赖排序。</p>
+     */
+    private static RenderType createBlockAnimationType() {
+        return RenderType.create("rtsbuilding_block_animation", DefaultVertexFormat.BLOCK,
+                VertexFormat.Mode.QUADS, 2097152, false, false,
+                RenderType.CompositeState.builder()
+                        .setShaderState(RenderStateShard.RENDERTYPE_SOLID_SHADER)
+                        .setLightmapState(RenderStateShard.LIGHTMAP)
+                        .setTextureState(RenderStateShard.BLOCK_SHEET_MIPPED)
+                        .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
+                        .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                        .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
+                        .setCullState(RenderStateShard.CULL)
+                        .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                        .createCompositeState(false));
+    }
+
+    /**
+     * 放置动画（grow）专用 RenderType：不透明（不启用混合）+ 写入深度，
+     * 对齐 BuildingGadgets2 放置虚影用 {@code RenderType.cutout()} 的"全程不透明纯缩放"效果。
+     */
+    private static RenderType createBlockAnimationOpaqueType() {
+        return RenderType.create("rtsbuilding_block_animation_opaque", DefaultVertexFormat.BLOCK,
+                VertexFormat.Mode.QUADS, 2097152, false, false,
+                RenderType.CompositeState.builder()
+                        .setShaderState(RenderStateShard.RENDERTYPE_SOLID_SHADER)
+                        .setLightmapState(RenderStateShard.LIGHTMAP)
+                        .setTextureState(RenderStateShard.BLOCK_SHEET_MIPPED)
+                        .setLayeringState(RenderStateShard.VIEW_OFFSET_Z_LAYERING)
+                        .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
+                        .setCullState(RenderStateShard.CULL)
+                        .setWriteMaskState(RenderStateShard.COLOR_DEPTH_WRITE)
                         .createCompositeState(false));
     }
 }
