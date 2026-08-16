@@ -121,6 +121,8 @@ public final class BlueprintWriters {
      * 遍历两个对角点定义的长方体区域，
      * 跳过空气和结构虚空方块，
      * 记录方块的相对坐标、方块状态、方块实体数据和材料物品 ID。
+     * <p>
+     * 默认跳过区域最低层（视为地板层），与蓝图放置语义保持一致。
      *
      * @param level      世界
      * @param first      第一个角点
@@ -130,6 +132,26 @@ public final class BlueprintWriters {
      * @return 捕获的蓝图
      */
     public static RtsBlueprint capture(Level level, BlockPos first, BlockPos second, String name, String sourceName) {
+        return capture(level, first, second, name, sourceName, true);
+    }
+
+    /**
+     * 从世界中捕获指定区域内的方块并创建蓝图。
+     * <p>
+     * 与 {@link #capture(Level, BlockPos, BlockPos, String, String)} 逻辑相同，
+     * 额外提供是否跳过区域最低层（地板层）的控制：
+     * 框选保存蓝图时应传入 {@code false}，完整保留框选区域内的全部非空气方块。
+     *
+     * @param level      世界
+     * @param first      第一个角点
+     * @param second     第二个角点
+     * @param name       蓝图名称
+     * @param sourceName 来源名称
+     * @param skipFloor  true 时跳过区域最低层（地板层），false 时完整捕获
+     * @return 捕获的蓝图
+     */
+    public static RtsBlueprint capture(Level level, BlockPos first, BlockPos second, String name, String sourceName,
+            boolean skipFloor) {
         if (level == null || first == null || second == null) {
             return RtsBlueprint.create(name, sourceName, BlueprintFormat.VANILLA_NBT, Vec3i.ZERO, List.of());
         }
@@ -139,7 +161,7 @@ public final class BlueprintWriters {
         int maxX = Math.max(first.getX(), second.getX());
         int maxY = Math.max(first.getY(), second.getY());
         int maxZ = Math.max(first.getZ(), second.getZ());
-        int captureMinY = minY + 1; // 跳过地板层
+        int captureMinY = skipFloor ? minY + 1 : minY;
         List<RtsBlueprintBlock> blocks = new ArrayList<>();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int y = captureMinY; y <= maxY; y++) {
@@ -162,7 +184,8 @@ public final class BlueprintWriters {
                 }
             }
         }
-        Vec3i size = new Vec3i(maxX - minX + 1, Math.max(0, maxY - minY), maxZ - minZ + 1);
+        int height = skipFloor ? Math.max(0, maxY - minY) : Math.max(1, maxY - minY + 1);
+        Vec3i size = new Vec3i(maxX - minX + 1, height, maxZ - minZ + 1);
         return RtsBlueprint.create(name, sourceName, BlueprintFormat.VANILLA_NBT, size, blocks);
     }
 

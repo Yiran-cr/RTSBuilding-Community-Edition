@@ -18,6 +18,7 @@ import com.rtsbuilding.rtsbuilding.server.service.RtsProgressRefresher;
 import com.rtsbuilding.rtsbuilding.server.service.RtsStorageTickService;
 import com.rtsbuilding.rtsbuilding.server.service.ServerTickOrchestrator;
 import com.rtsbuilding.rtsbuilding.server.workflow.core.RtsWorkflowEngine;
+import com.rtsbuilding.rtsbuilding.util.RtsPinyinSearch;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -34,8 +35,6 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
-
-import javax.imageio.spi.ServiceRegistry;
 
 /**
  * Main entry class for the RTSbuilding mod.
@@ -92,7 +91,7 @@ public class RtsbuildingMod {
      * <p>This phase runs on both client and server, responsible for initializing global components
      * that do not depend on a specific game world:</p>
      * <ol>
-     *   <li>Initialize the central service registry ({@link ServiceRegistry})</li>
+     *   <li>Initialize the central service registry (RtsServer service discovery)</li>
      *   <li>Initialize the RTS API, accessible by other mods via {@code RtsAPI.get()}</li>
      *   <li>Register all workflow pipelines</li>
      * </ol>
@@ -109,6 +108,9 @@ public class RtsbuildingMod {
         // Register all workflow pipelines, establishing processing chains for blueprint placement, mining, etc.
         RtsPipelineRegistration.registerAll();
 
+        // 拼音字典资源源注入在 ServerStartingEvent（服务端资源管理器就绪后）执行，
+        // 见 onServerStarting；此处保留 classpath 默认（阶段三 3.2）。
+
         LOGGER.info("RTSBuilding common setup completed");
     }
 
@@ -121,6 +123,17 @@ public class RtsbuildingMod {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         LOGGER.info("Server is starting...");
+        // 拼音字典注入真实资源源（ResourceManager）：服务端资源管理器此时已就绪，
+        // 打破 common 对 classpath 资源的隐式依赖（阶段三 3.2）。
+        RtsPinyinSearch.setDictionarySource(() -> {
+            try {
+                var loc = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(MODID, "pinyin/data.txt");
+                var resource = event.getServer().getResourceManager().getResource(loc).orElse(null);
+                return resource == null ? null : resource.open();
+            } catch (Exception ignored) {
+                return null;
+            }
+        });
     }
 
     /**
@@ -217,6 +230,10 @@ public class RtsbuildingMod {
             SaveScheduler.INSTANCE.onServerStopped();
             // Clear engine memory to prevent old world data from lingering when switching worlds
             RtsWorkflowEngine.getInstance().clearAllData();
+            // 服务端停止：按 init 逆序调用各服务 shutdown（阶段四 4.1）
+            if (RtsServer.getInstanceOrNull() != null) {
+                RtsServer.get().shutdown();
+            }
         }
 
         /**

@@ -1,13 +1,15 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar;
 
+import com.rtsbuilding.uifw.render.UiPalette;
+
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.popup.BasePopup;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.window.popup.BasePopup;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -64,11 +66,6 @@ public final class ModeSwitcher {
     
     private static final int POPUP_PAD_H = 6;
     private static final int POPUP_SHORTCUT_GAP = 16;
-
-    
-    private static final int LIGHT_SHORTCUT_COLOR = 0xFF777777;
-    
-    private static final int DARK_SHORTCUT_COLOR = 0xFF888888;
 
     
 
@@ -295,7 +292,7 @@ public final class ModeSwitcher {
             TextRenderer.draw(g, label, textX, textY, textColor);
 
             
-            int shortcutColor = ThemeManager.getInstance().isLightMode() ? LIGHT_SHORTCUT_COLOR : DARK_SHORTCUT_COLOR;
+            int shortcutColor = UiPalette.get("tooltip_shortcut");
             String shortcutLabel = RtsKeyMappings.CYCLE_MODE_KEY.getTranslatedKeyMessage().getString();
             int shortcutX = x + getPopupWidth() - getPadH() - Minecraft.getInstance().font.width(shortcutLabel);
             TextRenderer.draw(g, shortcutLabel, shortcutX, textY, shortcutColor);

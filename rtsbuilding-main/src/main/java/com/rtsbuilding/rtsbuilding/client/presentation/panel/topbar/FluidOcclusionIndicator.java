@@ -1,12 +1,12 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar;
 
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.state.TooltipController;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.state.TooltipController;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -25,7 +25,7 @@ public final class FluidOcclusionIndicator {
     
     private final TooltipController tooltip = TooltipController.builder().build();
 
-    public void render(GuiGraphics g, int mouseX, int mouseY, TopBarLayoutHelper.ButtonGroup group) {
+    public void render(GuiGraphics g, int mouseX, int mouseY, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         var rect = group.rect(0);
         boolean active = CursorRaycaster.isFluidRaycastActive();
         boolean hovering = rect.contains(mouseX, mouseY);
@@ -46,7 +46,7 @@ public final class FluidOcclusionIndicator {
     }
 
     
-    public void renderTooltipOverlay(GuiGraphics g, TopBarLayoutHelper.ButtonGroup group,
+    public void renderTooltipOverlay(GuiGraphics g, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group,
                                      int screenW, int screenH) {
         if (!tooltip.shouldRender()) return;
 

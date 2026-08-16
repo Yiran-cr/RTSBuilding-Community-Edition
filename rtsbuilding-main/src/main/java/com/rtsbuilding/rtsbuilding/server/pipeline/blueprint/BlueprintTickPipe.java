@@ -52,7 +52,7 @@ import java.util.List;
 public final class BlueprintTickPipe implements TickablePipe {
 
     /**
-     * 懒加载 BLUEPRINT 服务引用，避免类加载时 ServiceRegistry 尚未初始化导致 IllegalStateException。
+     * 懒加载 BLUEPRINT 服务引用，避免类加载时 RtsServer 服务定位尚未初始化导致 IllegalStateException。
      */
     private static RtsBlueprintServiceImpl getBlueprint() {
         return RtsServer.get().blueprint();
@@ -229,9 +229,8 @@ public final class BlueprintTickPipe implements TickablePipe {
                 } else if (plan.fluidCost() == Fluids.LAVA) {
                     if (bp.countFluidMb(player, Fluids.LAVA)
                             < FluidType.BUCKET_VOLUME) return PlaceResult.UNSUPPORTED;
-                } else {
-                    return PlaceResult.UNSUPPORTED;
                 }
+                // items 空且无流体成本（门/床/双层植物上格等无需材料的格子）：正常放置，不扣材料
             } else {
                 for (Item item : plan.items()) {
                     ItemStack extracted = bp.extractMaterial(player, item, 1);
@@ -246,36 +245,49 @@ public final class BlueprintTickPipe implements TickablePipe {
 
         // 延迟落位（BuildingGadgets2「动画即落位」语义）：客户端播放生长动画，
         // 服务端在动画周期结束后才真正 setBlock —— 方块"生长完成即出现"。
-        // 材料已在上面同步提取；落位失败时在延迟回调内退回。
+        // 支持支撑依赖重试（对齐 BG2 retryList）：落位时 canSurvive 失败（支撑方块尚未落位）
+        // → 延迟重试一次；重试超限或落位失败 → 退回已提取材料。
         var commitBp = bp;
-        RtsBlockAnimationCommitter.schedulePlace(player, plan.target(), plan.state(), () -> {
-            // 落位本身不依赖玩家：玩家下线时仍 setBlock，保证已扣材料的方块不丢失
-            boolean online = RtsBlockAnimationCommitter.isPlayerStillOnline(player);
-            boolean placed = BlockPlacer.setBlock(level, plan.target(), plan.state());
-            if (!placed) {
-                if (online && !player.isCreative()) refundExtractedMaterials(player, extractedMaterials);
-                return;
-            }
-
-            if (online && !player.isCreative() && plan.fluidCost() == Fluids.LAVA
-                    && !commitBp.extractFluid(player, Fluids.LAVA,
-                            FluidType.BUCKET_VOLUME)) {
-                level.removeBlock(plan.target(), false);
-                refundExtractedMaterials(player, extractedMaterials);
-                return;
-            }
-
-            BlockPlacer.applyBlueprintBlockEntity(level, plan.target(), plan.blockEntityTag());
-            BlockPlacer.trackPlaced(level, plan.target());
-            if (online) {
-                for (Item item : plan.items()) {
-                    ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
-                    if (itemId != null) {
-                        commitBp.noteBlockPlaced(player, plan.target(), itemId.toString());
+        RtsBlockAnimationCommitter.schedulePlace(player, plan.target(), plan.state(),
+                () -> {
+                    // 支撑依赖未就绪（邻居尚未落位）→ 请求延迟重试
+                    if (!plan.state().canSurvive(level, plan.target())) {
+                        return false;
                     }
-                }
-            }
-        });
+                    // 落位本身不依赖玩家：玩家下线时仍 setBlock，保证已扣材料的方块不丢失
+                    boolean online = RtsBlockAnimationCommitter.isPlayerStillOnline(player);
+                    boolean placed = BlockPlacer.setBlock(level, plan.target(), plan.state());
+                    if (!placed) {
+                        if (online && !player.isCreative()) refundExtractedMaterials(player, extractedMaterials);
+                        return true;
+                    }
+
+                    if (online && !player.isCreative() && plan.fluidCost() == Fluids.LAVA
+                            && !commitBp.extractFluid(player, Fluids.LAVA,
+                                    FluidType.BUCKET_VOLUME)) {
+                        level.removeBlock(plan.target(), false);
+                        refundExtractedMaterials(player, extractedMaterials);
+                        return true;
+                    }
+
+                    BlockPlacer.applyBlueprintBlockEntity(level, plan.target(), plan.blockEntityTag());
+                    BlockPlacer.trackPlaced(level, plan.target());
+                    if (online) {
+                        for (Item item : plan.items()) {
+                            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
+                            if (itemId != null) {
+                                commitBp.noteBlockPlaced(player, plan.target(), itemId.toString());
+                            }
+                        }
+                    }
+                    return true;
+                },
+                () -> {
+                    // 重试次数用尽仍无法落位：退回已提取材料
+                    if (RtsBlockAnimationCommitter.isPlayerStillOnline(player) && !player.isCreative()) {
+                        refundExtractedMaterials(player, extractedMaterials);
+                    }
+                });
         return PlaceResult.PLACED;
     }
 
@@ -295,9 +307,10 @@ public final class BlueprintTickPipe implements TickablePipe {
         if (!BlueprintReplaceRules.canBlueprintReplace(current)) {
             return false;
         }
-        // 对齐范围放置：碰撞检测 + 方块能否存活
         CollisionContext collision = CollisionContext.of(player);
-        return state.canSurvive(level, target) && level.isUnobstructed(state, target, collision);
+        // 不做 canSurvive 预检：多方块支撑方块（门 LOWER 等）可能尚未落位（延迟 12 ticks），
+        // canSurvive 交给落位时的支撑依赖重试机制（对齐 BG2 retryList）处理，这里仅做碰撞检测。
+        return level.isUnobstructed(state, target, collision);
     }
 
     /**
@@ -323,7 +336,8 @@ public final class BlueprintTickPipe implements TickablePipe {
             } else if (plan.fluidCost() == Fluids.LAVA) {
                 return bp.countFluidMb(player, Fluids.LAVA) >= FluidType.BUCKET_VOLUME;
             }
-            return false;
+            // items 空且无流体成本（门/床/双层植物上格等无需材料的格子）：材料视为充足
+            return true;
         }
         for (Item item : plan.items()) {
             if (bp.countMaterial(player, item) <= 0) return false;

@@ -1,27 +1,27 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.rightbar;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.EdgeResizeHandler;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.DownOverlayLayer;
+import com.rtsbuilding.uifw.window.api.UiPanelApi;
+import com.rtsbuilding.uifw.window.component.EdgeResizeHandler;
+import com.rtsbuilding.uifw.window.overlay.DownOverlayLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.rightbar.overlay.LowerRightOverlayLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.rightbar.overlay.UpperRightOverlayLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
+import com.rtsbuilding.uifw.render.UiPalette;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.Objects;
 
-public final class RightSidebarPanel implements RtsPanelApi {
+public final class RightSidebarPanel implements UiPanelApi {
 
     
-    private BuilderScreen screen;
+    private com.rtsbuilding.uifw.window.api.UiPanelHost screen;
 
     
     private int currentWidth = RightSidebarLayoutHelper.SIDEBAR_WIDTH;
 
     
     public void setCurrentWidth(int width) {
-        this.currentWidth = Math.max(30, Math.min(width, this.screen != null ? this.screen.width / 4 : 2000));
+        this.currentWidth = Math.max(30, Math.min(width, this.screen != null ? this.screen.getUiWidth() / 4 : 2000));
     }
 
     
@@ -71,7 +71,7 @@ public final class RightSidebarPanel implements RtsPanelApi {
     private static final int OVERLAY_MIN_SIZE = 20;
 
     @Override
-    public void init(BuilderScreen screen) {
+    public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
         this.screen = Objects.requireNonNull(screen,
                 "RightSidebarPanel.init() called with null screen");
     }
@@ -103,7 +103,7 @@ public final class RightSidebarPanel implements RtsPanelApi {
     
     private RightSidebarLayoutHelper.Rect layoutRect() {
         return layout.sidebarRect(
-                this.screen.width, this.screen.height, this.currentWidth);
+                this.screen.getUiWidth(), this.screen.getUiHeight(), this.currentWidth);
     }
 
     
@@ -111,7 +111,7 @@ public final class RightSidebarPanel implements RtsPanelApi {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         RightSidebarLayoutHelper.Rect sb = layoutRect();
-        g.fill(sb.x(), sb.y(), sb.x() + sb.width(), sb.y() + sb.height(), DarkUiPalette.bg());
+        g.fill(sb.x(), sb.y(), sb.x() + sb.width(), sb.y() + sb.height(), UiPalette.bg());
     }
 
     
@@ -145,7 +145,7 @@ public final class RightSidebarPanel implements RtsPanelApi {
 
     
     private boolean isMouseInLayer(DownOverlayLayer layer, int mouseX, int mouseY) {
-        if (this.screen == null || this.screen.isMouseOverUI(mouseX, mouseY)) return false;
+        if (this.screen == null || ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).isMouseOverUI(mouseX, mouseY)) return false;
         return layer.contains(mouseX, mouseY);
     }
 
@@ -199,7 +199,7 @@ public final class RightSidebarPanel implements RtsPanelApi {
         RightSidebarLayoutHelper.Rect sb = layoutRect();
         return resizeHandler.tryBegin(mouseX, mouseY,
                 sb.x(), sb.y(), sb.height(),
-                currentWidth, this.screen.width);
+                currentWidth, this.screen.getUiWidth());
     }
 
     @Override

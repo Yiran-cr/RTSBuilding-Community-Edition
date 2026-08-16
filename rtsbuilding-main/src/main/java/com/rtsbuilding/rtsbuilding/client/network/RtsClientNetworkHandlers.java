@@ -200,11 +200,11 @@ public final class RtsClientNetworkHandlers {
     public static void handlePlaceAnimation(S2CRtsPlaceAnimationPayload payload, net.neoforged.neoforge.network.handling.IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (net.minecraft.client.Minecraft.getInstance().level == null) return;
-            // 登记"预期放置"：目标状态 = payload.state()（快速建造路径已让动画包先于 BlockUpdate
-            // 到达，此处通常入等待集合，由 handleBlockUpdate 捕获状态变化在那一刻精确触发动画，
-            // 消除网络 RTT 造成的滞后；交互式路径状态已就绪则立即播放）
+            // 登记放置动画：目标状态 = payload.state()，动画总时长 = 服务端权威 durationTicks × 50ms。
+            // 快速建造路径让动画包先于落位到达，客户端立即播放生长动画，动画结束（服务端落位）
+            // 时方块出现 —— 「生长完成即落位」。
             com.rtsbuilding.rtsbuilding.client.render.RtsEffectStateTracker.registerPlace(
-                    payload.pos(), payload.state());
+                    payload.pos(), payload.state(), payload.durationTicks() * 50L);
         });
     }
 
@@ -215,10 +215,10 @@ public final class RtsClientNetworkHandlers {
             // 清除该位置残留裂纹
             mc.level.destroyBlockProgress(0x525453, payload.pos(), -1);
             // 破坏特效：登记"预期破坏"，动画绑定到客户端实际看到该位置变为空气的那一刻播放，
-            // 碎块颜色取破坏前状态 payload.state()。启动时刻 = 状态变化时刻，不做 seq 错峰。
+            // 碎块颜色取破坏前状态 payload.state()；动画时长 = 服务端权威 durationTicks × 50ms。
             if (payload.state() != null && !payload.state().isAir()) {
                 com.rtsbuilding.rtsbuilding.client.render.RtsEffectStateTracker.registerBreak(
-                        payload.pos(), payload.state());
+                        payload.pos(), payload.state(), payload.durationTicks() * 50L);
             }
             // 在客户端本地播放破坏音，音源固定为主相机位置（= 听者位置，无距离衰减）。
             // 不能用 levelEvent(2001, pos, ...)（音源在被破坏方块位置，RTS 相机远离时听不见），

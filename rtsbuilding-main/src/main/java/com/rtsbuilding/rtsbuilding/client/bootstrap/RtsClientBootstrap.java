@@ -1,6 +1,5 @@
 package com.rtsbuilding.rtsbuilding.client.bootstrap;
 
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
 import com.rtsbuilding.rtsbuilding.client.camera.RtsCameraEntityRenderer;
 import com.rtsbuilding.rtsbuilding.client.entity.RtsDroneRenderer;
@@ -15,10 +14,8 @@ import com.rtsbuilding.rtsbuilding.client.infrastructure.module.workflow.Workflo
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeybinds;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.render.RtsShaders;
 import com.rtsbuilding.rtsbuilding.common.RtsEntities;
 import com.rtsbuilding.rtsbuilding.common.RtsItems;
-import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -26,7 +23,6 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
-import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 
 @EventBusSubscriber(modid = RtsbuildingMod.MODID, value = Dist.CLIENT)
 public final class RtsClientBootstrap {
@@ -45,91 +41,15 @@ public final class RtsClientBootstrap {
     }
 
     @SubscribeEvent
-    public static void onRegisterShaders(RegisterShadersEvent event) {
-        try {
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "rounded_rect"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.roundedRect = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "rounded_rect_outline"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.roundedRectOutline = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "rounded_rect_top"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.roundedRectTop = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "rounded_rect_bottom"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.roundedRectBottom = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "rounded_rect_left"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.roundedRectLeft = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "rounded_rect_right"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.roundedRectRight = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "chevron"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.chevron = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "textured"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.textured = shader
-            );
-            event.registerShader(
-                    new ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "reset_icon"),
-                            DefaultVertexFormat.POSITION_TEX_COLOR
-                    ),
-                    shader -> RtsShaders.resetIcon = shader
-            );
-        } catch (java.io.IOException e) {
-            throw new RuntimeException("Failed to load shader", e);
-        }
-    }
-
-    @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
             // RTS 按键不再注册到原版"按键绑定"界面，改由 RTS 设置面板内的
             // "按键设置"折叠条目配置；此处加载自定义绑定并应用到 KeyMapping 对象。
             RtsKeybinds.load();
+
+            // 漏斗半径变化 → 服务端同步（UI 前置模组不感知网络，由主 mod 注入回调）
+            com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState.setFunnelRadiusSync(
+                    com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway::sendSetFunnelRadius);
 
             // 终端点亮模型属性：RTS 模式开启时（TERMINAL_LIT 组件为 true）物品模型
             // 切换为 rts_terminal_lit（由 rts_terminal.json 的 overrides 引用）。

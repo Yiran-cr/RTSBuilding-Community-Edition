@@ -374,7 +374,7 @@ public final class RtsPageCore {
                 linkedRefs.iconItemIds(), linkedRefs.worldAvailable(),
                 safePage, totalPages, totalEntries,
                 session.browser.search, session.browser.category,
-                (byte) session.browser.sort.ordinal(), session.browser.ascending,
+                (byte) session.browser.sort.id(), session.browser.ascending,
                 session.sessionFlags.autoStoreMinedDrops, session.sessionFlags.useBdNetwork,
                 categories,
                 itemStacks, itemCounts, itemModes,

@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="LGPL-3.0-only"
+
+[[mods]]
+modId="${mod_id}"
+version="${version}"
+displayName="uifw - UI Framework"
+credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
+authors="JerryLunar/\u5bc4\u5c85\u87f9H-crab"
+description='''
+Standalone Minecraft UI framework: SDF rendering, animation/theme system,
+and a reusable window & component library. Mod-agnostic — usable by any mod.
+'''
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[1,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="[1.21.1]"
+    ordering="NONE"
+    side="BOTH"

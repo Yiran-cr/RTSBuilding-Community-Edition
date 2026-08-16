@@ -3,6 +3,8 @@ package com.rtsbuilding.rtsbuilding.server.workflow.core;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowPriority;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowType;
+import com.rtsbuilding.rtsbuilding.server.workflow.model.WorkflowState;
+import com.rtsbuilding.rtsbuilding.server.workflow.model.WorkflowStateMachine;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -142,6 +144,17 @@ public final class RtsWorkflowEntry {
         return totalBlocks > 0 && (completedBlocks + failedBlocks) >= totalBlocks;
     }
 
+    /**
+     * 当前生命周期状态（阶段四 4.2 状态机化）。
+     *
+     * <p>由现有布尔标志经 {@link WorkflowStateMachine#fromFlags} 推导；
+     * 引擎应使用 {@link #transition(WorkflowState)} 做状态变更并校验合法性。
+     */
+    public WorkflowState state() {
+        return WorkflowStateMachine.fromFlags(
+                isOccupied(), suspended, paused, isComplete(), false);
+    }
+
     // ──────────────────────────────────────────────────────────────────
     //  Snapshot
     // ──────────────────────────────────────────────────────────────────
@@ -156,7 +169,7 @@ public final class RtsWorkflowEntry {
         return RtsWorkflowStatus.fromRaw(
                 type, priority, totalBlocks, completedBlocks, failedBlocks,
                 List.copyOf(missingItems), detailMessage,
-                suspended ? 2 : paused ? 1 : 0, id);
+                WorkflowStateMachine.toHoldType(state()), id);
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -223,6 +236,29 @@ public final class RtsWorkflowEntry {
     void setPaused(boolean paused) {
         this.paused = paused;
         touch();
+    }
+
+    /**
+     * 按状态机做状态转换（阶段四 4.2）。
+     *
+     * <p>先校验 {@code current → target} 是否合法（{@link WorkflowStateMachine#canTransition}），
+     * 合法则应用目标状态对应的标志，返回 true；非法返回 false 且不改动状态。
+     */
+    boolean transition(WorkflowState target) {
+        WorkflowState current = state();
+        if (!WorkflowStateMachine.canTransition(current, target)) {
+            return false;
+        }
+        // 应用目标状态标志（与现有布尔字段保持同步，保证 NBT 存档兼容）
+        switch (target) {
+            case RUNNING -> { suspended = false; paused = false; }
+            case PAUSED -> { suspended = false; paused = true; }
+            case SUSPENDED -> { suspended = true; paused = false; }
+            case IDLE -> reset();
+            case COMPLETED, FAILED -> { /* 由 total/completed/failed 推导，无需额外标志 */ }
+        }
+        touch();
+        return true;
     }
 
     /** Reset this entry to default (idle) state — used when recycling a slot. */

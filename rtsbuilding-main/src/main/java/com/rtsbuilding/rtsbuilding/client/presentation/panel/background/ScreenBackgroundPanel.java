@@ -1,19 +1,19 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.background;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
+import com.rtsbuilding.uifw.window.api.UiPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayoutHelper;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.ViewCaptureService;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.render.SdfRenderer;
 import net.minecraft.client.gui.GuiGraphics;
 
-public final class ScreenBackgroundPanel implements RtsPanelApi {
+public final class ScreenBackgroundPanel implements UiPanelApi {
 
-    private BuilderScreen screen;
+    private com.rtsbuilding.uifw.window.api.UiPanelHost screen;
 
     private final AnimFloat hoverAnim = AnimFloat.hover();
 
@@ -27,7 +27,7 @@ public final class ScreenBackgroundPanel implements RtsPanelApi {
     
     public static final double CAPTURE_SCALE = 1.24;
     @Override
-    public void init(BuilderScreen screen) {
+    public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
         this.screen = screen;
     }
 
@@ -36,7 +36,7 @@ public final class ScreenBackgroundPanel implements RtsPanelApi {
         if (this.screen == null) return;
         
         if (ViewCaptureService.hasValidFrame()) {
-            renderCapturedFrameAt(g, 0, 0, this.screen.width, this.screen.height);
+            renderCapturedFrameAt(g, 0, 0, this.screen.getUiWidth(), this.screen.getUiHeight());
         }
     }
 
@@ -87,7 +87,7 @@ public final class ScreenBackgroundPanel implements RtsPanelApi {
         if (renderX > destX || renderY > destY
                 || renderX + renderW < destX + destW
                 || renderY + renderH < destY + destH) {
-            g.fill(destX, destY, destX + destW, destY + destH, 0xFF000000);
+            g.fill(destX, destY, destX + destW, destY + destH, UiPalette.black());
         }
 
         
@@ -107,26 +107,26 @@ public final class ScreenBackgroundPanel implements RtsPanelApi {
     
     private void renderNineSliceFallback(GuiGraphics g, int mouseX, int mouseY) {
         
-        int contentW = this.screen.width - this.screen.getRightSidebarWidth();
-        int contentH = this.screen.height - BACKGROUND_TOP_Y - this.screen.getDownSidebarHeight();
+        int contentW = this.screen.getUiWidth() - ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).getRightSidebarWidth();
+        int contentH = this.screen.getUiHeight() - BACKGROUND_TOP_Y - ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).getDownSidebarHeight();
         if (contentW <= 0 || contentH <= 0) return;
 
         
-        int leftW = this.screen.getLeftSidebarWidth();
-        boolean hovered = (this.screen == null || !this.screen.isMouseOverUI(mouseX, mouseY))
+        int leftW = ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).getLeftSidebarWidth();
+        boolean hovered = (this.screen == null || !((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).isMouseOverUI(mouseX, mouseY))
                 && mouseX >= leftW && mouseX < contentW
                 && mouseY >= BACKGROUND_TOP_Y && mouseY < BACKGROUND_TOP_Y + contentH;
 
         float t = hoverAnim.track(hovered);
 
-        int color = ColorAnimation.lerpRGB(DarkUiPalette.accent(), ColorAnimation.scale(DarkUiPalette.accent(), 1.4f), t);
+        int color = ColorAnimation.lerpRGB(UiPalette.accent(), ColorAnimation.scale(UiPalette.accent(), 1.4f), t);
         SdfRenderer.drawRoundedOutline(g, 1, BACKGROUND_TOP_Y + 1, contentW - 2, contentH - 2, 8, color);
     }
 
     
     public static ContentBounds contentBounds(BuilderScreen screen) {
-        int contentW = screen.width - screen.getRightSidebarWidth();
-        int contentH = screen.height - BACKGROUND_TOP_Y - screen.getDownSidebarHeight();
+        int contentW = screen.getUiWidth() - ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).getRightSidebarWidth();
+        int contentH = screen.getUiHeight() - BACKGROUND_TOP_Y - ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).getDownSidebarHeight();
         return new ContentBounds(0, BACKGROUND_TOP_Y, Math.max(contentW, 0), Math.max(contentH, 0));
     }
 

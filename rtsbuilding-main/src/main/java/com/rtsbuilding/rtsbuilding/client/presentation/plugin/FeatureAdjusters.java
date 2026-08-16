@@ -1,21 +1,21 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin;
 
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.OverlayContext;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.NumericInputBox;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ScaleSliderComponent;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ToggleSwitch;
+import com.rtsbuilding.uifw.window.overlay.OverlayContext;
+import com.rtsbuilding.uifw.component.NumericInputBox;
+import com.rtsbuilding.uifw.component.ScaleSliderComponent;
+import com.rtsbuilding.uifw.component.ToggleSwitch;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.FillMode;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.animate.Easing;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.state.FeatureAdjusterState;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.animate.Easing;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -223,7 +223,7 @@ public final class FeatureAdjusters {
         Minecraft mc = Minecraft.getInstance();
         // 背景框（dark.png 的 p6 色填充 + 边框）
         SdfRenderer.drawBorderedRoundedRect(g, boxX, boxY, boxW, boxH, BOX_RADIUS,
-                DarkUiPalette.border(), DarkUiPalette.p6(), 1);
+                UiPalette.border(), UiPalette.p6(), 1);
         // 数值输入框（右侧，与标题行垂直居中）
         row.inputW = INPUT_W;
         row.inputX = boxX + boxW - BOX_PAD_H - INPUT_W;
@@ -256,7 +256,7 @@ public final class FeatureAdjusters {
         Minecraft mc = Minecraft.getInstance();
         // 背景框（dark.png 的 p6 色填充 + 边框）
         SdfRenderer.drawBorderedRoundedRect(g, boxX, boxY, boxW, boxH, BOX_RADIUS,
-                DarkUiPalette.border(), DarkUiPalette.p6(), 1);
+                UiPalette.border(), UiPalette.p6(), 1);
 
         BuilderScreen screen = mc.screen instanceof BuilderScreen bs ? bs : null;
         BuildShape shape = screen != null ? screen.getActiveBuildShape() : null;
@@ -326,7 +326,7 @@ public final class FeatureAdjusters {
         int selW = Math.max(1, perSeg - inset * 2);
         int selH = segH - inset * 2;
         int selX = segX + inset + Math.round(slide * perSeg);
-        SdfRenderer.drawPill(g, selX, segY + inset, selW, selH, DarkUiPalette.toggleOn());
+        SdfRenderer.drawPill(g, selX, segY + inset, selW, selH, UiPalette.toggleOn());
 
         // 各段文字 + 悬停渐亮 + 命中矩形
         int hoverText = ThemeManager.getHoverTextColor();

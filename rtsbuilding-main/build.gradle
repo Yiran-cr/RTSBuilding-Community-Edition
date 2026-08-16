@@ -2,6 +2,10 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+// 内置附加 mod 子项目列表（单一来源：gradle.properties 的 builtin_mods，阶段六 6.1）
+def builtinMods = (providers.gradleProperty('builtin_mods').getOrElse('')
+        .split(',') as List).findAll { it != null && !it.trim().isEmpty() }.collect { ':' + it.trim() }
+
 base {
     archivesName = providers.gradleProperty('mod_archive_name').getOrElse(mod_id)
 }
@@ -50,11 +54,11 @@ neoForge {
             sourceSet(sourceSets.main)
             sourceSet(project(':rtsbuilding-common').sourceSets.main)
             sourceSet(project(':rtsbuilding-api').sourceSets.main)
-            sourceSet(project(':rtsbuilding-technologized').sourceSets.main)
-            sourceSet(project(':rtsaddon-ae2').sourceSets.main)
-            sourceSet(project(':rtsaddon-refinedstorage').sourceSets.main)
-            sourceSet(project(':rtsaddon-beyonddimensions').sourceSets.main)
-            sourceSet(project(':rtsaddon-sophisticatedbackpacks').sourceSets.main)
+            sourceSet(project(':rtsbuilding-ui').sourceSets.main)
+            // 内置附加 mod 子项目列表来自 gradle.properties 的 builtin_mods（单一来源，见 6.1）
+            for (def modProject in builtinMods) {
+                sourceSet(project(modProject).sourceSets.main)
+            }
         }
     }
 }
@@ -84,6 +88,12 @@ dependencies {
     compileOnly project(':rtsbuilding-api')
     compileOnly project(':rtsbuilding-common')
 
+    // 前置 UI 模组：仅编译期引用（compileOnly）。运行时类与资源由上方 mods{}
+    // sourceSet 合并进主 mod 提供——若用 implementation project(...)，dev 类路径会
+    // 同时出现 uifw 的 jar（独立打包时自带 neoforge.mods.toml）与 sourceSet 合并，
+    // 导致 FML duplicate_mod（uifw 出现在 [jar, main] 两处）。
+    compileOnly project(':rtsbuilding-ui')
+
     compileOnly "mezz.jei:jei-${jei_minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${jei_minecraft_version}-neoforge-api:${jei_version}"
     runtimeOnly "mezz.jei:jei-${jei_minecraft_version}-neoforge:${jei_version}"
@@ -104,11 +114,6 @@ dependencies {
     // （否则 BlueprintFormatTest/RtsCountUtilTest 抛 NoClassDefFoundError）
     testImplementation project(':rtsbuilding-common')
     testImplementation project(':rtsbuilding-api')
-
-    testImplementation 'org.openjdk.jmh:jmh-core:1.37'
-    testAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
-
-    testImplementation 'org.xerial:sqlite-jdbc:3.46.0.0'
 }
 
 // ── Pinyin dictionary verification ──
@@ -132,6 +137,91 @@ tasks.register('verifyPinyinDictionary') {
 
 tasks.named('processResources').configure {
     dependsOn tasks.named('verifyPinyinDictionary')
+}
+
+// ── Addon packaging verification (阶段六 6.2) ──
+// 内置附加 mod 的「Gradle 子项目 → modId → 主 @Mod 类（相对 class 路径）」映射。
+// 新增内置 addon 时需在此登记（与 gradle.properties builtin_mods 及 neoforge.mods.toml 一致）。
+def addonManifest = [
+    'rtsbuilding-technologized'           : [
+        modId  : 'rtsbuilding_technologized',
+        entryClass: 'com/rtsbuilding/rtsbuilding/energy/RtsEnergyMod.class'
+    ],
+    'rtsaddon-ae2'                        : [
+        modId  : 'rtsbuilding_addon_ae2',
+        entryClass: 'com/rtsbuilding/addon/ae2/RtsAe2Addon.class'
+    ],
+    'rtsaddon-refinedstorage'             : [
+        modId  : 'rtsbuilding_addon_refinedstorage',
+        entryClass: 'com/rtsbuilding/addon/refinedstorage/RtsRefinedStorageAddon.class'
+    ],
+    'rtsaddon-beyonddimensions'           : [
+        modId  : 'rtsbuilding_addon_beyonddimensions',
+        entryClass: 'com/rtsbuilding/addon/beyonddimensions/RtsBeyondDimensionsAddon.class'
+    ],
+    'rtsaddon-sophisticatedbackpacks'     : [
+        modId  : 'rtsbuilding_addon_sophisticatedbackpacks',
+        entryClass: 'com/rtsbuilding/addon/sophisticatedbackpacks/RtsSophisticatedBackpacksAddon.class'
+    ]
+]
+
+tasks.register('verifyAddonPackaging') {
+    group = 'verification'
+    description = 'Verify all built-in addons are merged into the main JAR and declared in neoforge.mods.toml.'
+    dependsOn tasks.named('jar')
+
+    inputs.file(tasks.named('jar').flatMap { it.archiveFile })
+    inputs.property('builtin_mods', builtinMods.join(','))
+
+    doLast {
+        def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+        def missing = new ArrayList<String>()
+
+        def jarRoot = new java.util.zip.ZipFile(jarFile)
+        def entries = jarRoot.entries()
+        def entryNames = new HashSet<String>()
+        while (entries.hasMoreElements()) {
+            entryNames.add(entries.nextElement().name)
+        }
+
+        // 1) 每个内置 addon 的 @Mod 入口类已合入
+        for (def mp : builtinMods) {
+            def key = mp.substring(1) // 去掉 ':' 前缀得到子项目名
+            def manifest = addonManifest[key]
+            if (manifest == null) {
+                missing.add("builtin_mods 中的 ${key} 未在 addonManifest 登记")
+                continue
+            }
+            if (!entryNames.contains(manifest.entryClass)) {
+                missing.add("${key}: 入口类 ${manifest.entryClass} 未合入主 JAR")
+            }
+        }
+
+        // 2) neoforge.mods.toml 声明了每个内置 addon 的 modId
+        def tomlEntry = entryNames.find { it.endsWith('neoforge.mods.toml') }
+        if (tomlEntry == null) {
+            missing.add('主 JAR 缺少 META-INF/neoforge.mods.toml')
+        } else {
+            def toml = jarRoot.getInputStream(jarRoot.getEntry(tomlEntry)).text
+            for (def mp : builtinMods) {
+                def key = mp.substring(1)
+                def manifest = addonManifest[key]
+                if (manifest != null && !toml.contains("modId=\"${manifest.modId}\"")) {
+                    missing.add("${key}: modId ${manifest.modId} 未在 neoforge.mods.toml 声明")
+                }
+            }
+        }
+        jarRoot.close()
+
+        if (!missing.isEmpty()) {
+            throw new GradleException("Addon packaging verification failed:\n  " + missing.join('\n  '))
+        }
+        logger.lifecycle("verifyAddonPackaging: ${builtinMods.size()} built-in addons verified in ${jarFile.name}")
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn tasks.named('verifyAddonPackaging')
 }
 
 // ── Mod metadata generation ──
@@ -161,8 +251,6 @@ neoForge.ideSyncTask generateModMetadata
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
-    exclude '**/server/benchmark/**'
-    exclude '**/server/history/**'
     testLogging {
         events "passed", "skipped", "failed"
         showStandardStreams = true
@@ -190,10 +278,13 @@ tasks.named('jar', Jar).configure {
     archiveFileName = "${mod_archive_name}-${mod_version}.jar"
     from project(':rtsbuilding-common').sourceSets.main.output
     from project(':rtsbuilding-api').sourceSets.main.output
-    from project(':rtsbuilding-technologized').sourceSets.main.output
-    from project(':rtsaddon-ae2').sourceSets.main.output
-    from project(':rtsaddon-refinedstorage').sourceSets.main.output
-    from project(':rtsaddon-beyonddimensions').sourceSets.main.output
-    from project(':rtsaddon-sophisticatedbackpacks').sourceSets.main.output
+    // 合并 uifw 输出时排除其自身 neoforge.mods.toml（独立发布时使用），
+    // 避免与主 JAR 由 generateModMetadata 生成的 mods.toml 冲突。
+    from(project(':rtsbuilding-ui').sourceSets.main.output) {
+        exclude 'META-INF/neoforge.mods.toml'
+    }
+    for (def modProject in builtinMods) {
+        from project(modProject).sourceSets.main.output
+    }
 }
 

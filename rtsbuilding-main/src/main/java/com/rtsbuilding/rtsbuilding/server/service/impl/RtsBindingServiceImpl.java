@@ -16,12 +16,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-import javax.imageio.spi.ServiceRegistry;
-
 /**
  * {@link RtsBindingServiceImpl} 的默认实现——处理所有存储绑定相关的服务端逻辑。
  *
- * <p>该实现类通过 {@link ServiceRegistry} 调用其他子服务：
+ * <p>该实现类通过 RtsServer 的服务定位调用其他子服务：
  * <ul>
  *   <li>使用 {@code server.session()} 获取/保存玩家会话</li>
  *   <li>使用 {@code server.page()} 刷新储存页面</li>

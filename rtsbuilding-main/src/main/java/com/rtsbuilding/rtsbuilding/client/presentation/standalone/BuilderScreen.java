@@ -1,5 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.standalone;
 
+import com.rtsbuilding.uifw.render.UiPalette;
+
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.rtsbuilding.rtsbuilding.client.application.service.ScreenCoordinator;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
@@ -11,9 +13,11 @@ import com.rtsbuilding.rtsbuilding.client.presentation.event.model.*;
 import com.rtsbuilding.rtsbuilding.client.presentation.layout.PanelRegistry;
 import com.rtsbuilding.rtsbuilding.client.presentation.layout.RenderLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.background.ScreenBackgroundPanel;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsFloatingWindowLayer;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsPanel;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.color.ColorPickerPanel;
+import com.rtsbuilding.uifw.window.window.FloatingWindowLayer;
+import com.rtsbuilding.uifw.window.window.UiPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintLibraryPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintSavePanel;
+import com.rtsbuilding.uifw.component.color.ColorPickerPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.DownSidebarLayoutHelper;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.DownSidebarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.gear.GearMenuPanel;
@@ -25,7 +29,8 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayout
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.client.render.ViewCaptureService;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
-import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.window.api.UiPanelHost;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -34,18 +39,26 @@ import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class BuilderScreen extends Screen {
+import java.nio.file.Path;
+
+public class BuilderScreen extends Screen implements UiPanelHost {
 
     private final RtsClientKernel kernel;
     
     private final ScreenBackgroundPanel screenBackgroundPanel;
-    private final RtsFloatingWindowLayer floatingWindowLayer;
+    private final FloatingWindowLayer floatingWindowLayer;
     private final TopBarPanel topBarPanel;
     private final ColorPickerPanel colorPickerPanel;
     private final GearMenuPanel gearMenuPanel;
     private final RightSidebarPanel rightSidebarPanel;
     private final DownSidebarPanel downSidebarPanel;
     private final LeftSidebarPanel leftSidebarPanel;
+
+    /** 蓝图保存对话框：蓝图模式框选完成后按回车弹出，输入名称保存本地蓝图。 */
+    private final BlueprintSavePanel blueprintSavePanel;
+
+    /** 蓝图文件管理面板：顶栏「文件」→「蓝图文件」打开。 */
+    private final BlueprintLibraryPanel blueprintLibraryPanel;
 
     
     private final PanelRegistry panelRegistry = new PanelRegistry();
@@ -85,16 +98,22 @@ public class BuilderScreen extends Screen {
         this.downSidebarPanel = new DownSidebarPanel();
         this.leftSidebarPanel = new LeftSidebarPanel();
         this.topBarPanel = new TopBarPanel();
+        this.blueprintSavePanel = new BlueprintSavePanel();
+        this.blueprintLibraryPanel = new BlueprintLibraryPanel();
         long t1 = System.nanoTime();
         panelRegistry.register(topBarPanel, RenderLayer.CONTENT_PANELS);
         panelRegistry.register(leftSidebarPanel, RenderLayer.CONTENT_PANELS);
         panelRegistry.register(rightSidebarPanel, RenderLayer.CONTENT_PANELS);
         panelRegistry.register(downSidebarPanel, RenderLayer.CONTENT_PANELS);
-        this.floatingWindowLayer = new RtsFloatingWindowLayer();
+        this.floatingWindowLayer = new FloatingWindowLayer();
         this.topBarPanel.setOnGearMenuToggle(() -> {
             gearMenuPanel.toggleOpen();
             topBarPanel.setGearMenuOpen(gearMenuPanel.isOpen());
         });
+        // 「文件」→「蓝图文件」：打开蓝图文件管理面板
+        this.topBarPanel.setOnOpenBlueprintLibrary(() -> blueprintLibraryPanel.open());
+        // 「文件」→「导入」：导入其他模组蓝图并转换为本模组蓝图
+        this.topBarPanel.setOnImportBlueprint(this::importBlueprintFile);
         long t2 = System.nanoTime();
 
         this.selectionHighlight = new SelectionHighlight();
@@ -106,15 +125,15 @@ public class BuilderScreen extends Screen {
         long t3 = System.nanoTime();
         this.cursorStyleManager = new CursorStyleManager((mx, my) -> {
             var fwCursor = floatingWindowLayer.resizeCursorAt(mx, my);
-            if (fwCursor != RtsPanel.ResizeCursor.DEFAULT) return fwCursor;
+            if (fwCursor != UiPanel.ResizeCursor.DEFAULT) return fwCursor;
             if (floatingWindowLayer.isMouseOverWindowOrResizableBorder(mx, my)) {
-                return RtsPanel.ResizeCursor.DEFAULT;
+                return UiPanel.ResizeCursor.DEFAULT;
             }
-            if (rightSidebarPanel.isMouseOverOverlayDivider(mx, my)) return RtsPanel.ResizeCursor.RESIZE_NS;
-            if (downSidebarPanel.isMouseOverOverlayDivider(mx, my)) return RtsPanel.ResizeCursor.RESIZE_EW;
-            if (rightSidebarPanel.isMouseOverLeftEdge(mx, my)) return RtsPanel.ResizeCursor.RESIZE_EW;
-            if (downSidebarPanel.isMouseOverTopEdge(mx, my)) return RtsPanel.ResizeCursor.RESIZE_NS;
-            return RtsPanel.ResizeCursor.DEFAULT;
+            if (rightSidebarPanel.isMouseOverOverlayDivider(mx, my)) return UiPanel.ResizeCursor.RESIZE_NS;
+            if (downSidebarPanel.isMouseOverOverlayDivider(mx, my)) return UiPanel.ResizeCursor.RESIZE_EW;
+            if (rightSidebarPanel.isMouseOverLeftEdge(mx, my)) return UiPanel.ResizeCursor.RESIZE_EW;
+            if (downSidebarPanel.isMouseOverTopEdge(mx, my)) return UiPanel.ResizeCursor.RESIZE_NS;
+            return UiPanel.ResizeCursor.DEFAULT;
         });
         this.cursorWrapHandler = new CursorWrapHandler();
         this.scaleManager = new BuilderScreenScaleManager();
@@ -168,6 +187,10 @@ public class BuilderScreen extends Screen {
         long t1 = System.nanoTime();
         this.gearMenuPanel.init(this);
         this.floatingWindowLayer.frontToBackWindows().add(this.gearMenuPanel);
+        this.blueprintSavePanel.init(this);
+        this.floatingWindowLayer.frontToBackWindows().add(this.blueprintSavePanel);
+        this.blueprintLibraryPanel.init(this);
+        this.floatingWindowLayer.frontToBackWindows().add(this.blueprintLibraryPanel);
         long t2 = System.nanoTime();
         panelRegistry.initAll(this);
         long t3 = System.nanoTime();
@@ -220,13 +243,131 @@ public class BuilderScreen extends Screen {
         }
     }
 
-    public RtsFloatingWindowLayer getFloatingWindowLayer() {
+    public FloatingWindowLayer getFloatingWindowLayer() {
         return this.floatingWindowLayer;
+    }
+
+    /** {@link UiPanelHost}：宿主屏幕宽度（逻辑像素）。 */
+    @Override
+    public int getUiWidth() {
+        return this.width;
+    }
+
+    /** {@link UiPanelHost}：宿主屏幕高度（逻辑像素）。 */
+    @Override
+    public int getUiHeight() {
+        return this.height;
     }
 
     
     public ColorPickerPanel getColorPickerPanel() {
         return this.colorPickerPanel;
+    }
+
+    /** 蓝图保存对话框（蓝图模式框选完成按回车触发）。 */
+    public BlueprintSavePanel getBlueprintSavePanel() {
+        return this.blueprintSavePanel;
+    }
+
+    /** 蓝图文件管理面板（顶栏「文件」→「蓝图文件」）。 */
+    public BlueprintLibraryPanel getBlueprintLibraryPanel() {
+        return this.blueprintLibraryPanel;
+    }
+
+    /**
+     * 导入外部蓝图文件（Sponge 结构 / Litematica / Building Gadgets 模板 / 原版结构）。
+     * <p>弹出系统文件选择对话框选择蓝图文件，经 {@code BlueprintReaders} 自动转换
+     * 为本模组的原版结构 NBT 形式并存入本地蓝图目录；成功后刷新蓝图文件面板。</p>
+     */
+    public void importBlueprintFile() {
+        Minecraft mc = Minecraft.getInstance();
+        Path source = chooseBlueprintFile();
+        if (source == null) {
+            return;
+        }
+        try {
+            var registryAccess = mc.level != null
+                    ? mc.level.registryAccess()
+                    : net.minecraft.core.RegistryAccess.EMPTY;
+            Path saved = com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore.importFile(source, registryAccess);
+            blueprintLibraryPanel.refreshFiles();
+            if (mc.player != null) {
+                mc.player.displayClientMessage(
+                        Component.translatable("message.rtsbuilding.blueprint.import.success",
+                                saved.getFileName().toString()), true);
+            }
+        } catch (Exception ex) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.warn("导入蓝图失败: {}", source, ex);
+            if (mc.player != null) {
+                mc.player.displayClientMessage(
+                        Component.translatable("message.rtsbuilding.blueprint.import.failed",
+                                ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()), true);
+            }
+        }
+    }
+
+    /**
+     * 弹出系统文件选择对话框，返回用户选择的蓝图文件路径；取消返回 null。
+     * <p>AWT 组件必须在事件分发线程（EDT）上创建与显示，这里用
+     * {@link java.awt.EventQueue#invokeAndWait} 包裹，避免在 Minecraft 渲染线程
+     * 直接创建 AWT 对话框导致无法显示。headless 环境下返回 null 并提示。</p>
+     */
+    private static Path chooseBlueprintFile() {
+        Minecraft mc = Minecraft.getInstance();
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.warn("当前环境为 headless，无法打开文件选择对话框");
+            if (mc.player != null) {
+                mc.player.displayClientMessage(
+                        Component.translatable("message.rtsbuilding.blueprint.import.failed",
+                                "headless environment"), true);
+            }
+            return null;
+        }
+
+        final Path[] result = {null};
+        final Throwable[] failure = {null};
+        try {
+            java.awt.EventQueue.invokeAndWait(() -> {
+                try {
+                    // 使用 AWT 原生文件对话框：无需额外依赖，且支持 Windows/Linux 桌面环境
+                    java.awt.Frame dummy = new java.awt.Frame();
+                    java.awt.FileDialog dialog = new java.awt.FileDialog(dummy,
+                            Component.translatable("screen.rtsbuilding.blueprint.import.title").getString(),
+                            java.awt.FileDialog.LOAD);
+                    dialog.setFilenameFilter((dir, name) -> {
+                        String lower = name.toLowerCase(java.util.Locale.ROOT);
+                        return lower.endsWith(".nbt") || lower.endsWith(".schem")
+                                || lower.endsWith(".schematic") || lower.endsWith(".litematic")
+                                || lower.endsWith(".json");
+                    });
+                    dialog.setVisible(true);
+                    String file = dialog.getFile();
+                    String dir = dialog.getDirectory();
+                    dialog.dispose();
+                    dummy.dispose();
+                    if (file != null) {
+                        result[0] = java.nio.file.Path.of(dir == null ? file : dir + file);
+                    }
+                } catch (Throwable t) {
+                    failure[0] = t;
+                }
+            });
+        } catch (Exception ex) {
+            failure[0] = ex;
+        }
+
+        if (failure[0] != null) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.warn("打开文件选择对话框失败", failure[0]);
+            if (mc.player != null) {
+                mc.player.displayClientMessage(
+                        Component.translatable("message.rtsbuilding.blueprint.import.failed",
+                                failure[0].getMessage() == null
+                                        ? failure[0].getClass().getSimpleName()
+                                        : failure[0].getMessage()), true);
+            }
+            return null;
+        }
+        return result[0];
     }
 
     public int getRightSidebarWidth() {
@@ -254,7 +395,7 @@ public class BuilderScreen extends Screen {
         }
     }
 
-    public boolean isMouseOverRtsPanelApi(double mouseX, double mouseY) {
+    public boolean isMouseOverUiPanelApi(double mouseX, double mouseY) {
         
         if (floatingWindowLayer != null
                 && floatingWindowLayer.isMouseOverWindowOrResizableBorder(mouseX, mouseY)) {
@@ -401,6 +542,24 @@ public class BuilderScreen extends Screen {
         if (bsp != null) bsp.clearCache();
     }
 
+    /**
+     * 尝试打开蓝图保存对话框：仅蓝图模式 + 框选完成 + 非点击模式下生效。
+     *
+     * @return 是否已打开对话框（供调用方消费事件）
+     */
+    public boolean tryOpenBlueprintSave() {
+        if (!isBlueprintMode()) return false;
+        if (!com.rtsbuilding.rtsbuilding.Config.areBlueprintsEnabled()) return false;
+        if (isClickButtonSelected()) return false;
+        var sel = kernel.renderPipeline().boxSelector;
+        if (sel == null || sel.getPhase() != com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelector.Phase.COMPLETE) {
+            return false;
+        }
+        if (blueprintSavePanel.isOpen()) return false;
+        blueprintSavePanel.openForSelection(sel.getMinCorner(), sel.getMaxCorner());
+        return true;
+    }
+
     
     
     
@@ -461,8 +620,8 @@ public class BuilderScreen extends Screen {
     }
 
     
-    public void enableRtsScissor(GuiGraphics g, int x1, int y1, int x2, int y2) {
-        scaleManager.enableRtsScissor(g, x1, y1, x2, y2);
+    public void enableUiScissor(GuiGraphics g, int x1, int y1, int x2, int y2) {
+        scaleManager.enableUiScissor(g, x1, y1, x2, y2);
     }
 
     
@@ -612,8 +771,8 @@ public class BuilderScreen extends Screen {
         int textW = Minecraft.getInstance().font.width(hint);
         int x = downBarW / 2 - textW / 2;
         int y = downBarY - 18;
-        g.fill(x - 8, y, x + textW + 8, y + 14, 0xAA000000);
-        g.drawString(Minecraft.getInstance().font, hint, x, y + 2, 0xFFFFFFFF);
+        g.fill(x - 8, y, x + textW + 8, y + 14, UiPalette.get("overlay_bg"));
+        g.drawString(Minecraft.getInstance().font, hint, x, y + 2, UiPalette.get("tooltip_text"));
     }
 
     

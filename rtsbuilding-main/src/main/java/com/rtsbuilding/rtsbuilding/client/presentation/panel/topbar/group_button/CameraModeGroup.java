@@ -2,11 +2,11 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_butto
 
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.button.AbstractButtonGroup;
+import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayoutHelper;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.state.TooltipController;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.state.TooltipController;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -45,7 +45,7 @@ public final class CameraModeGroup extends AbstractButtonGroup {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, TopBarLayoutHelper.ButtonGroup group) {
+    public void render(GuiGraphics g, int mouseX, int mouseY, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         
         selected[0] = !cameraModule.isPlayerOrbitMode();  
         selected[1] = cameraModule.isPlayerOrbitMode();   
@@ -53,7 +53,7 @@ public final class CameraModeGroup extends AbstractButtonGroup {
     }
 
     @Override
-    protected void renderExtra(GuiGraphics g, int mouseX, int mouseY, TopBarLayoutHelper.ButtonGroup group) {
+    protected void renderExtra(GuiGraphics g, int mouseX, int mouseY, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         
         {
             var rect = group.rect(0);
@@ -69,7 +69,7 @@ public final class CameraModeGroup extends AbstractButtonGroup {
     }
 
     
-    public void renderTooltipOverlay(GuiGraphics g, TopBarLayoutHelper.ButtonGroup group,
+    public void renderTooltipOverlay(GuiGraphics g, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group,
                                      int screenW, int screenH) {
         String keyText = RtsKeyMappings.TOGGLE_CAMERA_MODE_KEY.getTranslatedKeyMessage().getString();
         int textColor = ThemeManager.getTextColor();

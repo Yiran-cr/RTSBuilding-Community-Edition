@@ -3,17 +3,17 @@ package com.rtsbuilding.rtsbuilding.client.presentation.plugin.workflow;
 import com.rtsbuilding.rtsbuilding.client.domain.state.WorkflowProgress;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.workflow.WorkflowModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.ScrollBar;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.OverlayContext;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.animate.Easing;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.SpriteRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.NineSliceRegion;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.TextureInfo;
+import com.rtsbuilding.uifw.window.component.ScrollBar;
+import com.rtsbuilding.uifw.window.overlay.OverlayContext;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.animate.Easing;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.SpriteRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.model.NineSliceRegion;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowProgressProcessor;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import net.minecraft.client.Minecraft;
@@ -31,9 +31,6 @@ public class WorkflowRenderer {
     private static final int TOP_PAD = 2;
     private static final int ROW_PAD_H = 6;
     private static final int BAR_HEIGHT = 12;
-
-    private static final int TEXT_COLOR = 0xFFCCCCCC;
-    private static final int SUPPRESSED_TEXT_COLOR = 0xFF888888;
 
     private static final int BTN_SIZE = 14;
     private static final int TOGGLE_ICON_SIZE = 10;
@@ -129,7 +126,7 @@ public class WorkflowRenderer {
             RtsWorkflowStatus status = statuses[i];
             if (status == null || !status.isActive()) continue;
 
-            String label = RtsWorkflowProgressProcessor.formatLabel(status);
+            String label = buildLabel(status);
             String progressText = RtsWorkflowProgressProcessor.formatProgressText(status);
             int fillW = RtsWorkflowProgressProcessor.computeFillWidth(status, barW);
 
@@ -137,13 +134,13 @@ public class WorkflowRenderer {
             int barY = rowY + 4;
             int btnY = barY + (BAR_HEIGHT - BTN_SIZE) / 2;
 
-            int labelColor = status.onHold() ? SUPPRESSED_TEXT_COLOR : TEXT_COLOR;
+            int labelColor = status.onHold() ? UiPalette.get("text_muted") : UiPalette.get("text");
 
             float fillRatio = (float) fillW / barW;
             int fillStart = status.onHold() ? 0xFFFF8C00 : 0xFF2E7D32;
             int fillEnd = status.onHold() ? 0xFFFFB74D : 0xFF66BB6A;
             SdfRenderer.drawProgressBar(g, ox, barY, barW, BAR_HEIGHT, fillRatio,
-                    DarkUiPalette.accent(), fillStart, fillEnd, DarkUiPalette.hoverBorder());
+                    UiPalette.accent(), fillStart, fillEnd, UiPalette.hoverBorder());
 
             int textCenterY = barY + (BAR_HEIGHT - font.lineHeight) / 2 + 1;
             int textRightBound = ox + barW - 2;
@@ -166,8 +163,8 @@ public class WorkflowRenderer {
 
             {
                 float t = toggleHover.track(toggleHovered);
-                int fill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), t);
-                SdfRenderer.drawBorderedRoundedRect(g, toggleBtnX, btnY, BTN_SIZE, BTN_SIZE, 4, DarkUiPalette.black(), fill, 1);
+                int fill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), t);
+                SdfRenderer.drawBorderedRoundedRect(g, toggleBtnX, btnY, BTN_SIZE, BTN_SIZE, 4, UiPalette.black(), fill, 1);
             }
             {
                 AnimFloat stateAnim = toggleStateAnims.computeIfAbsent(i, k -> AnimFloat.of(0f, 200L, Easing.EASE_OUT_QUAD));
@@ -190,10 +187,10 @@ public class WorkflowRenderer {
 
             {
                 float t = deleteHover.track(deleteHovered);
-                int fill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), t);
-                SdfRenderer.drawBorderedRoundedRect(g, deleteBtnX, btnY, BTN_SIZE, BTN_SIZE, 4, DarkUiPalette.black(), fill, 1);
+                int fill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), t);
+                SdfRenderer.drawBorderedRoundedRect(g, deleteBtnX, btnY, BTN_SIZE, BTN_SIZE, 4, UiPalette.black(), fill, 1);
             }
-            SdfRenderer.drawRoundedRect(g, closeIconX, closeIconY, CLOSE_ICON_SIZE, CLOSE_ICON_SIZE, 2, 0xFFFF4444);
+            SdfRenderer.drawRoundedRect(g, closeIconX, closeIconY, CLOSE_ICON_SIZE, CLOSE_ICON_SIZE, 2, UiPalette.get("icon_close"));
 
             rowLayouts.add(new RowLayout(i, status.entryId(), toggleBtnX, deleteBtnX, btnY, rowY, ROW_HEIGHT));
 
@@ -204,7 +201,7 @@ public class WorkflowRenderer {
             String text = Component.translatable("screen.rtsbuilding.workflow.none").getString();
             int tx = context.getX() + (context.getWidth() - font.width(text)) / 2;
             int ty = context.getY() + (context.getHeight() - font.lineHeight) / 2;
-            TextRenderer.draw(g, text, tx, ty, SUPPRESSED_TEXT_COLOR);
+            TextRenderer.draw(g, text, tx, ty, UiPalette.get("text_muted"));
         }
 
         toggleBtnHovers.keySet().removeIf(k -> k >= statuses.length || statuses[k] == null || !statuses[k].isActive());
@@ -214,5 +211,21 @@ public class WorkflowRenderer {
             int barX = ox + contentW + SCROLLBAR_GAP;
             scrollBar.render(g, barX, baseOy, visibleH);
         }
+    }
+
+    /**
+     * 组装工作流行 label（client 侧 UI 文案）。
+     *
+     * <p>lang key 由 common 的 {@link RtsWorkflowProgressProcessor#typeLabelKey} 推导，
+     * 此处统一解析为可见文本并追加「搁置」后缀（common 不触碰 Component，见阶段三 3.1）。
+     */
+    private String buildLabel(RtsWorkflowStatus status) {
+        String key = RtsWorkflowProgressProcessor.typeLabelKey(status);
+        if (key.isEmpty()) return "";
+        String label = Component.translatable(key).getString();
+        if (status.onHold()) {
+            label += Component.translatable("screen.rtsbuilding.workflow.suspended").getString();
+        }
+        return label;
     }
 }

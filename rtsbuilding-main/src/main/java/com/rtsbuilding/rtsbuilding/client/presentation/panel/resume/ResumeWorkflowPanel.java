@@ -1,13 +1,13 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.resume;
 
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsPanel;
+import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -23,7 +23,7 @@ import java.util.Locale;
  *   <li>有冲突 → 「跳过」（跳过冲突继续放置）与「覆盖」（原生破坏冲突方块后放置）。</li>
  * </ul>
  */
-public final class ResumeWorkflowPanel extends RtsPanel {
+public final class ResumeWorkflowPanel extends UiPanel {
 
     private static final int PANEL_W = 288;
     private static final int PANEL_H = 190;
@@ -44,8 +44,8 @@ public final class ResumeWorkflowPanel extends RtsPanel {
     /** 材料不足进度条渐变（深 → 亮）。 */
     private static final int PROGRESS_MISSING_START = 0xFFC62828;
     private static final int PROGRESS_MISSING_END = 0xFFFF5252;
-    /** 进度条内文字色（浅白，叠加在轨道/填充上均清晰）。 */
-    private static final int BAR_TEXT_COLOR = 0xFFE8E8E8;
+
+    private static final int BAR_TEXT_COLOR = UiPalette.get("text_hover");
 
     /** 材料行图标尺寸。 */
     private static final int MAT_ICON_SIZE = 16;
@@ -155,7 +155,7 @@ public final class ResumeWorkflowPanel extends RtsPanel {
             shown++;
         }
         if (matLabels.isEmpty()) {
-            TextRenderer.draw(g, t("screen.rtsbuilding.resume.no_materials"), x, cy, DarkUiPalette.border());
+            TextRenderer.draw(g, t("screen.rtsbuilding.resume.no_materials"), x, cy, UiPalette.border());
         }
 
         // 按钮区
@@ -207,7 +207,7 @@ public final class ResumeWorkflowPanel extends RtsPanel {
         int fillStart = enough ? PROGRESS_OK_START : PROGRESS_MISSING_START;
         int fillEnd = enough ? PROGRESS_OK_END : PROGRESS_MISSING_END;
         SdfRenderer.drawProgressBar(g, barX, barY, barW, MAT_BAR_H, ratio,
-                DarkUiPalette.accent(), fillStart, fillEnd, DarkUiPalette.hoverBorder());
+                UiPalette.accent(), fillStart, fillEnd, UiPalette.hoverBorder());
 
         // 进度条内文字（垂直居中）：左侧名称，右侧「有 M / 需 R」，不足时左侧再追加「缺 X」
         int textCenterY = barY + (MAT_BAR_H - mc.font.lineHeight) / 2 + 1;
@@ -235,10 +235,10 @@ public final class ResumeWorkflowPanel extends RtsPanel {
     private void renderButton(GuiGraphics g, int x, int y, String label, boolean disabled,
                               int[] rect, int mouseX, int mouseY) {
         boolean hovered = !disabled && mouseX >= x && mouseX < x + BTN_W && mouseY >= y && mouseY < y + BTN_H;
-        int fill = disabled ? 0x55333333 : hovered ? DarkUiPalette.accent() : 0x882E3B4C;
-        SdfRenderer.drawBorderedRoundedRect(g, x, y, BTN_W, BTN_H, 5, DarkUiPalette.border(), fill, 1);
+        int fill = disabled ? 0x55333333 : hovered ? UiPalette.accent() : 0x882E3B4C;
+        SdfRenderer.drawBorderedRoundedRect(g, x, y, BTN_W, BTN_H, 5, UiPalette.border(), fill, 1);
         int labelW = Minecraft.getInstance().font.width(label);
-        int textColor = disabled ? DarkUiPalette.border()
+        int textColor = disabled ? UiPalette.border()
                 : hovered ? ThemeManager.getHoverTextColor() : ThemeManager.getTextColor();
         TextRenderer.draw(g, label, x + (BTN_W - labelW) / 2,
                 y + (BTN_H - Minecraft.getInstance().font.lineHeight) / 2, textColor);
@@ -298,7 +298,7 @@ public final class ResumeWorkflowPanel extends RtsPanel {
     @Override
     protected void computeDefaultPosition() {
         if (screen == null) return;
-        setWindowX(Math.max(8, (screen.width - getWindowWidth()) / 2));
-        setWindowY(Math.max(8, (screen.height - getWindowHeight()) / 3));
+        setWindowX(Math.max(8, (screen.getUiWidth() - getWindowWidth()) / 2));
+        setWindowY(Math.max(8, (screen.getUiHeight() - getWindowHeight()) / 3));
     }
 }

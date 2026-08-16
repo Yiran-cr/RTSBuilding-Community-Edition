@@ -69,7 +69,7 @@ public final class SessionSerializer {
         tag.putInt("page", Math.max(0, v.page));
         tag.putString("search", v.search);
         tag.putString("category", RtsStoragePageBuilder.normalizeCategory(v.category));
-        tag.putInt("sort", (v.sort == null ? RtsStorageSort.QUANTITY : v.sort).ordinal());
+        tag.putInt("sort", (v.sort == null ? RtsStorageSort.QUANTITY : v.sort).id());
         tag.putBoolean("ascending", v.ascending);
         return tag;
     }
@@ -114,9 +114,8 @@ public final class SessionSerializer {
         }
     }
 
-    private static RtsStorageSort parseSort(int ordinal) {
-        RtsStorageSort[] values = RtsStorageSort.values();
-        return ordinal >= 0 && ordinal < values.length ? values[ordinal] : RtsStorageSort.QUANTITY;
+    private static RtsStorageSort parseSort(int id) {
+        return RtsStorageSort.fromId(id);
     }
 
     // ======================================================================

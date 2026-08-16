@@ -1,26 +1,37 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin.binding;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.rtsbuilding.rtsbuilding.client.domain.state.LinkedStorageEntry;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.storage.StorageModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.ScrollBar;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.OverlayContext;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.theme.ThemeManager;
+import com.rtsbuilding.uifw.window.component.ScrollBar;
+import com.rtsbuilding.uifw.window.overlay.OverlayContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * 绑定条目渲染：链接存储条目列表（优先级/图标/名称/操作按钮）。
+ * 操作按钮的语义色（解绑/双向/仅提取/定位）为业务状态色，保留硬编码。
+ */
 public final class BindingRenderer {
 
     private final OverlayContext ctx;
@@ -35,8 +46,35 @@ public final class BindingRenderer {
     private final Map<Integer, AnimFloat> toggleHoverAnims = new HashMap<>();
     private final Map<Integer, AnimFloat> priorityHoverAnims = new HashMap<>();
 
+    private static final int ROW_H = 20;
+    private static final int ICON_SIZE = 12;
+    private static final int PRIORITY_PAD_H = 4;
+    private static final int PRIORITY_ICON_GAP = 2;
+    private static final int ICON_TEXT_GAP = 4;
+    private static final int BTN_HEIGHT = 14;
+    private static final int BTN_PAD_H = 4;
+    private static final int BTN_GAP = 2;
+    private static final int ARROW_BTN_SIZE = 14;
+    private static final int ARROW_DRAW_SIZE = 6;
+    private static final int SCROLLBAR_W = 7;
+    private static final int RIGHT_MARGIN = 4;
+    private static final int LEFT_PAD = 5;
+    private static final int TOP_PAD = 2;
+    private static final int EDIT_INPUT_W = 40;
+    private static final int EDIT_INPUT_H = 14;
+    private static final long CURSOR_BLINK_MS = 600;
+
+    // ── 业务状态色（绑定操作按钮语义，不入主题） ──
+    private static final int UNBIND_COLOR = 0xFFE06060;
+    private static final int UNBIND_HOVER_COLOR = 0xFFFF8080;
+    private static final int MODE_BI_COLOR = 0xFF60C060;
+    private static final int MODE_EXTRACT_COLOR = 0xFFE0A040;
+    private static final int BTN_HOVER_FG = 0xFFFFFFFF;
+    private static final int LOCATE_BTN_COLOR = 0xFF8080E0;
+    private static final int LOCATE_BTN_HOVER_COLOR = 0xFFA0A0FF;
+
     public BindingRenderer(OverlayContext ctx, ScrollBar scrollBar, List<RowLayout> rowLayouts,
-                    PriorityEditController editController, EntryAnimationController animController) {
+                           PriorityEditController editController, EntryAnimationController animController) {
         this.ctx = ctx;
         this.scrollBar = scrollBar;
         this.rowLayouts = rowLayouts;
@@ -44,123 +82,85 @@ public final class BindingRenderer {
         this.animController = animController;
     }
 
-    private static final int ROW_H = 20;
-    private static final int ICON_SIZE = 12;
-    private static final int PRIORITY_PAD_H = 4;
-    private static final int PRIORITY_ICON_GAP = 2;
-    private static final int ICON_TEXT_GAP = 4;
-
-    private static final int BTN_HEIGHT = 14;
-
-    private static final int BTN_PAD_H = 4;
-    private static final int BTN_GAP = 2;
-
-    private static final int ARROW_BTN_SIZE = 14;
-
-    private static final int ARROW_DRAW_SIZE = 6;
-    private static final int SCROLLBAR_W = 7;
-    private static final int RIGHT_MARGIN = 4;
-    private static final int LEFT_PAD = 5;
-    private static final int TOP_PAD = 2;
-
-    private static final int EDIT_INPUT_W = 40;
-    private static final int EDIT_INPUT_H = ARROW_BTN_SIZE;
-
-    private static final long CURSOR_BLINK_MS = 600;
-
-    private static final int UNBIND_COLOR = 0xFFE06060;
-    private static final int UNBIND_HOVER_COLOR = 0xFFFF8080;
-    private static final int MODE_BI_COLOR = 0xFF60C060;
-    private static final int MODE_EXTRACT_COLOR = 0xFFE0A040;
-    private static final int BTN_HOVER_FG = 0xFFFFFFFF;
-
-    private static final int LOCATE_BTN_COLOR = 0xFF8080E0;
-    private static final int LOCATE_BTN_HOVER_COLOR = 0xFFA0A0FF;
-
     public void renderContent(GuiGraphics g) {
         StorageModule sm = RtsClientKernel.get().module(StorageModule.class);
         if (sm == null) return;
 
-        var entries = sm.getLinkedStorageEntries();
-        var names = sm.getLinkedDisplayNames();
-        var iconIds = sm.getLinkedIconItemIds();
-        var priorities = sm.getLinkedPriorities();
-        int count = Math.min(entries.size(), Math.min(names.size(),
-                Math.min(iconIds.size(), priorities.size())));
-
+        List<LinkedStorageEntry> entries = sm.getLinkedStorageEntries();
+        List<String> names = sm.getLinkedDisplayNames();
+        List<String> iconIds = sm.getLinkedIconItemIds();
+        List<Integer> priorities = sm.getLinkedPriorities();
+        int count = Math.min(entries.size(), Math.min(names.size(), Math.min(iconIds.size(), priorities.size())));
         if (count > 0) {
-            editController.tick(count);
-            animController.tick(count);
+            this.editController.tick(count);
+            this.animController.tick(count);
         }
 
-        int x = ctx.getX(), y = ctx.getY(), w = ctx.getWidth(), h = ctx.getHeight();
-        int mouseX = ctx.getLastMouseX(), mouseY = ctx.getLastMouseY();
+        int x = this.ctx.getX();
+        int y = this.ctx.getY();
+        int w = this.ctx.getWidth();
+        int h = this.ctx.getHeight();
+        int mouseX = this.ctx.getLastMouseX();
+        int mouseY = this.ctx.getLastMouseY();
         Minecraft mc = Minecraft.getInstance();
-        int visibleH = h - TOP_PAD * 2;
 
-        scrollBar.setContent(count * ROW_H, visibleH);
-        int scroll = scrollBar.getScroll();
+        int visibleH = h - 4;
+        this.scrollBar.setContent(count * ROW_H, visibleH);
+        int scroll = this.scrollBar.getScroll();
 
-        renderBackgroundRows(g, x, y, w, count, scroll, visibleH, mouseX, mouseY);
+        this.renderBackgroundRows(g, x, y, w, count, scroll, visibleH, mouseX, mouseY);
 
         if (count > 0) {
             List<Integer> sortedIndices = buildSortedIndices(count, priorities);
-
-            RowLayout.ButtonBar btnBar = new RowLayout.ButtonBar(mc, scrollBar.isVisible(), x, w);
+            RowLayout.ButtonBar btnBar = new RowLayout.ButtonBar(mc, this.scrollBar.isVisible(), x, w);
             int fontColor = ThemeManager.getTextColor();
-
-            rowLayouts.clear();
+            this.rowLayouts.clear();
             int clipY = y + TOP_PAD;
             for (int vi = 0; vi < count; vi++) {
                 int origIdx = sortedIndices.get(vi);
                 RowLayout rl = new RowLayout();
                 rl.originalIndex = origIdx;
-                rowLayouts.add(rl);
-
-                renderSingleRow(g, x, y, scroll, vi, origIdx, rl, entries, names, iconIds, priorities,
+                this.rowLayouts.add(rl);
+                this.renderSingleRow(g, x, y, scroll, vi, origIdx, rl, entries, names, iconIds, priorities,
                         btnBar, fontColor, mc, mouseX, mouseY, clipY, visibleH);
             }
         } else {
             String hint = "No linked";
-            int textColor = ThemeManager.getTextColor() & 0xFFFFFF | 0x60000000;
+            int textColor = (ThemeManager.getTextColor() & 0xFFFFFF) | 0x60000000;
             int lineH = Minecraft.getInstance().font.lineHeight;
             TextRenderer.drawCentered(g, Minecraft.getInstance().font, hint,
-                    ctx.getX() + ctx.getWidth() / 2, ctx.getY() + (ctx.getHeight() - lineH) / 2, textColor);
+                    this.ctx.getX() + this.ctx.getWidth() / 2,
+                    this.ctx.getY() + (this.ctx.getHeight() - lineH) / 2, textColor);
         }
 
-        renderScrollbar(g, x, y, h);
+        this.renderScrollbar(g, x, y, h);
     }
 
-    private void renderBackgroundRows(GuiGraphics g, int x, int y, int w, int count,
-                                       int scroll, int visibleH, int mouseX, int mouseY) {
+    private void renderBackgroundRows(GuiGraphics g, int x, int y, int w, int count, int scroll, int visibleH, int mouseX, int mouseY) {
         int firstRow = scroll / ROW_H;
         int totalRows = visibleH / ROW_H + 2;
-
         for (int i = firstRow; i < firstRow + totalRows; i++) {
             int bgTop = y + TOP_PAD + i * ROW_H - scroll;
-            int color = (i % 2 == 0) ? DarkUiPalette.p7() : DarkUiPalette.p6();
+            int color = i % 2 == 0 ? UiPalette.p7() : UiPalette.p6();
             g.fill(x, bgTop, x + w, bgTop + ROW_H, color);
         }
     }
 
-    private void renderSingleRow(GuiGraphics g, int x, int y, int scroll,
-                                  int vi, int origIdx, RowLayout rl,
-                                  List<LinkedStorageEntry> entries, List<String> names,
-                                  List<String> iconIds, List<Integer> priorities,
-                                  RowLayout.ButtonBar btnBar, int fontColor, Minecraft mc,
-                                  int mouseX, int mouseY, int clipY, int clipH) {
-        int lineH = mc.font.lineHeight;
-
+    private void renderSingleRow(GuiGraphics g, int x, int y, int scroll, int vi, int origIdx, RowLayout rl,
+                                 List<LinkedStorageEntry> entries, List<String> names, List<String> iconIds,
+                                 List<Integer> priorities, RowLayout.ButtonBar btnBar, int fontColor,
+                                 Minecraft mc, int mouseX, int mouseY, int clipY, int clipH) {
+        int lineH = Minecraft.getInstance().font.lineHeight;
         int baseRowY = TOP_PAD + vi * ROW_H;
-        float animY = animController.updateEntryAnimY(origIdx, baseRowY);
-        int contentY = y + Math.round(animY) - scroll;
-        rl.y = contentY;
-
+        float animY = this.animController.updateEntryAnimY(origIdx, baseRowY);
+        int contentY;
+        int priorityBoxW;
+        rl.y = contentY = y + Math.round(animY) - scroll;
         boolean rowVisible = contentY + ROW_H >= clipY && contentY < clipY + clipH;
-        boolean isEditingRow = editController.isEditingRow(vi);
+        boolean isEditingRow = this.editController.isEditingRow(vi);
         boolean actuallyRender = rowVisible || isEditingRow;
 
-        var entry = entries.get(origIdx);
+        LinkedStorageEntry entry = entries.get(origIdx);
         String name = names.get(origIdx);
         String iconItemId = iconIds.get(origIdx);
         int priority = priorities.get(origIdx);
@@ -168,32 +168,28 @@ public final class BindingRenderer {
 
         int rowCenterY = contentY + ROW_H / 2;
         int cursorX = x + LEFT_PAD;
-
         int arrowBtnY = rowCenterY - ARROW_BTN_SIZE / 2;
         rl.arrowBtnX = cursorX;
         if (actuallyRender) {
-            renderArrowButton(g, cursorX, arrowBtnY, vi == 0, mouseX, mouseY);
+            this.renderArrowButton(g, cursorX, arrowBtnY, vi == 0, mouseX, mouseY);
         }
-        cursorX += ARROW_BTN_SIZE + PRIORITY_ICON_GAP;
-        rl.priorityX = cursorX;
 
-        int priorityBoxW = mc.font.width(String.valueOf(priority)) + PRIORITY_PAD_H * 2;
-        rl.priorityW = priorityBoxW;
-        float animW = editController.computePriorityBoxWidth(priorityBoxW, isEditingRow, vi);
+        rl.priorityX = cursorX += ARROW_BTN_SIZE + PRIORITY_ICON_GAP;
+        rl.priorityW = priorityBoxW = mc.font.width(String.valueOf(priority)) + PRIORITY_PAD_H * 2;
+        float animW = this.editController.computePriorityBoxWidth(priorityBoxW, isEditingRow, vi);
         if (actuallyRender || isEditingRow) {
-            boolean hoverPriority = !ctx.isDividerDragging() && !isEditingRow
+            boolean hoverPriority = !this.ctx.isDividerDragging() && !isEditingRow
                     && mouseX >= cursorX && mouseX < cursorX + (int) animW
-                    && mouseY >= rowCenterY - EDIT_INPUT_H / 2 && mouseY < rowCenterY + EDIT_INPUT_H / 2;
-            renderPriorityBox(g, cursorX, rowCenterY, String.valueOf(priority),
-                    isEditingRow, dimmed, (int) animW, vi,
-                    priorityHoverAnims.computeIfAbsent(vi, k -> AnimFloat.hover()).track(hoverPriority));
+                    && mouseY >= rowCenterY - BTN_HEIGHT / 2 && mouseY < rowCenterY + BTN_HEIGHT / 2;
+            this.renderPriorityBox(g, cursorX, rowCenterY, String.valueOf(priority), isEditingRow, dimmed,
+                    (int) animW, vi, this.priorityHoverAnims.computeIfAbsent(vi, k -> AnimFloat.hover()).track(hoverPriority));
         }
         cursorX += (int) animW + PRIORITY_ICON_GAP;
 
         if (actuallyRender && !iconItemId.isEmpty()) {
             ItemStack stack = resolveItemStack(iconItemId);
             if (!stack.isEmpty()) {
-                renderItemIcon(g, stack, cursorX + ICON_SIZE / 2, rowCenterY);
+                this.renderItemIcon(g, stack, cursorX + 6, rowCenterY);
             }
         }
         cursorX += ICON_SIZE;
@@ -207,20 +203,20 @@ public final class BindingRenderer {
         }
 
         if (actuallyRender) {
-            renderActionButtons(g, entry, rl, btnBar, rowCenterY, mouseX, mouseY);
+            this.renderActionButtons(g, entry, rl, btnBar, rowCenterY, mouseX, mouseY);
         }
     }
 
     private void renderArrowButton(GuiGraphics g, int btnX, int btnY, boolean isFirst, int mouseX, int mouseY) {
-        boolean hovering = !ctx.isDividerDragging()
-                && inRect(mouseX, mouseY, btnX, btnY, ARROW_BTN_SIZE, ARROW_BTN_SIZE);
-        int rowIndex = rowLayouts.size();
-        AnimFloat anim = arrowHoverAnims.computeIfAbsent(rowIndex, k -> AnimFloat.hover());
+        boolean hovering = !this.ctx.isDividerDragging() && inRect(mouseX, mouseY, btnX, btnY, ARROW_BTN_SIZE, ARROW_BTN_SIZE);
+        int rowIndex = this.rowLayouts.size();
+        AnimFloat anim = this.arrowHoverAnims.computeIfAbsent(rowIndex, k -> AnimFloat.hover());
         float t = anim.track(hovering);
-        int fillColor = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), t);
+
+        int fillColor = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), t);
         SdfRenderer.drawBorderedRoundedRect(g, btnX, btnY, ARROW_BTN_SIZE, ARROW_BTN_SIZE, 4,
-                DarkUiPalette.black(), fillColor, 1);
-        var pose = g.pose();
+                UiPalette.black(), fillColor, 1);
+        PoseStack pose = g.pose();
         pose.pushPose();
         pose.translate(btnX + ARROW_BTN_SIZE / 2, btnY + ARROW_BTN_SIZE / 2, 0);
         pose.mulPose(Axis.ZP.rotationDegrees(isFirst ? 90f : -90f));
@@ -231,88 +227,83 @@ public final class BindingRenderer {
     }
 
     private void renderActionButtons(GuiGraphics g, LinkedStorageEntry entry, RowLayout rl,
-                                      RowLayout.ButtonBar btnBar, int rowCenterY, int mouseX, int mouseY) {
+                                     RowLayout.ButtonBar btnBar, int rowCenterY, int mouseX, int mouseY) {
+        int locateBtnX;
+        int unbindX;
+        int toggleX;
         int btnY = rowCenterY - BTN_HEIGHT / 2;
-        int rowIndex = rowLayouts.size() - 1;
+        int rowIndex = this.rowLayouts.size() - 1;
 
         String locateText;
         if (entry.worldAvailable()) {
             StorageModule sm = RtsClientKernel.get().module(StorageModule.class);
             boolean showLocate = sm != null && sm.isLocationDisplayActive(entry.pos());
-            locateText = showLocate ? "关闭显示" : "开启位置";
+            locateText = showLocate ? tr("ui.rtsbuilding.binding.hide_location") : tr("ui.rtsbuilding.binding.show_location");
         } else {
-            locateText = "开启位置";
+            locateText = tr("ui.rtsbuilding.binding.show_location");
         }
         int locateBtnW = Minecraft.getInstance().font.width(locateText) + BTN_PAD_H * 2;
-        int locateBtnX = btnBar.locateX();
-        rl.locateBtnX = locateBtnX;
+        rl.locateBtnX = locateBtnX = btnBar.locateX();
         rl.locateBtnW = locateBtnW;
-        boolean hoverLocate = !ctx.isDividerDragging()
-                && inRect(mouseX, mouseY, locateBtnX, btnY, locateBtnW, BTN_HEIGHT);
-        drawTextButton(g, locateBtnX, btnY, locateText,
+        boolean hoverLocate = !this.ctx.isDividerDragging() && inRect(mouseX, mouseY, locateBtnX, btnY, locateBtnW, BTN_HEIGHT);
+        this.drawTextButton(g, locateBtnX, btnY, locateText,
                 hoverLocate ? LOCATE_BTN_HOVER_COLOR : LOCATE_BTN_COLOR,
-                locateHoverAnims.computeIfAbsent(rowIndex * 3, k -> AnimFloat.hover()).track(hoverLocate));
+                this.locateHoverAnims.computeIfAbsent(rowIndex * 3, k -> AnimFloat.hover()).track(hoverLocate));
 
-        String unbindText = "解绑";
+        String unbindText = tr("ui.rtsbuilding.binding.unbind");
         int unbindBtnW = Minecraft.getInstance().font.width(unbindText) + BTN_PAD_H * 2;
-        int unbindX = btnBar.unbindX();
-        rl.unbindX = unbindX;
+        rl.unbindX = unbindX = btnBar.unbindX();
         rl.unbindW = unbindBtnW;
-        boolean hoverUnbind = !ctx.isDividerDragging()
-                && inRect(mouseX, mouseY, unbindX, btnY, unbindBtnW, BTN_HEIGHT);
-        drawTextButton(g, unbindX, btnY, unbindText,
+        boolean hoverUnbind = !this.ctx.isDividerDragging() && inRect(mouseX, mouseY, unbindX, btnY, unbindBtnW, BTN_HEIGHT);
+        this.drawTextButton(g, unbindX, btnY, unbindText,
                 hoverUnbind ? UNBIND_HOVER_COLOR : UNBIND_COLOR,
-                unbindHoverAnims.computeIfAbsent(rowIndex * 3 + 1, k -> AnimFloat.hover()).track(hoverUnbind));
+                this.unbindHoverAnims.computeIfAbsent(rowIndex * 3 + 1, k -> AnimFloat.hover()).track(hoverUnbind));
 
-        String toggleText = entry.isExtractOnly() ? "仅提取" : "双向";
+        String toggleText = entry.isExtractOnly() ? tr("ui.rtsbuilding.binding.extract_only") : tr("ui.rtsbuilding.binding.bidirectional");
         int toggleBtnW = Minecraft.getInstance().font.width(toggleText) + BTN_PAD_H * 2;
-        int toggleX = btnBar.toggleX();
-        rl.toggleX = toggleX;
+        rl.toggleX = toggleX = btnBar.toggleX();
         rl.toggleW = toggleBtnW;
-        boolean hoverToggle = !ctx.isDividerDragging()
-                && inRect(mouseX, mouseY, toggleX, btnY, toggleBtnW, BTN_HEIGHT);
+        boolean hoverToggle = !this.ctx.isDividerDragging() && inRect(mouseX, mouseY, toggleX, btnY, toggleBtnW, BTN_HEIGHT);
         int toggleColor = entry.isExtractOnly() ? MODE_EXTRACT_COLOR : MODE_BI_COLOR;
-        drawTextButton(g, toggleX, btnY, toggleText,
-                hoverToggle ? BTN_HOVER_FG : toggleColor,
-                toggleHoverAnims.computeIfAbsent(rowIndex * 3 + 2, k -> AnimFloat.hover()).track(hoverToggle));
+        this.drawTextButton(g, toggleX, btnY, toggleText, hoverToggle ? BTN_HOVER_FG : toggleColor,
+                this.toggleHoverAnims.computeIfAbsent(rowIndex * 3 + 2, k -> AnimFloat.hover()).track(hoverToggle));
+    }
+
+    private static String tr(String key) {
+        return Component.translatable(key).getString();
     }
 
     private void drawTextButton(GuiGraphics g, int btnX, int btnY, String text, int textColor, float hoverT) {
         int btnW = Minecraft.getInstance().font.width(text) + BTN_PAD_H * 2;
-        int fillColor = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), hoverT);
-        SdfRenderer.drawBorderedRoundedRect(g, btnX, btnY, btnW, BTN_HEIGHT, 4,
-                DarkUiPalette.black(), fillColor, 1);
+        int fillColor = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), hoverT);
+        SdfRenderer.drawBorderedRoundedRect(g, btnX, btnY, btnW, BTN_HEIGHT, 4, UiPalette.black(), fillColor, 1);
         int lineH = Minecraft.getInstance().font.lineHeight;
         TextRenderer.drawCentered(g, Minecraft.getInstance().font, text,
                 btnX + btnW / 2, btnY + (BTN_HEIGHT - lineH) / 2, textColor);
     }
 
-    private void renderPriorityBox(GuiGraphics g, int boxX, int centerY,
-                                    String priorityStr, boolean editing, boolean dimmed, int boxW, int rowIndex,
-                                    float hoverT) {
-        int boxY = centerY - EDIT_INPUT_H / 2;
-
-        SdfRenderer.drawInputBox(g, boxX, boxY, boxW, EDIT_INPUT_H, editController.getAnimValue(rowIndex), hoverT, 4);
-
+    private void renderPriorityBox(GuiGraphics g, int boxX, int centerY, String priorityStr,
+                                   boolean editing, boolean dimmed, int boxW, int rowIndex, float hoverT) {
+        int boxY = centerY - BTN_HEIGHT / 2;
+        SdfRenderer.drawInputBox(g, boxX, boxY, boxW, BTN_HEIGHT,
+                this.editController.getAnimValue(rowIndex), hoverT, 4);
         Minecraft mc = Minecraft.getInstance();
         int fontColor = ThemeManager.getTextColor();
         int textColor = editing ? fontColor : (dimmed ? (fontColor & 0xFFFFFF) | 0x60000000 : fontColor);
         int textX = boxX + 4;
-        int textY = boxY + (EDIT_INPUT_H - mc.font.lineHeight) / 2;
+        int textY = boxY + (BTN_HEIGHT - Minecraft.getInstance().font.lineHeight) / 2;
 
         if (editing) {
-            String text = editController.getBufferText();
+            String text = this.editController.getBufferText();
             if (!text.isEmpty()) {
                 String visible = TextRenderer.trimToWidth(mc.font, text, boxW - 8);
                 TextRenderer.draw(g, visible, textX, textY, textColor);
             }
-            long elapsed = System.currentTimeMillis() - editController.getStartTime();
-            if ((elapsed / CURSOR_BLINK_MS) % 2 == 0) {
-                int cursorVisualX = mc.font.width(text.isEmpty() ? "0"
-                        : text.substring(0, Math.min(editController.getBufferLength(), text.length())));
+            if ((System.currentTimeMillis() - this.editController.getStartTime()) / CURSOR_BLINK_MS % 2 == 0) {
+                int cursorVisualX = mc.font.width(text.isEmpty() ? "0" : text.substring(0, Math.min(this.editController.getBufferLength(), text.length())));
                 int clampedX = Math.min(cursorVisualX, boxW - 8);
-                g.fill(textX + clampedX, textY,
-                        textX + clampedX + 1, textY + mc.font.lineHeight, 0xFFFFFFFF);
+                g.fill(textX + clampedX, textY, textX + clampedX + 1, textY + Minecraft.getInstance().font.lineHeight,
+                        UiPalette.get("input_cursor"));
             }
         } else if (priorityStr != null && !priorityStr.isEmpty()) {
             int textWidth = mc.font.width(priorityStr);
@@ -323,13 +314,13 @@ public final class BindingRenderer {
 
     private void renderItemIcon(GuiGraphics g, ItemStack stack, int centerX, int centerY) {
         if (stack.isEmpty()) return;
-        GuiItemRenderer.drawItemCentered(g, stack, centerX, centerY, (float) ICON_SIZE / 16.0f);
+        GuiItemRenderer.drawItemCentered(g, stack, centerX, centerY, 0.75f);
     }
 
     private void renderScrollbar(GuiGraphics g, int x, int y, int h) {
-        int visibleH = h - TOP_PAD * 2;
-        int barX = x + ctx.getWidth() - SCROLLBAR_W - RIGHT_MARGIN;
-        scrollBar.render(g, barX, y + TOP_PAD + 6, visibleH - 12);
+        int visibleH = h - 4;
+        int barX = x + this.ctx.getWidth() - SCROLLBAR_W - RIGHT_MARGIN;
+        this.scrollBar.render(g, barX, y + TOP_PAD + 6, visibleH - 12);
     }
 
     private static List<Integer> buildSortedIndices(int count, List<Integer> priorities) {

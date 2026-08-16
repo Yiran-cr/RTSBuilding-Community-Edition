@@ -31,7 +31,7 @@ public final class ServerActionHandler {
 
     public static void handle(C2SAction payload, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            // C2SAction.decode 在 ActionType ordinal 越界时返回 null（见 C2SAction#decode），
+            // C2SAction.decode 在 ActionType id 越界/未知时返回 null（见 C2SAction#decode），
             // 这里必须在任何字段访问前判空，防止恶意包触发 NPE。
             if (payload == null || !(ctx.player() instanceof ServerPlayer p)) return;
             try { dispatch(payload, p); }
@@ -45,8 +45,8 @@ public final class ServerActionHandler {
         switch (msg.actionType()) {
             case SET_MODE -> {
                 int id = t.getByte("mode") & 0xFF;
-                var modes = BuilderMode.values();
-                if (id >= 0 && id < modes.length) RtsServer.get().binding().setMode(p, modes[id]);
+                var mode = BuilderMode.fromId(id);
+                if (mode != null) RtsServer.get().binding().setMode(p, mode);
             }
             case TOGGLE_CAMERA -> {
                 boolean enable = t.getBoolean("startAtPlayerHead");
@@ -96,7 +96,7 @@ public final class ServerActionHandler {
             case CLOSE_REMOTE_MENU -> RtsServer.get().binding().closeRemoteMenu(p);
             case STORE_HOTBAR_SLOT -> RtsServer.get().binding().storeHotbarSlot(p, (byte) (t.getByte("slot") & 0xFF));
             case REQUEST_PAGE -> {
-                var sort = com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort.byId(t.getByte("sort"));
+                var sort = com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort.fromId(t.getByte("sort"));
                 RtsServer.get().page().requestPage(p, t.getInt("page"), t.getString("search"), t.getString("category"), sort, t.getBoolean("ascending"), t.getInt("pageSize"), true, new ArrayList<>());
             }
             case PLACE_BLOCK -> {

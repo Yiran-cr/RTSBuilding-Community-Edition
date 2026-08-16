@@ -5,6 +5,7 @@ import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsMineProgressPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsUltimineProgressPayload;
 import com.rtsbuilding.rtsbuilding.platform.Platform;
 import com.rtsbuilding.rtsbuilding.server.service.beam.RtsDroneBeamService;
+import com.rtsbuilding.rtsbuilding.server.service.placement.RtsBlockAnimationCommitter;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -46,10 +47,17 @@ public final class RtsMiningNetworkHelper {
 
     /**
      * 发送破坏动画数据包，显示方块从哪种状态变为哪种状态。
-     * <p>数据包携带服务端 tick 与同 tick 内序号（{@code seq}），客户端据此错峰启动动画。
+     * <p>数据包携带服务端 tick、同 tick 内序号（{@code seq}）与服务端权威动画时长。
      * 同时广播一条破坏红光（目标方块 → 无人机摄像头）给其他玩家。</p>
      */
     public static void sendBreakAnimation(ServerPlayer player, BlockPos pos, BlockState state, BlockState resultState) {
+        sendBreakAnimation(player, pos, state, resultState, RtsBlockAnimationCommitter.BREAK_ANIMATION_TICKS);
+    }
+
+    /**
+     * 发送破坏动画数据包（指定<b>服务端权威动画时长</b>，见 {@link RtsBlockAnimationCommitter#BREAK_ANIMATION_TICKS}）。
+     */
+    public static void sendBreakAnimation(ServerPlayer player, BlockPos pos, BlockState state, BlockState resultState, int durationTicks) {
         if (player == null || pos == null) {
             return;
         }
@@ -57,7 +65,7 @@ public final class RtsMiningNetworkHelper {
         long tick = level.getGameTime();
         int seq = nextBreakSeq(player, tick);
         Platform.sendPacket(player,
-                new S2CRtsBreakAnimationPayload(pos.immutable(), state, resultState, tick, seq));
+                new S2CRtsBreakAnimationPayload(pos.immutable(), state, resultState, tick, seq, durationTicks));
         // 破坏光束：只对其他玩家可见（主控不接收），两端追踪方块位置与无人机摄像头位置
         RtsDroneBeamService.broadcastBreak(player, pos);
     }

@@ -18,7 +18,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelector;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster.CursorRay;
-import com.rtsbuilding.rtsbuilding.client.util.state.FeatureAdjusterState;
+import com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState;
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
 import net.minecraft.client.Minecraft;
@@ -102,7 +102,7 @@ public final class BuildInteractionHandler {
         int button = event.button();
 
         if (!isInBuildOrInteractiveMode(topBarPanel)) return PASS;
-        if (screen.isMouseOverRtsPanelApi(event.x(), event.y())) return PASS;
+        if (screen.isMouseOverUiPanelApi(event.x(), event.y())) return PASS;
         if (!isWorldArea(event.x(), event.y(), screen)) return PASS;
         if (leftSidebarPanel != null && leftSidebarPanel.isClickButtonSelected()
                 && screen.isInteractiveMode()) return PASS;
@@ -165,7 +165,7 @@ public final class BuildInteractionHandler {
         }
 
         if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && !isAltDown() && !isShiftDown()
-                && !screen.isMouseOverRtsPanelApi(event.x(), event.y())
+                && !screen.isMouseOverUiPanelApi(event.x(), event.y())
                 && isWorldArea(event.x(), event.y(), screen)
                 && isInBuildOrInteractiveMode(topBarPanel)
                 && !shouldSkipRightClickRelease(screen, leftSidebarPanel)) {
@@ -188,7 +188,7 @@ public final class BuildInteractionHandler {
 
         
         if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE
-                && !screen.isMouseOverRtsPanelApi(event.x(), event.y())
+                && !screen.isMouseOverUiPanelApi(event.x(), event.y())
                 && isWorldArea(event.x(), event.y(), screen)) {
             if (!cameraInputLayer.wasDragged(button)) {
                 tryPickHoveredBlockForPlacement(screen);
@@ -301,7 +301,7 @@ public final class BuildInteractionHandler {
         double rtsScale = screen.getRtsGuiScale();
         double mouseX = mc.mouseHandler.xpos() / rtsScale;
         double mouseY = mc.mouseHandler.ypos() / rtsScale;
-        if (screen.isMouseOverRtsPanelApi(mouseX, mouseY)) return;
+        if (screen.isMouseOverUiPanelApi(mouseX, mouseY)) return;
         if (!isWorldArea(mouseX, mouseY, screen)) return;
 
         // 点击模式：指针指向的方块为球心，持续拾取周围掉落物（无需点击）

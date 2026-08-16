@@ -22,14 +22,13 @@ public record C2SAction(
             C2SAction::decode);
 
     private static void encode(RegistryFriendlyByteBuf buf, C2SAction p) {
-        buf.writeVarInt(p.actionType().ordinal());
+        buf.writeVarInt(p.actionType().id());
         buf.writeNullable(p.params(), (b, tag) -> b.writeNbt(tag));
     }
 
     private static C2SAction decode(RegistryFriendlyByteBuf buf) {
-        int ordinal = buf.readVarInt();
-        ActionType[] values = ActionType.values();
-        ActionType actionType = ordinal >= 0 && ordinal < values.length ? values[ordinal] : null;
+        int id = buf.readVarInt();
+        ActionType actionType = ActionType.fromId(id);
         CompoundTag params = buf.readNullable(b -> b.readNbt());
         if (actionType == null) {
             return null;

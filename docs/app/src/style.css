@@ -487,3 +487,57 @@ p code, li code, td code { color: var(--purple); }
   border-radius: 5px;
   border: 1px solid rgba(109, 92, 230, 0.14);
 }
+
+/* ============================================================
+   架构评审页（Markdown 文档渲染）
+   ============================================================ */
+.md-body { line-height: 1.75; font-size: 14px; color: var(--text-2); }
+.md-body h1, .md-body h2, .md-body h3, .md-body h4, .md-body h5, .md-body h6 {
+  color: var(--text); font-weight: 600; margin: 28px 0 12px; line-height: 1.4;
+}
+.md-body h1 { font-size: 24px; padding-bottom: 10px; border-bottom: 2px solid var(--border); }
+.md-body h2 {
+  font-size: 20px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-top: 38px;
+}
+.md-body h3 { font-size: 16.5px; color: var(--brand); margin-top: 26px; }
+.md-body h4 { font-size: 14.5px; margin-top: 20px; }
+.md-body h1:first-child, .md-body h2:first-child { margin-top: 0; }
+
+.md-body p { margin: 10px 0; }
+.md-body strong { color: var(--text); font-weight: 600; }
+.md-body ul, .md-body ol { margin: 10px 0; padding-left: 24px; }
+.md-body li { margin: 5px 0; }
+.md-body li::marker { color: var(--brand); }
+
+.md-body code {
+  font-family: var(--mono); font-size: 12.5px;
+  color: var(--purple); background: #f1effc;
+  padding: 1.5px 7px; border-radius: 5px;
+  border: 1px solid rgba(109, 92, 230, 0.14);
+}
+.md-body pre {
+  background: #0f1a2e; color: #d5e0f2;
+  border-radius: 10px; padding: 14px 16px;
+  margin: 12px 0; overflow-x: auto;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.md-body pre code {
+  background: transparent; color: inherit;
+  border: none; padding: 0; font-size: 12.5px;
+  line-height: 1.6;
+}
+.md-body blockquote {
+  margin: 12px 0; padding: 10px 16px;
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+  border-radius: 0 10px 10px 0;
+  color: var(--text-2);
+}
+.md-body blockquote code { color: var(--brand); background: rgba(77, 107, 254, 0.10); border-color: rgba(77, 107, 254, 0.18); }
+.md-body hr { border: none; border-top: 1px solid var(--border); margin: 26px 0; }
+.md-body table { font-size: 13px; }
+.md-body table th { white-space: nowrap; }
+.md-body a { color: var(--brand); text-decoration: none; }
+.md-body a:hover { text-decoration: underline; }

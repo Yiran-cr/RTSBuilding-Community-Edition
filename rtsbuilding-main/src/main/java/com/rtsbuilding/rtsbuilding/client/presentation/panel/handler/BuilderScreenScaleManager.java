@@ -83,7 +83,7 @@ public final class BuilderScreenScaleManager {
     
 
     
-    public void enableRtsScissor(GuiGraphics g, int x1, int y1, int x2, int y2) {
+    public void enableUiScissor(GuiGraphics g, int x1, int y1, int x2, int y2) {
         double scale = this.fixedRtsScaleRenderPass ? this.activeRtsGuiRenderScale : 1.0D;
         if (scale > 0.0D && Double.isFinite(scale) && Math.abs(scale - 1.0D) >= 0.001D) {
             g.enableScissor(

@@ -52,7 +52,7 @@ public final class TopBarLayoutHelper {
     
 
     
-    public static final class ButtonGroup {
+    public static final class ButtonGroup implements com.rtsbuilding.uifw.window.button.ButtonGroupLayout {
         private final int groupGap;
         private final Rect[] rects;
 
@@ -73,7 +73,19 @@ public final class TopBarLayoutHelper {
             return new ButtonGroup(groupGap, r);
         }
 
-        public Rect rect(int index) { return rects[index]; }
+        /** {@link ButtonGroupLayout}：按钮数量。 */
+        @Override
+        public int count() { return rects.length; }
+
+        /** {@link ButtonGroupLayout}：第 index 个按钮矩形（适配为 UI 模块几何类型）。 */
+        @Override
+        public com.rtsbuilding.uifw.window.button.ButtonGroupRect rect(int index) {
+            Rect r = rects[index];
+            return new com.rtsbuilding.uifw.window.button.ButtonGroupRect(r.x(), r.y(), r.width(), r.height());
+        }
+
+        /** 内部矩形访问（布局计算用，保留原语义）。 */
+        public Rect rectAt(int index) { return rects[index]; }
         public int leftEdge() { return rects[rects.length - 1].x(); }
         public int rightEdge() { return rects[0].x() + rects[0].width(); }
         public int groupGap() { return groupGap; }

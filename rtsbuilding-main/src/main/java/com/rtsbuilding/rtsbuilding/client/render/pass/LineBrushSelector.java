@@ -350,14 +350,21 @@ public final class LineBrushSelector {
 
     /**
      * 当前阶段的交互提示文案；非交互阶段返回 {@code null}。
-     * 破坏侧由左键驱动（左键选取），将"建造"替换为"破坏"、"右键"替换为"左键"。
+     * 破坏侧由左键驱动（左键选取）：lang 文案用 {@code {action}}/{@code {button}} 占位，
+     * 此处按建造/破坏模式替换（见 AGENTS.md 语言约定，UI 文案不硬编码）。
      */
     @Nullable
     public String currentHint() {
         if (!isActive()) return null;
         String hint = shape.hint(phase, params);
-        if (hint == null || !breakActive) return hint;
-        return hint.replace("建造", "破坏").replace("右键", "左键");
+        if (hint == null) return null;
+        String action = breakActive ? tr("ui.rtsbuilding.shape.break") : tr("ui.rtsbuilding.shape.build");
+        String button = breakActive ? tr("ui.rtsbuilding.shape.left_button") : tr("ui.rtsbuilding.shape.right_button");
+        return hint.replace("{action}", action).replace("{button}", button);
+    }
+
+    private static String tr(String key) {
+        return net.minecraft.network.chat.Component.translatable(key).getString();
     }
 
     public void reset() {

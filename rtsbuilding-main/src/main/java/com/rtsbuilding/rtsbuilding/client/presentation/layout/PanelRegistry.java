@@ -1,9 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.layout;
 
 import com.rtsbuilding.rtsbuilding.client.presentation.event.dispatcher.EventDispatcher;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
+import com.rtsbuilding.uifw.window.api.UiPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.state.HoverSuppression;
+import com.rtsbuilding.uifw.state.HoverSuppression;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.ArrayList;
@@ -15,14 +15,14 @@ import static com.rtsbuilding.rtsbuilding.client.presentation.event.model.EventR
 public final class PanelRegistry {
 
     
-    private record PanelEntry(RtsPanelApi panel, RenderLayer layer) {}
+    private record PanelEntry(UiPanelApi panel, RenderLayer layer) {}
 
     private final List<PanelEntry> entries = new ArrayList<>();
 
     
 
     
-    public void register(RtsPanelApi panel, RenderLayer layer) {
+    public void register(UiPanelApi panel, RenderLayer layer) {
         if (panel == null) {
             throw new IllegalArgumentException("不能注册 null 面板");
         }
@@ -36,7 +36,7 @@ public final class PanelRegistry {
 
     
     @SuppressWarnings("unchecked")
-    public <T extends RtsPanelApi> T getPanel(Class<T> type) {
+    public <T extends UiPanelApi> T getPanel(Class<T> type) {
         for (PanelEntry entry : entries) {
             if (type.isInstance(entry.panel())) {
                 return (T) entry.panel();

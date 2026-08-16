@@ -29,19 +29,15 @@ import net.neoforged.neoforge.client.model.data.ModelData;
  * 粒子飞出：方块缩小的同时，方块碎粒（物品粒子）沿斜上方向飞离中心。
  * 非完整模型方块（流体等）回退为半透明色块。
  *
- * <p>每帧渲染后调用 {@link GhostRingBuffer#prune} 清理过期条目；
+ * <p>动画总时长取<b>服务端权威</b>的 {@code durationMs}（动画包 durationTicks × 50ms），
+ * 动画节奏由服务端控制而非客户端本地计时器；每帧渲染后调用 {@link GhostRingBuffer#prune}
+ * 按条目时长清理过期条目。
  * 写入侧已按 tick 限流、缓冲满时丢弃新条目，保证已入缓冲动画完整播放。</p>
  */
 public final class BreakEffectPass implements RenderPass {
 
-    /** 方块缩小时长（毫秒）：从 1 缩小到 0。 */
-    private static final long SHRINK_DURATION_MS = 400L;
-
     /** 碎片粒子数量（每方块）。 */
     private static final int FRAGMENT_COUNT = 4;
-
-    /** 总动画时长（毫秒）：方块缩小与碎片飘散并行进行。 */
-    private static final long DURATION_MS = 600L;
 
     /** 碎片水平飘散半径（格）。 */
     private static final double SPREAD = 1.8D;
@@ -68,14 +64,14 @@ public final class BreakEffectPass implements RenderPass {
 
         BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
 
-        buffer.forEach((key, state, addedAtMs) -> {
+        buffer.forEach((key, state, addedAtMs, durationMs) -> {
             long age = now - addedAtMs;
-            if (age < 0 || age >= DURATION_MS) return;
+            if (age < 0 || age >= durationMs) return;
             BlockPos p = BlockPos.of(key);
 
-            // 方块缩小 1 → 0（轻微缓动让收尾自然）
-            double shrinkT = Math.min(1.0, age / (double) SHRINK_DURATION_MS);
-            float scale = (float) Math.pow(1.0 - shrinkT, 1.5D);
+            // 方块缩小 1 → 0（轻微缓动让收尾自然），总时长由服务端权威控制
+            double t = age / (double) durationMs;
+            float scale = (float) Math.pow(1.0 - t, 1.5D);
             if (scale > 0.02F) {
                 // 缩小时段内，scale 过小后透明度随之淡出，避免方块消失突兀
                 float alpha = scale < 0.4F ? scale / 0.4F : 1.0F;
@@ -83,10 +79,11 @@ public final class BreakEffectPass implements RenderPass {
             }
 
             // 碎片粒子向四周飞出 + 上升
-            renderFragments(mc.level, p, state, age / (double) DURATION_MS, key, dispatcher, poseStack, alloc);
+            renderFragments(mc.level, p, state, t, key, dispatcher, poseStack, alloc);
         });
 
-        buffer.prune(now, DURATION_MS);
+        // 清理过期条目（按各自服务端权威时长）
+        buffer.prune(now);
     }
 
     /** 以方块中心按 scale 缩放渲染真实方块模型（shrink）；非完整模型方块回退为半透明色块。 */

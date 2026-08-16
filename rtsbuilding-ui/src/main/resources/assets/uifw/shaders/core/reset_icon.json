@@ -1,0 +1,53 @@
+{
+    "vertex": "uifw:reset_icon",
+    "fragment": "uifw:reset_icon",
+    "samplers": [],
+    "uniforms": [
+        {
+            "name": "ModelViewMat",
+            "type": "matrix4x4",
+            "count": 16,
+            "values": [
+                1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            ]
+        },
+        {
+            "name": "ProjMat",
+            "type": "matrix4x4",
+            "count": 16,
+            "values": [
+                1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            ]
+        },
+        {
+            "name": "u_Size",
+            "type": "float",
+            "count": 2,
+            "values": [1.0, 1.0]
+        },
+        {
+            "name": "u_Radius",
+            "type": "float",
+            "count": 1,
+            "values": [4.0]
+        },
+        {
+            "name": "u_Thickness",
+            "type": "float",
+            "count": 1,
+            "values": [2.0]
+        },
+        {
+            "name": "u_Gap",
+            "type": "float",
+            "count": 1,
+            "values": [60.0]
+        }
+    ]
+}

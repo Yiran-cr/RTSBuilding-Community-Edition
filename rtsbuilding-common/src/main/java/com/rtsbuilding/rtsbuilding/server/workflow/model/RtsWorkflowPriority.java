@@ -39,4 +39,17 @@ public enum RtsWorkflowPriority {
     public boolean isHigherThan(RtsWorkflowPriority other) {
         return this.rank > other.rank;
     }
+
+    /**
+     * 按协议 rank 反解；未知 rank 返回 {@link #NORMAL}（跨端兼容默认值）。
+     */
+    public static RtsWorkflowPriority fromRank(int rank) {
+        return switch (rank) {
+            case 0 -> LOW;
+            case 1 -> NORMAL;
+            case 2 -> HIGH;
+            case 3 -> CRITICAL;
+            default -> NORMAL;
+        };
+    }
 }

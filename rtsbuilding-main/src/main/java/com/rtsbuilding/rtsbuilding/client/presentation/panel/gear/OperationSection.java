@@ -1,12 +1,12 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.gear;
 
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.SettingsSection;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ResetButton;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ScaleSliderComponent;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ToggleSwitch;
+import com.rtsbuilding.uifw.window.component.SettingsSection;
+import com.rtsbuilding.uifw.component.ResetButton;
+import com.rtsbuilding.uifw.component.ScaleSliderComponent;
+import com.rtsbuilding.uifw.component.ToggleSwitch;
 import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;

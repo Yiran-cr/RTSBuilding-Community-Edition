@@ -6,21 +6,21 @@ import com.rtsbuilding.rtsbuilding.client.domain.state.RecentEntry;
 import com.rtsbuilding.rtsbuilding.client.domain.state.StorageEntry;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.storage.StorageModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.ScrollBar;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.OverlayContext;
+import com.rtsbuilding.uifw.window.component.ScrollBar;
+import com.rtsbuilding.uifw.window.overlay.OverlayContext;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.animate.Easing;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.SpriteRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.SpriteRegion;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.TextureInfo;
-import com.rtsbuilding.rtsbuilding.client.util.state.TooltipController;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.animate.Easing;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.SpriteRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.model.SpriteRegion;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
+import com.rtsbuilding.uifw.state.TooltipController;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -216,9 +216,9 @@ public final class GridRenderer {
 
         currentItemTooltip.update(isHoveringOverCurrentSelection, false);
 
-        int itemFill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), currentItemHover.track(isHoveringOverCurrentSelection));
+        int itemFill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), currentItemHover.track(isHoveringOverCurrentSelection));
         SdfRenderer.drawBorderedRoundedRect(g, itemDisplayX, itemDisplayY, itemDisplaySize, itemDisplaySize, 4,
-                DarkUiPalette.black(), itemFill, 1);
+                UiPalette.black(), itemFill, 1);
 
         if (!state.currentSelectedItem.isEmpty()) {
             GuiItemRenderer.drawItem(g, state.currentSelectedItem, itemDisplayX + 1, itemDisplayY + 1);
@@ -238,9 +238,9 @@ public final class GridRenderer {
                 && mouseY >= sortBtnY && mouseY < sortBtnY + BUTTON_SIZE;
         sortButtonTooltip.update(isHoveringOverSortBtn, false);
 
-        int sortFill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), sortBtnHover.track(isHoveringOverSortBtn));
+        int sortFill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), sortBtnHover.track(isHoveringOverSortBtn));
         SdfRenderer.drawBorderedRoundedRect(g, sortBtnX, sortBtnY, BUTTON_SIZE, BUTTON_SIZE, 4,
-                DarkUiPalette.black(), sortFill, 1);
+                UiPalette.black(), sortFill, 1);
         SpriteRenderer.drawSprite(g, switch (state.currentSortType) {
             case NAME -> SORT_NAME_ICON;
             case COUNT -> SORT_COUNT_ICON;
@@ -253,9 +253,9 @@ public final class GridRenderer {
                 && mouseY >= orderBtnY && mouseY < orderBtnY + BUTTON_SIZE;
         orderButtonTooltip.update(isHoveringOverOrderBtn, false);
 
-        int orderFill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), orderBtnHover.track(isHoveringOverOrderBtn));
+        int orderFill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), orderBtnHover.track(isHoveringOverOrderBtn));
         SdfRenderer.drawBorderedRoundedRect(g, orderBtnX, orderBtnY, BUTTON_SIZE, BUTTON_SIZE, 4,
-                DarkUiPalette.black(), orderFill, 1);
+                UiPalette.black(), orderFill, 1);
         SpriteRenderer.drawSprite(g, state.reverseSortOrder ? ORDER_DESC_ICON : ORDER_ASC_ICON,
                 slotThemeOffset, orderBtnX, orderBtnY, BUTTON_SIZE, BUTTON_SIZE);
 
@@ -265,9 +265,9 @@ public final class GridRenderer {
                 && mouseY >= typeFilterBtnY && mouseY < typeFilterBtnY + BUTTON_SIZE;
         typeFilterButtonTooltip.update(isHoveringOverTypeFilterBtn, false);
 
-        int typeFilterFill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), typeFilterBtnHover.track(isHoveringOverTypeFilterBtn));
+        int typeFilterFill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), typeFilterBtnHover.track(isHoveringOverTypeFilterBtn));
         SdfRenderer.drawBorderedRoundedRect(g, typeFilterBtnX, typeFilterBtnY, BUTTON_SIZE, BUTTON_SIZE, 4,
-                DarkUiPalette.black(), typeFilterFill, 1);
+                UiPalette.black(), typeFilterFill, 1);
         SpriteRenderer.drawSprite(g, TYPE_ITEM_ICON,
                 0, typeFilterBtnX, typeFilterBtnY, BUTTON_SIZE, BUTTON_SIZE);
 
@@ -277,9 +277,9 @@ public final class GridRenderer {
                 && mouseY >= containerBtnY && mouseY < containerBtnY + BUTTON_SIZE;
         containerButtonTooltip.update(isHoveringOverContainerBtn, false);
 
-        int containerFill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), containerBtnHover.track(isHoveringOverContainerBtn));
+        int containerFill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), containerBtnHover.track(isHoveringOverContainerBtn));
         SdfRenderer.drawBorderedRoundedRect(g, containerBtnX, containerBtnY, BUTTON_SIZE, BUTTON_SIZE, 4,
-                DarkUiPalette.black(), containerFill, 1);
+                UiPalette.black(), containerFill, 1);
         SpriteRenderer.drawSprite(g, CONTAINER_EXTRACT_ICON,
                 0, containerBtnX, containerBtnY, BUTTON_SIZE, BUTTON_SIZE);
 
@@ -288,9 +288,9 @@ public final class GridRenderer {
         boolean isHoveringRecentSort = mouseX >= recentSortBtnX && mouseX < recentSortBtnX + BUTTON_SIZE
                 && mouseY >= recentSortBtnY && mouseY < recentSortBtnY + BUTTON_SIZE;
         recentSortButtonTooltip.update(isHoveringRecentSort, false);
-        int recentSortFill = ColorAnimation.lerpRGB(DarkUiPalette.bg(), DarkUiPalette.accent(), recentSortHover.track(isHoveringRecentSort));
+        int recentSortFill = ColorAnimation.lerpRGB(UiPalette.bg(), UiPalette.accent(), recentSortHover.track(isHoveringRecentSort));
         SdfRenderer.drawBorderedRoundedRect(g, recentSortBtnX, recentSortBtnY, BUTTON_SIZE, BUTTON_SIZE, 4,
-                DarkUiPalette.black(), recentSortFill, 1);
+                UiPalette.black(), recentSortFill, 1);
         SpriteRenderer.drawSprite(g, state.recentSortAscending ? ORDER_ASC_ICON : ORDER_DESC_ICON,
                 slotThemeOffset, recentSortBtnX, recentSortBtnY, BUTTON_SIZE, BUTTON_SIZE);
 
@@ -321,7 +321,7 @@ public final class GridRenderer {
 
                 if ((System.currentTimeMillis() / CURSOR_BLINK_MS) % 2 == 0) {
                     int cursorX = textX + searchFont.width(displayText);
-                    g.fill(cursorX, textY, cursorX + 1, textY + searchFont.lineHeight, 0xFFFFFFFF);
+                    g.fill(cursorX, textY, cursorX + 1, textY + searchFont.lineHeight, UiPalette.get("input_cursor"));
                 }
             } else {
                 String placeholder = searchText.isEmpty()
@@ -373,7 +373,7 @@ public final class GridRenderer {
 
                 if ((System.currentTimeMillis() / CURSOR_BLINK_MS) % 2 == 0) {
                     int cursorX = textX + searchFont.width(displayText);
-                    g.fill(cursorX, textY, cursorX + 1, textY + searchFont.lineHeight, 0xFFFFFFFF);
+                    g.fill(cursorX, textY, cursorX + 1, textY + searchFont.lineHeight, UiPalette.get("input_cursor"));
                 }
             } else {
                 String placeholder = searchText.isEmpty()
@@ -414,7 +414,7 @@ public final class GridRenderer {
         g.flush();
         Screen screen = mc.screen;
         if (screen instanceof BuilderScreen bs) {
-            bs.enableRtsScissor(g, state.recentGridOriginX, originY + 1, mainOriginX + state.cachedMainGridWidth, scissorBottomY);
+            bs.enableUiScissor(g, state.recentGridOriginX, originY + 1, mainOriginX + state.cachedMainGridWidth, scissorBottomY);
         } else {
             g.enableScissor(state.recentGridOriginX, originY + 1, mainOriginX + state.cachedMainGridWidth, scissorBottomY);
         }
@@ -510,8 +510,8 @@ public final class GridRenderer {
         g.flush();
         g.disableScissor();
 
-        SdfRenderer.drawRoundedOutline(g, state.recentGridOriginX, originY, state.recentGridW, frameH, 4, DarkUiPalette.accent());
-        SdfRenderer.drawRoundedOutline(g, mainOriginX, originY, state.cachedMainGridWidth, frameH, 4, DarkUiPalette.accent());
+        SdfRenderer.drawRoundedOutline(g, state.recentGridOriginX, originY, state.recentGridW, frameH, 4, UiPalette.accent());
+        SdfRenderer.drawRoundedOutline(g, mainOriginX, originY, state.cachedMainGridWidth, frameH, 4, UiPalette.accent());
 
         int dividerX = (state.recentGridOriginX + state.recentGridW + mainOriginX) / 2;
         g.vLine(dividerX, y + 5, originY + gridVisibleH - 3, ThemeManager.getDividerColor());
@@ -734,7 +734,7 @@ public final class GridRenderer {
             g.pose().pushPose();
             g.pose().translate(tipX + padH, textY, 0);
             g.pose().scale(0.75f, 0.75f, 1.0f);
-            TextRenderer.draw(g, lines[i], 0, 0, 0xFFFFFFFF);
+            TextRenderer.draw(g, lines[i], 0, 0, UiPalette.get("tooltip_text"));
             g.pose().popPose();
             textY += scaledLineH + scaledLineGap;
         }

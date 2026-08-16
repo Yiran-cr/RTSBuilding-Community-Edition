@@ -16,6 +16,7 @@
             <option value="$PROJECT_DIR$/rtsbuilding-common" />
             <option value="$PROJECT_DIR$/rtsbuilding-main" />
             <option value="$PROJECT_DIR$/rtsbuilding-technologized" />
+            <option value="$PROJECT_DIR$/rtsbuilding-ui" />
           </set>
         </option>
         <option name="resolveExternalAnnotations" value="true" />

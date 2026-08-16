@@ -6,7 +6,7 @@ import com.rtsbuilding.rtsbuilding.PerformanceConfig;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.state.FeatureAdjusterState;
+import com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;

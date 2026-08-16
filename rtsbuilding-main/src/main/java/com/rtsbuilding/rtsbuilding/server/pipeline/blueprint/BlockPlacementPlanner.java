@@ -5,17 +5,25 @@ import com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprintBlock;
 import com.rtsbuilding.rtsbuilding.common.blueprint.transform.BlueprintTransform;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 预计算放置计划——将旋转、材质查找、流体成本、方块实体标签等
@@ -64,6 +72,7 @@ public final class BlockPlacementPlanner {
     /**
      * 为整个蓝图计算所有方块的放置计划。
      *
+     * @param level        服务端世界（用于 BG2 战利品表方式计算各格所需材料）
      * @param blueprint    要放置的蓝图
      * @param anchor       锚点坐标
      * @param centerOffset 旋转中心偏移量
@@ -74,6 +83,7 @@ public final class BlockPlacementPlanner {
      * （缺失定义的块对应 null）
      */
     public static List<PlacementPlan> compute(
+            ServerLevel level,
             RtsBlueprint blueprint,
             BlockPos anchor,
             BlockPos centerOffset,
@@ -94,7 +104,7 @@ public final class BlockPlacementPlanner {
             BlockState state = BlueprintTransform.rotateState(
                     block.state(), ySteps, xSteps, zSteps);
 
-            List<Item> items = materialItems(block, state);
+            List<Item> items = materialItems(level, target, block, state);
             Fluid fluid = items.isEmpty() ? fluidCostFor(state) : Fluids.EMPTY;
 
             plans.add(new PlacementPlan(target, state, items, fluid, block.blockEntityTag()));
@@ -108,22 +118,73 @@ public final class BlockPlacementPlanner {
     // ──────────────────────────────────────────────────────────────────
 
     /**
-     * 返回方块的材料物品列表。
-     * 优先使用蓝图记录的材质 ID；若为空则回退到方块的 asItem()。
+     * 返回方块的材料物品列表，<b>完全参考 BuildingGadgets2 的掉落物导向去重</b>：
+     *
+     * <ol>
+     *   <li>蓝图<b>显式记录</b>的材质（{@code materialItemId} / AE2 线缆/总线 NBT 材质）优先——保留本模组特色；</li>
+     *   <li>否则用 <b>silk touch 战利品表</b>（BG2 的 {@code getDropsForBlockState} 方式）决定每格所需材料。
+     *       门/床/双层植物的上格（UPPER/HEAD）战利品表无掉落 → 返回空、不扣费，天然实现多方块占位去重。</li>
+     * </ol>
      */
-    public static List<Item> materialItems(RtsBlueprintBlock block, BlockState state) {
-        List<ResourceLocation> ids = RtsBlueprint.materialItemIds(block);
-        if (ids.isEmpty() && state != null) {
-            Item fallback = state.getBlock().asItem();
-            return fallback == Items.AIR ? List.of() : List.of(fallback);
+    public static List<Item> materialItems(ServerLevel level, BlockPos target, RtsBlueprintBlock block, BlockState state) {
+        // 1) 蓝图显式材质（AE2 线缆/总线 NBT、materialItemId）优先
+        List<ResourceLocation> explicit = RtsBlueprint.explicitMaterialItemIds(block);
+        if (!explicit.isEmpty()) {
+            return explicit.stream()
+                    .map(BuiltInRegistries.ITEM::get)
+                    .filter(Objects::nonNull)
+                    .filter(item -> item != Items.AIR)
+                    .toList();
         }
-        List<Item> out = new ArrayList<>(ids.size());
-        for (ResourceLocation id : ids) {
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) continue;
-            Item item = BuiltInRegistries.ITEM.get(id);
-            if (item != null && item != Items.AIR) out.add(item);
+        // 2) BG2 战利品表（silk touch）掉落物导向：无掉落（多方块上格等）→ 空，不扣材料
+        return bg2LootMaterialItems(level, target, state);
+    }
+
+    /**
+     * BuildingGadgets2 战利品表材料计算：用带 {@code SILK_TOUCH} 附魔的工具查询方块战利品表，
+     * 取掉落物作为所需材料。
+     * <p><b>与 BG2 的差异</b>：BG2 在掉落为空时回退到 {@code baseItem}（导致门 UPPER 也扣费）；
+     * 这里为达成"多方块去重"，掉落为空时直接返回空（不扣费）。战利品表异常时回退 {@code asItem()} 兜底，
+     * 避免材料丢失。</p>
+     */
+    private static List<Item> bg2LootMaterialItems(ServerLevel level, BlockPos target, BlockState state) {
+        if (state == null || state.isAir()) {
+            return List.of();
         }
-        return out.isEmpty() ? List.of() : List.copyOf(out);
+        ItemStack silkTool = new ItemStack(Items.DIAMOND_PICKAXE);
+        try {
+            silkTool.enchant(level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.SILK_TOUCH), 1);
+        } catch (RuntimeException e) {
+            // 附魔注册表缺失等极端情况：回退 asItem
+            return fallbackAsItem(state);
+        }
+        LootParams.Builder builder = (new LootParams.Builder(level))
+                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(target))
+                .withParameter(LootContextParams.TOOL, silkTool);
+        List<ItemStack> drops;
+        try {
+            drops = state.getDrops(builder);
+        } catch (RuntimeException e) {
+            // 战利品表异常（缺失参数/损坏表）：回退 asItem，避免材料丢失
+            return fallbackAsItem(state);
+        }
+        if (drops.isEmpty()) {
+            // 无掉落物（门 UPPER / 床头 / 双层植物上格等）→ 空，不扣材料
+            return List.of();
+        }
+        return drops.stream()
+                .filter(stack -> stack != null && !stack.isEmpty())
+                .map(ItemStack::getItem)
+                .filter(item -> item != Items.AIR)
+                .distinct()
+                .toList();
+    }
+
+    /** 回退：使用方块自身的 Item 形态（asItem）。 */
+    private static List<Item> fallbackAsItem(BlockState state) {
+        Item item = state.getBlock().asItem();
+        return item == null || item == Items.AIR ? List.of() : List.of(item);
     }
 
     /**

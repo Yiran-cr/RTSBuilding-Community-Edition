@@ -166,7 +166,7 @@ public final class BlueprintPersistence {
         int zSteps = data.getInt(KEY_Z_STEPS);
 
         // ── 重算放置计划 ─────────────────────────────────────────
-        List<PlacementPlan> plans = BlockPlacementPlanner.compute(blueprint, anchor, centerOffset, ySteps, xSteps, zSteps);
+        List<PlacementPlan> plans = BlockPlacementPlanner.compute(level, blueprint, anchor, centerOffset, ySteps, xSteps, zSteps);
 
         // ── 重建剩余队列 ─────────────────────────────────────────
         LinkedList<Integer> remaining = new LinkedList<>();

@@ -6,6 +6,7 @@ import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowPriority;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowType;
+import com.rtsbuilding.rtsbuilding.server.workflow.model.WorkflowState;
 import com.rtsbuilding.rtsbuilding.server.workflow.service.RtsWorkflowSlotManager;
 import com.rtsbuilding.rtsbuilding.server.workflow.service.RtsWorkflowSyncService;
 import com.rtsbuilding.rtsbuilding.server.workflow.service.WorkflowPersistenceService;
@@ -385,8 +386,7 @@ public final class RtsWorkflowEngine implements IWorkflowEngine {
             boolean anyChanged = false;
 
             for (RtsWorkflowEntry entry : slots.occupiedEntries()) {
-                if (!entry.suspended() && !entry.paused()) {
-                    entry.setPaused(true);
+                if (entry.transition(WorkflowState.PAUSED)) {
                     anyChanged = true;
                 }
             }

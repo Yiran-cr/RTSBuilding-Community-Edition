@@ -9,7 +9,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.event.dispatcher.EventDis
 import com.rtsbuilding.rtsbuilding.client.presentation.event.model.EventResult;
 import com.rtsbuilding.rtsbuilding.client.presentation.event.model.KeyPressEvent;
 import com.rtsbuilding.rtsbuilding.client.presentation.layout.PanelRegistry;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsFloatingWindowLayer;
+import com.rtsbuilding.uifw.window.window.FloatingWindowLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.gear.GearMenuPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.BindModeMouseHandler;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.BuildInteractionHandler;
@@ -51,7 +51,7 @@ public final class BuilderScreenEventRouter {
 
     public void registerAll(EventDispatcher dispatcher, PanelRegistry panelRegistry,
                             BuilderScreen screen, RtsClientKernel kernel,
-                            RtsFloatingWindowLayer floatingWindowLayer,
+                            FloatingWindowLayer floatingWindowLayer,
                             TopBarPanel topBarPanel, LeftSidebarPanel leftSidebarPanel,
                             GearMenuPanel gearMenuPanel,
                             BuilderScreenMovementHandler movementHandler,
@@ -74,7 +74,7 @@ public final class BuilderScreenEventRouter {
     }
 
     private void registerMouseClickHandlers(EventDispatcher d, BuilderScreen screen,
-            RtsClientKernel kernel, RtsFloatingWindowLayer fw, PanelRegistry pr,
+            RtsClientKernel kernel, FloatingWindowLayer fw, PanelRegistry pr,
             LeftSidebarPanel lb, BuilderScreenMovementHandler mh,
             BindModeMouseHandler bmh, EntityInteractionHandler eih,
             BuildInteractionHandler bih, TopBarPanel topBar) {
@@ -100,7 +100,13 @@ public final class BuilderScreenEventRouter {
             if (event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT
                     && !isAltDown() && !isShiftDown()
                     && !lb.isClickButtonSelected()) {
-                kernel.renderPipeline().boxSelector.handleRightClickWithHover();
+                var boxSelector = kernel.renderPipeline().boxSelector;
+                // 蓝图模式：框选完成后右键框内点击 = 打开蓝图保存对话框（生成蓝图）。
+                // 先处理框选状态机（选点推进/框外重置），再判断是否满足触发条件。
+                boxSelector.handleRightClickWithHover();
+                if (screen.tryOpenBlueprintSave()) {
+                    return CONSUMED;
+                }
                 return CONSUMED;
             }
             return PASS;
@@ -122,7 +128,7 @@ public final class BuilderScreenEventRouter {
         }, EventDispatcher.P_MOVEMENT);
 
         d.onMouseClick(event -> {
-            if (screen.isMouseOverRtsPanelApi(event.x(), event.y())) return CONSUMED;
+            if (screen.isMouseOverUiPanelApi(event.x(), event.y())) return CONSUMED;
             if (kernel.inputPipeline().onMouseClicked(event.x(), event.y(), event.button())) return CONSUMED;
             return PASS;
         }, EventDispatcher.P_INPUT_PIPELINE);
@@ -134,7 +140,7 @@ public final class BuilderScreenEventRouter {
     }
 
     private void registerMouseReleaseHandlers(EventDispatcher d, PanelRegistry pr,
-            RtsFloatingWindowLayer fw, RtsClientKernel kernel,
+            FloatingWindowLayer fw, RtsClientKernel kernel,
             BuildInteractionHandler bih, BuilderScreen screen, TopBarPanel topBar,
             LeftSidebarPanel leftSidebarPanel) {
         pr.registerContentPanelMouseRelease(d);
@@ -152,7 +158,7 @@ public final class BuilderScreenEventRouter {
     }
 
     private void registerMouseDragHandlers(EventDispatcher d, PanelRegistry pr,
-            RtsFloatingWindowLayer fw, RtsClientKernel kernel) {
+            FloatingWindowLayer fw, RtsClientKernel kernel) {
         pr.registerContentPanelMouseDrag(d);
 
         d.onMouseDrag(event -> {
@@ -166,7 +172,7 @@ public final class BuilderScreenEventRouter {
     }
 
     private void registerMouseScrollHandlers(EventDispatcher d, PanelRegistry pr,
-            RtsFloatingWindowLayer fw, RtsClientKernel kernel,
+            FloatingWindowLayer fw, RtsClientKernel kernel,
             LeftSidebarPanel lb, BuilderScreen screen) {
         pr.registerContentPanelMouseScroll(d);
 
@@ -210,7 +216,7 @@ public final class BuilderScreenEventRouter {
             // 裸滚轮：不消费，交由下方框选/相机（inputPipeline）处理相机远近缩放
             if (!lb.isClickButtonSelected()
                     && kernel.renderPipeline().boxSelector.handleScroll(event.scrollY())) return CONSUMED;
-            if (screen.isMouseOverRtsPanelApi(event.x(), event.y())) return CONSUMED;
+            if (screen.isMouseOverUiPanelApi(event.x(), event.y())) return CONSUMED;
             if (kernel.inputPipeline().onMouseScrolled(event.x(), event.y(), event.scrollX(), event.scrollY())) return CONSUMED;
             if (superScreen.mouseScrolled(event.x(), event.y(), event.scrollX(), event.scrollY())) return CONSUMED;
             return PASS;
@@ -218,7 +224,7 @@ public final class BuilderScreenEventRouter {
     }
 
     private void registerKeyPressHandlers(EventDispatcher d,
-            RtsFloatingWindowLayer fw, PanelRegistry pr,
+            FloatingWindowLayer fw, PanelRegistry pr,
             RtsClientKernel kernel, TopBarPanel topBar, LeftSidebarPanel lb,
             GearMenuPanel gearMenu, BuilderScreenMovementHandler mh,
             BindModeMouseHandler bmh, EntityInteractionHandler eih,
@@ -260,7 +266,7 @@ public final class BuilderScreenEventRouter {
     }
 
     private void registerCharHandlers(EventDispatcher d, PanelRegistry pr,
-            RtsFloatingWindowLayer fw, RtsClientKernel kernel) {
+            FloatingWindowLayer fw, RtsClientKernel kernel) {
         pr.registerContentPanelCharTyped(d);
 
         d.onChar(event -> {
@@ -271,7 +277,7 @@ public final class BuilderScreenEventRouter {
         }, EventDispatcher.P_FALLBACK);
     }
 
-    private void registerMouseMoveHandlers(EventDispatcher d, RtsFloatingWindowLayer fw) {
+    private void registerMouseMoveHandlers(EventDispatcher d, FloatingWindowLayer fw) {
         d.onMouseMove(event -> {
             if (fw != null) fw.mouseMoved(event.x(), event.y());
             superScreen.mouseMoved(event.x(), event.y());
@@ -336,6 +342,13 @@ public final class BuilderScreenEventRouter {
                 }
             }
             return CONSUMED;
+        }
+        if (event.keyCode() == GLFW.GLFW_KEY_ENTER || event.keyCode() == GLFW.GLFW_KEY_KP_ENTER) {
+            // 蓝图模式框选完成：回车打开蓝图保存对话框（生成蓝图）
+            if (screen.tryOpenBlueprintSave()) {
+                return CONSUMED;
+            }
+            return PASS;
         }
         return PASS;
     }

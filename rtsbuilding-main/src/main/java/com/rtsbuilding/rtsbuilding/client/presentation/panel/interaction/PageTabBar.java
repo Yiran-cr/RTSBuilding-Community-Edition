@@ -1,13 +1,13 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction;
 
 import com.mojang.math.Axis;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -29,7 +29,7 @@ public final class PageTabBar {
 
     public static final int TAB_BAR_H = 16;
     /** 标签条深色底颜色（由宿主面板负责铺底，可超出标签条区域）。 */
-    public static final int TAB_BAR_BG_COLOR = 0x55000000;
+    public static final int TAB_BAR_BG_COLOR = UiPalette.get("tab_bar_bg");
 
     private static final int ICON_SIZE = 12;
     private static final int ICON_TEXT_GAP = 4;
@@ -46,7 +46,7 @@ public final class PageTabBar {
     /** 标题与关闭按钮的间距。 */
     private static final int CLOSE_GAP = 4;
     /** 关闭按钮悬停背景色（半透明白，叠加在标签底色上）。 */
-    private static final int CLOSE_HOVER_BG = 0x3DFFFFFF;
+    private static final int CLOSE_HOVER_BG = UiPalette.get("tab_close_hover");
 
     /** 悬停动画状态：以标签的稳定 ID 为键，条目增删后动画不会错位。 */
     private final Map<Object, AnimFloat> hoverById = new HashMap<>();
@@ -102,7 +102,7 @@ public final class PageTabBar {
             boolean hovered = isHovered(mouseX, mouseY, tabX, tabTop, tabW, tabH);
             float t = hoverById.computeIfAbsent(tab.stableId(), k -> AnimFloat.hover()).track(hovered);
             // 非活动标签：默认 p7，悬浮渐变到 p1
-            int fillColor = ColorAnimation.lerpRGB(DarkUiPalette.p7(), DarkUiPalette.p1(), t);
+            int fillColor = ColorAnimation.lerpRGB(UiPalette.p7(), UiPalette.p1(), t);
             SdfRenderer.drawRoundedRectTopOnly(g, tabX, tabTop, tabW, tabH,
                     TAB_RADIUS, fillColor, TAB_INACTIVE_ALPHA);
             int textColor = ThemeManager.getTextColor();
@@ -122,7 +122,7 @@ public final class PageTabBar {
                 if (tab.entryIndex() == activeIndex) {
                     // 选中标签：恒用 p5（toggleOn），文字保持亮白；底边内缩 1px 不贴出标签栏
                     SdfRenderer.drawRoundedRectTopOnly(g, tabX, y, tabW, height - 1,
-                            TAB_RADIUS, DarkUiPalette.toggleOn(), 1.0f);
+                            TAB_RADIUS, UiPalette.toggleOn(), 1.0f);
                     int textColor = ThemeManager.getHoverTextColor();
                     drawTabContent(g, mc, tab, tabX, y, height - 1, textColor);
                     if (tab.hasCloseButton() && isHovered(mouseX, mouseY, tabX, y, tabW, height - 1)) {

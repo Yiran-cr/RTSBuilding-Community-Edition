@@ -11,6 +11,7 @@
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/rtsbuilding-main/rtsbuilding.rtsbuilding-main.main.iml" filepath="$PROJECT_DIR$/.idea/modules/rtsbuilding-main/rtsbuilding.rtsbuilding-main.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/rtsbuilding-main/rtsbuilding.rtsbuilding-main.test.iml" filepath="$PROJECT_DIR$/.idea/modules/rtsbuilding-main/rtsbuilding.rtsbuilding-main.test.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/rtsbuilding-technologized/rtsbuilding.rtsbuilding-technologized.main.iml" filepath="$PROJECT_DIR$/.idea/modules/rtsbuilding-technologized/rtsbuilding.rtsbuilding-technologized.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/rtsbuilding-ui/rtsbuilding.rtsbuilding-ui.main.iml" filepath="$PROJECT_DIR$/.idea/modules/rtsbuilding-ui/rtsbuilding.rtsbuilding-ui.main.iml" />
     </modules>
   </component>
 </project>

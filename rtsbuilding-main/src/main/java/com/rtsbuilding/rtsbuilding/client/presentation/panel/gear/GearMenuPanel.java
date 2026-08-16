@@ -2,17 +2,17 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.gear;
 
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.ScrollBar;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsPanel;
+import com.rtsbuilding.uifw.window.component.ScrollBar;
+import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
+import com.rtsbuilding.uifw.render.UiPalette;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
 import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreenConstants.*;
 
-public final class GearMenuPanel extends RtsPanel {
+public final class GearMenuPanel extends UiPanel {
     private static final int LEGACY_DEFAULT_WINDOW_W = 200;
     private static final int LEGACY_DEFAULT_WINDOW_H = 284;
     private static final int DEFAULT_WINDOW_W = 253;
@@ -28,12 +28,13 @@ public final class GearMenuPanel extends RtsPanel {
     private final PersonalizationSection personalizationSection = new PersonalizationSection();
     private final OperationSection operationSection = new OperationSection();
     private final KeybindSection keybindSection = new KeybindSection();
+    private final IntegrationSection integrationSection = new IntegrationSection();
 
     
     private final ScrollBar scrollBar = new ScrollBar();
 
     @Override
-    public void init(BuilderScreen screen) {
+    public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
         super.init(screen);
         this.resizable = true;
         RtsClientKernel kernel = RtsClientKernel.get();
@@ -57,7 +58,8 @@ public final class GearMenuPanel extends RtsPanel {
                 + renderingSection.totalHeight(cw)
                 + personalizationSection.totalHeight(cw)
                 + operationSection.totalHeight(cw)
-                + keybindSection.totalHeight(cw);
+                + keybindSection.totalHeight(cw)
+                + (integrationSection.hasIntegrations() ? integrationSection.totalHeight(cw) : 0);
     }
 
     
@@ -95,6 +97,11 @@ public final class GearMenuPanel extends RtsPanel {
         operationSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
         sectionY += operationSection.totalHeight(cw);
         keybindSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
+        sectionY += keybindSection.totalHeight(cw);
+        // 无宿主集成时不显示「宿主集成」分区
+        if (integrationSection.hasIntegrations()) {
+            integrationSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
+        }
 
         
         if (scrollBar.isVisible()) {
@@ -134,7 +141,11 @@ public final class GearMenuPanel extends RtsPanel {
             sectionCY += personalizationSection.totalHeight(cw);
             if (operationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
             sectionCY += operationSection.totalHeight(cw);
-            keybindSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW);
+            if (keybindSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
+            sectionCY += keybindSection.totalHeight(cw);
+            if (integrationSection.hasIntegrations()) {
+                integrationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW);
+            }
         }
     }
 
@@ -238,16 +249,16 @@ public final class GearMenuPanel extends RtsPanel {
     }
 
     @Override
-    protected int getPanelBgColor() { return DarkUiPalette.bg(); }
+    protected int getPanelBgColor() { return UiPalette.bg(); }
 
     @Override
-    protected int getPanelBorderColor() { return DarkUiPalette.accent(); }
+    protected int getPanelBorderColor() { return UiPalette.accent(); }
 
     @Override
-    protected int getPanelHoverBgColor() { return DarkUiPalette.hoverBorder(); }
+    protected int getPanelHoverBgColor() { return UiPalette.hoverBorder(); }
 
     @Override
-    protected int getTitleBarBgColor() { return DarkUiPalette.border(); }
+    protected int getTitleBarBgColor() { return UiPalette.border(); }
 
     @Override
     protected int contentY() { return bounds.getY() + getTitleBarHeight() + 2; }
@@ -265,7 +276,7 @@ public final class GearMenuPanel extends RtsPanel {
         if (this.screen == null) {
             return super.getMaxWindowWidth();
         }
-        int viewportLimit = Math.max(getMinWindowWidth(), (this.screen.width * 2) / 3);
+        int viewportLimit = Math.max(getMinWindowWidth(), (this.screen.getUiWidth() * 2) / 3);
         return Math.min(super.getMaxWindowWidth(), viewportLimit);
     }
 
@@ -274,16 +285,16 @@ public final class GearMenuPanel extends RtsPanel {
         if (this.screen == null) {
             return super.getMaxWindowHeight();
         }
-        int viewportLimit = Math.max(getMinWindowHeight(), (this.screen.height * 2) / 3);
+        int viewportLimit = Math.max(getMinWindowHeight(), (this.screen.getUiHeight() * 2) / 3);
         return Math.min(super.getMaxWindowHeight(), viewportLimit);
     }
 
     @Override
     protected void computeDefaultPosition() {
-        setWindowX(Math.max(8, (this.screen.width - getWindowWidth()) / 2));
-        setWindowY(Mth.clamp((this.screen.height - getWindowHeight()) / 2,
+        setWindowX(Math.max(8, (this.screen.getUiWidth() - getWindowWidth()) / 2));
+        setWindowY(Mth.clamp((this.screen.getUiHeight() - getWindowHeight()) / 2,
                 TOP_H + 6,
-                Math.max(TOP_H + 6, this.screen.height - getWindowHeight() - 8)));
+                Math.max(TOP_H + 6, this.screen.getUiHeight() - getWindowHeight() - 8)));
     }
 
     public CameraModule getCameraModule() {

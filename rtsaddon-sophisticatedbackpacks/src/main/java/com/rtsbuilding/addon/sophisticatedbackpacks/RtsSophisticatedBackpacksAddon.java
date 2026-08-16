@@ -2,6 +2,7 @@ package com.rtsbuilding.addon.sophisticatedbackpacks;
 
 import com.rtsbuilding.rtsbuilding.api.compat.RtsBackpackProvider;
 import com.rtsbuilding.rtsbuilding.api.compat.RtsCompatRegistry;
+import com.rtsbuilding.rtsbuilding.api.compat.RtsIntegration;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -21,22 +22,50 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Mod("rtsbuilding_addon_sophisticatedbackpacks")
-public class RtsSophisticatedBackpacksAddon {
+public class RtsSophisticatedBackpacksAddon implements RtsIntegration {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("RTSBuilding/Backpacks");
 
+    private final BackpackReflection reflection;
+    private final String loadError;
+
     public RtsSophisticatedBackpacksAddon(IEventBus modEventBus, ModContainer modContainer) {
-        
         if (!ModList.get().isLoaded("sophisticatedbackpacks")) {
             LOGGER.info("Sophisticated Backpacks not detected — addon will not register");
+            this.reflection = null;
+            this.loadError = null;
             return;
         }
         var reflection = new BackpackReflection();
         if (!reflection.loaded) {
             LOGGER.warn("Sophisticated Backpacks found but reflection load failed");
+            this.reflection = null;
+            this.loadError = "reflection load failed";
+            // 仍注册 integration，让设置面板/日志能显示"宿主存在但绑定失败"
+            RtsCompatRegistry.registerIntegration(this);
             return;
         }
-        RtsCompatRegistry.register(new BackpackProvider(reflection));
+        this.reflection = reflection;
+        this.loadError = null;
+        // 统一走 RtsIntegration 注册入口（阶段二：Addon 集成统一抽象）
+        RtsCompatRegistry.registerIntegration(this);
+        LOGGER.info("Sophisticated Backpacks integration registered");
+    }
+
+    @Override public String integrationId() { return "sophisticatedbackpacks"; }
+
+    @Override public boolean available() { return reflection != null && reflection.loaded; }
+
+    @Override @Nullable
+    public String selfCheck() {
+        if (loadError != null) return loadError;
+        return reflection == null ? "sophisticatedbackpacks not loaded" : reflection.selfCheck();
+    }
+
+    @Override
+    public void register(RtsCompatRegistry registry) {
+        if (reflection == null) return;
+        registry.register(new BackpackProvider(reflection));
         LOGGER.info("Sophisticated Backpacks provider registered");
     }
 
@@ -113,6 +142,19 @@ public class RtsSophisticatedBackpacksAddon {
             } catch (Exception e) {
                 LOGGER.warn("Backpack reflection load failed: {}", e.getMessage());
             }
+        }
+
+        /** 自检反射绑定健康度：缺失关键句柄时返回诊断串，健康返回 null。 */
+        @Nullable
+        String selfCheck() {
+            if (!loaded) return "reflection load failed";
+            StringBuilder missing = new StringBuilder();
+            if (mhIsBackpack == null) missing.append("mhIsBackpack,");
+            if (mhGetWrapper == null) missing.append("mhGetWrapper,");
+            if (mhGetUuid == null) missing.append("mhGetUuid,");
+            if (mhGetStack == null) missing.append("mhGetStack,");
+            if (mhOpenBackpack == null) missing.append("mhOpenBackpack,");
+            return missing.length() == 0 ? null : "missing: " + missing;
         }
 
         @SuppressWarnings("unused")

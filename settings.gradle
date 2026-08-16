@@ -10,6 +10,9 @@ plugins {
 
 rootProject.name = "rtsbuilding"
 
+// 独立前置 UI 模组（可被主 mod 及其他 mod 依赖，modId: rtsbuilding_ui）
+include "rtsbuilding-ui"
+
 include "rtsbuilding-common"
 include "rtsbuilding-api"
 // Main mod — project path kept flat to avoid Java module naming issues with ModDevGradle

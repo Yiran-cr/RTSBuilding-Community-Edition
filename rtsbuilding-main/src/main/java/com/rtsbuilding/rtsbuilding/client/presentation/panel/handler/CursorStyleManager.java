@@ -1,6 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.handler;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsPanel;
+import com.rtsbuilding.uifw.window.window.UiPanel;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.glfw.GLFW;
 
@@ -9,10 +9,10 @@ public final class CursorStyleManager {
     @FunctionalInterface
     public interface CursorResolver {
         
-        RtsPanel.ResizeCursor resolve(int mouseX, int mouseY);
+        UiPanel.ResizeCursor resolve(int mouseX, int mouseY);
     }
 
-    private RtsPanel.ResizeCursor currentStyle = RtsPanel.ResizeCursor.DEFAULT;
+    private UiPanel.ResizeCursor currentStyle = UiPanel.ResizeCursor.DEFAULT;
     private final CursorResolver resolver;
 
     
@@ -27,7 +27,7 @@ public final class CursorStyleManager {
 
     
     public void update(int mouseX, int mouseY) {
-        RtsPanel.ResizeCursor cursor = resolver.resolve(mouseX, mouseY);
+        UiPanel.ResizeCursor cursor = resolver.resolve(mouseX, mouseY);
         if (cursor == this.currentStyle) return;
         this.currentStyle = cursor;
         Minecraft mc = Minecraft.getInstance();
@@ -40,10 +40,10 @@ public final class CursorStyleManager {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.getWindow() == null) return;
         GLFW.glfwSetCursor(mc.getWindow().getWindow(), 0L);
-        this.currentStyle = RtsPanel.ResizeCursor.DEFAULT;
+        this.currentStyle = UiPanel.ResizeCursor.DEFAULT;
     }
 
-    private long cursorHandle(RtsPanel.ResizeCursor cursor) {
+    private long cursorHandle(UiPanel.ResizeCursor cursor) {
         return switch (cursor) {
             case RESIZE_EW -> {
                 if (this.resizeEwCursor == 0L) {

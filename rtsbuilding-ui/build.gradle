@@ -1,0 +1,58 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+base {
+    archivesName = "uifw-${minecraft_version}"
+}
+
+// 独立版本号（gradle.properties 的 uifw_version），用于独立发布 jar 与其 mods.toml。
+version = providers.gradleProperty('uifw_version').getOrElse('1.0.0')
+
+dependencies {
+}
+
+neoForge {
+    version = project.neo_version
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+
+    mods {
+        "${uifw_mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+// ── 独立发布 ──
+// UI 框架可独立打包为可分发 jar（含自身 neoforge.mods.toml），供其它 mod 直接依赖；
+// 同时主 JAR 合并内嵌（由 rtsbuilding-main 打包时排除本模块的 mods.toml，见主 build.gradle）。
+//
+// 注意：mods.toml 放在 src/main/templates 而非 src/main/resources —— 若放 resources，
+// dev 运行（runClient）时它会与主 toml（generateModMetadata 生成）在类路径上共存，
+// 两者都声明 modId="uifw"，导致 FML mod 容器初始化冲突（fml.modloadingissue.javafml.dangling_entrypoint）。
+// 因此 toml 只在独立 jar 打包时由 jar 任务注入。
+
+tasks.named('jar', Jar).configure {
+    from('src/main/templates/META-INF/neoforge.mods.toml') {
+        into 'META-INF'
+        expand 'mod_id': project.uifw_mod_id, 'version': project.uifw_version
+    }
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifactId = "uifw-${minecraft_version}"
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${rootProject.projectDir}/repo"
+        }
+    }
+}

@@ -8,6 +8,7 @@
       <div class="hero-tabs">
         <button class="chip" :class="{ active: view === 'features' }" @click="switchView('features')">功能总览</button>
         <button class="chip" :class="{ active: view === 'reports' }" @click="switchView('reports')">链路检查报告</button>
+        <button class="chip" :class="{ active: view === 'archreview' }" @click="switchView('archreview')">架构评审</button>
         <button class="chip" :class="{ active: view === 'worklog' }" @click="switchView('worklog')">工作日志</button>
       </div>
     </header>
@@ -54,8 +55,13 @@
     </template>
 
     <!-- ================= 工作日志页 ================= -->
-    <template v-else>
+    <template v-else-if="view === 'worklog'">
       <WorkLog />
+    </template>
+
+    <!-- ================= 架构评审页 ================= -->
+    <template v-else>
+      <ArchReview />
     </template>
   </div>
 </template>
@@ -66,6 +72,7 @@ import { loadReports } from './reports'
 import FeaturesView from './FeaturesView.vue'
 import DetailView from './DetailView.vue'
 import WorkLog from './WorkLog.vue'
+import ArchReview from './ArchReview.vue'
 
 const reports = loadReports()
 const view = ref('reports')

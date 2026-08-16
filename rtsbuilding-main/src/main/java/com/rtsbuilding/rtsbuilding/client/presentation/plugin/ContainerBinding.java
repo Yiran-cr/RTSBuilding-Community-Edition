@@ -1,7 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.ScrollBar;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.OverlayContext;
+import com.rtsbuilding.uifw.window.component.ScrollBar;
+import com.rtsbuilding.uifw.window.overlay.OverlayContext;
 import com.rtsbuilding.rtsbuilding.client.presentation.plugin.binding.*;
 import net.minecraft.client.gui.GuiGraphics;
 

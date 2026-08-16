@@ -1,13 +1,9 @@
 package com.rtsbuilding.addon.beyonddimensions;
 
 import com.rtsbuilding.rtsbuilding.api.compat.*;
-import com.wintercogs.beyonddimensions.api.capability.helper.unordered.FluidUnifiedStorageHandler;
-import com.wintercogs.beyonddimensions.api.dimensionnet.DimensionsNet;
 import com.wintercogs.beyonddimensions.api.dimensionnet.UnifiedStorage;
-import com.wintercogs.beyonddimensions.api.storage.handler.impl.AbstractUnorderedStackHandler;
 import com.wintercogs.beyonddimensions.api.storage.key.KeyAmount;
 import com.wintercogs.beyonddimensions.api.storage.key.impl.ItemStackKey;
-import com.wintercogs.beyonddimensions.common.block.entity.NetedBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
@@ -30,18 +26,38 @@ import java.util.List;
 import java.util.Map;
 
 @Mod("rtsbuilding_addon_beyonddimensions")
-public class RtsBeyondDimensionsAddon {
+public class RtsBeyondDimensionsAddon implements RtsIntegration {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("RTSBuilding/BD");
 
+    private final boolean hostLoaded;
+
     public RtsBeyondDimensionsAddon(IEventBus modEventBus, ModContainer modContainer) {
-        
         if (!ModList.get().isLoaded("beyonddimensions")) {
             LOGGER.info("Beyond Dimensions not detected — addon will not register");
+            this.hostLoaded = false;
             return;
         }
-        RtsCompatRegistry.register(new BdStorageProvider());
-        RtsCompatRegistry.register(new BdFluidProvider());
+        this.hostLoaded = true;
+        // 统一走 RtsIntegration 注册入口（阶段二：Addon 集成统一抽象）
+        // BD 为编译期强耦合集成（见 architecture-optimization.md 阶段二 2.4），绑定由 javac 保证。
+        RtsCompatRegistry.registerIntegration(this);
+        LOGGER.info("Beyond Dimensions integration registered");
+    }
+
+    @Override public String integrationId() { return "beyonddimensions"; }
+
+    @Override public boolean available() { return hostLoaded; }
+
+    /** BD 为编译期绑定（非反射），宿主类加载即视为健康。 */
+    @Override @Nullable
+    public String selfCheck() { return hostLoaded ? null : "beyonddimensions not loaded"; }
+
+    @Override
+    public void register(RtsCompatRegistry registry) {
+        if (!hostLoaded) return;
+        registry.register(new BdStorageProvider());
+        registry.register(new BdFluidProvider());
         LOGGER.info("Beyond Dimensions storage/fluid providers registered");
     }
 
@@ -51,18 +67,16 @@ public class RtsBeyondDimensionsAddon {
 
         @Override @Nullable
         public IItemHandler createItemHandler(ServerPlayer player, BlockPos pos) {
-            if (player == null || player.getServer() == null || pos == null) return null;
-            DimensionsNet net = DimensionsNet.getPrimaryNetFromPlayer(player);
-            if (net == null) return null;
-            if (!pos.equals(BlockPos.ZERO)) {
+            var storage = BdAdapter.primaryStorage(player);
+            if (storage == null) return null;
+            if (pos != null && !pos.equals(BlockPos.ZERO)) {
                 // 精确判定：仅玩家主网络的成员方块才返回网络 handler；
                 // 普通方块（箱子等）返回 null → 调用方回退到方块自身能力（避免重复接入同一网络）
-                BlockEntity be = player.serverLevel().getBlockEntity(pos);
-                if (!(be instanceof NetedBlockEntity neted) || neted.getNet() != net) {
+                if (!BdAdapter.isNetMember(player, pos, storage)) {
                     return null;
                 }
             }
-            return new BdDirectItemHandler(net.getUnifiedStorage());
+            return new BdDirectItemHandler(storage);
         }
 
         @Override
@@ -77,20 +91,11 @@ public class RtsBeyondDimensionsAddon {
 
         @Override @Nullable
         public String getNetworkDisplayName(ServerPlayer player) {
-            if (player == null || player.getServer() == null) return "Beyond Dimensions Network";
-            DimensionsNet net = DimensionsNet.getPrimaryNetFromPlayer(player);
-            if (net == null) return "Beyond Dimensions Network";
-            try {
-                String name = net.getCustomName();
-                return (name != null && !name.isEmpty()) ? name : "Beyond Dimensions Network";
-            } catch (NoSuchMethodError e) {
-                return "Beyond Dimensions Network";
-            }
+            return BdAdapter.displayName(player);
         }
 
         public static boolean hasPrimaryNetwork(ServerPlayer player) {
-            if (player == null || player.getServer() == null) return false;
-            return DimensionsNet.getPrimaryNetFromPlayer(player) != null;
+            return BdAdapter.primaryNet(player) != null;
         }
     }
 
@@ -100,10 +105,7 @@ public class RtsBeyondDimensionsAddon {
 
         @Override @Nullable
         public IFluidHandler createFluidHandler(ServerPlayer player) {
-            if (player == null || player.getServer() == null) return null;
-            DimensionsNet net = DimensionsNet.getPrimaryNetFromPlayer(player);
-            if (net == null) return null;
-            return new FluidUnifiedStorageHandler(net.getUnifiedStorage());
+            return BdAdapter.fluidHandler(player);
         }
 
         @Override
@@ -131,15 +133,14 @@ public class RtsBeyondDimensionsAddon {
             keys.clear();
             displayStacks.clear();
             counts.clear();
-            var bucket = storage.<AbstractUnorderedStackHandler.TypeBucket>getBucket(ItemStackKey.ID);
-            if (bucket.isEmpty()) return;
-            var tb = bucket.get();
-            for (int i = 0; i < tb.size(); i++) {
-                if (!(tb.get(i) instanceof ItemStackKey key)) continue;
-                KeyAmount entry = storage.getStackByKey(key);
+            int size = BdAdapter.bucketSize(storage);
+            for (int i = 0; i < size; i++) {
+                if (!(BdAdapter.bucketGet(storage, i) instanceof ItemStackKey key)) continue;
+                KeyAmount entry = BdAdapter.stackByKey(storage, key);
                 long amount = entry.amount();
                 if (amount <= 0L) continue;
-                if (!(storage.getOutStackByKey(key) instanceof ItemStack itemStack) || itemStack.isEmpty()) continue;
+                ItemStack itemStack = BdAdapter.outStackByKey(storage, key);
+                if (itemStack == null || itemStack.isEmpty()) continue;
                 itemToKey.put(itemStack.getItem(), key);
                 keys.add(key);
                 displayStacks.add(itemStack.copyWithCount(1));
@@ -162,7 +163,7 @@ public class RtsBeyondDimensionsAddon {
         @Override
         public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
             if (stack == null || stack.isEmpty()) return ItemStack.EMPTY;
-            KeyAmount remainder = storage.insert(new ItemStackKey(stack), stack.getCount(), simulate);
+            KeyAmount remainder = BdAdapter.insert(storage, new ItemStackKey(stack), stack.getCount(), simulate);
             if (!simulate && remainder.isEmpty()) rebuildCache();
             return remainder.isEmpty() ? ItemStack.EMPTY :
                     remainder.toStack() instanceof ItemStack result ? result : stack.copy();
@@ -173,7 +174,7 @@ public class RtsBeyondDimensionsAddon {
             if (slot < 0 || slot >= keys.size() || amount <= 0) return ItemStack.EMPTY;
             ItemStackKey key = keys.get(slot);
             if (key == null) return ItemStack.EMPTY;
-            KeyAmount extracted = storage.extract(key, amount, simulate, false);
+            KeyAmount extracted = BdAdapter.extract(storage, key, amount, simulate);
             if (!simulate) rebuildCache();
             return extracted.isEmpty() ? ItemStack.EMPTY :
                     extracted.toStack() instanceof ItemStack result ? result : ItemStack.EMPTY;
@@ -184,7 +185,7 @@ public class RtsBeyondDimensionsAddon {
             if (target == null || amount <= 0) return ItemStack.EMPTY;
             ItemStackKey key = itemToKey.get(target);
             if (key == null) return ItemStack.EMPTY;
-            KeyAmount result = storage.extract(key, amount, simulate, false);
+            KeyAmount result = BdAdapter.extract(storage, key, amount, simulate);
             if (!simulate) rebuildCache();
             return result.isEmpty() ? ItemStack.EMPTY :
                     result.toStack() instanceof ItemStack stack ? stack : ItemStack.EMPTY;

@@ -8,18 +8,82 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
+/**
+ * 拼音/首字母模糊搜索。
+ *
+ * <p><b>资源注入约定</b>：字典默认从 classpath 加载（{@code /assets/rtsbuilding/pinyin/data.txt}），
+ * 但该资源实际位于 main 模块 —— common 单独发版时 classpath 中不存在，会静默降级为空字典。
+ * 为打破跨模块资源耦合，main 启动时应调用 {@link #setDictionarySource(Supplier)} 注入真实资源源
+ * （如 Minecraft {@code ResourceManager} 的打开器），见阶段三 3.2 边界净化。
+ */
 public final class RtsPinyinSearch {
     private static final String DICT_PATH = "/assets/rtsbuilding/pinyin/data.txt";
+
+    /** 字典来源：默认 classpath，可由 main 注入。volatile 保证跨线程可见性。 */
+    private static volatile Supplier<InputStream> dictionarySource = () ->
+            RtsPinyinSearch.class.getResourceAsStream(DICT_PATH);
+
+    /** 来源变更后标记：下次 contains 需用新来源重载字典。 */
+    private static volatile boolean needsReload = false;
+
     private static final Map<Character, String[]> PINYIN_BY_CHAR = loadDictionary();
 
     private RtsPinyinSearch() {
+    }
+
+    /**
+     * 注入字典来源（main 启动时调用，用于提供真实资源打开器）。
+     *
+     * <p>注入后标记重载，在首次 {@link #contains} 调用时用新来源重新加载字典
+     * （资源管理器可能晚于注入就绪）。调用方负责线程安全（建议 commonSetup 阶段单线程调用）。
+     *
+     * @param source 返回字典 {@link InputStream} 的供应器；传 null 恢复 classpath 默认
+     */
+    public static void setDictionarySource(Supplier<InputStream> source) {
+        if (source == null) {
+            dictionarySource = () -> RtsPinyinSearch.class.getResourceAsStream(DICT_PATH);
+        } else {
+            dictionarySource = source;
+        }
+        needsReload = true;
+    }
+
+    /** 当前字典是否非空（拼音搜索实际可用）。 */
+    public static boolean isDictionaryLoaded() {
+        return !PINYIN_BY_CHAR.isEmpty();
+    }
+
+    /**
+     * 延迟重载：来源变更后首次调用时，用当前来源重新加载字典（仅触发一次）。
+     *
+     * <p>防御性设计：新来源加载<b>失败</b>（返回空/异常）时<b>保留原字典</b>，
+     * 避免把已正常加载的 classpath 字典清空成空导致拼音搜索静默失效。
+     */
+    private static void ensureDictionaryLoaded() {
+        if (!needsReload) {
+            return;
+        }
+        synchronized (PINYIN_BY_CHAR) {
+            if (!needsReload) {
+                return;
+            }
+            needsReload = false;
+            Map<Character, String[]> fresh = loadDictionary();
+            if (!fresh.isEmpty()) {
+                PINYIN_BY_CHAR.clear();
+                PINYIN_BY_CHAR.putAll(fresh);
+            }
+            // fresh 为空（新来源不可用）→ 保留原字典，拼音搜索继续可用
+        }
     }
 
     public static boolean contains(String text, String query) {
         if (text == null || text.isBlank() || query == null || query.isBlank()) {
             return false;
         }
+        ensureDictionaryLoaded();
         if (!containsCjk(text)) {
             return false;
         }
@@ -112,7 +176,7 @@ public final class RtsPinyinSearch {
 
     private static Map<Character, String[]> loadDictionary() {
         Map<Character, String[]> result = new HashMap<>();
-        try (InputStream in = RtsPinyinSearch.class.getResourceAsStream(DICT_PATH)) {
+        try (InputStream in = dictionarySource.get()) {
             if (in == null) {
                 return result;
             }

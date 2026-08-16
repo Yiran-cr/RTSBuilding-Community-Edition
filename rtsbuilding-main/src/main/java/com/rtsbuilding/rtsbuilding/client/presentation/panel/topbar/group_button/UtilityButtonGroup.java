@@ -2,14 +2,14 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_butto
 
 import com.mojang.math.Axis;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.button.AbstractButtonGroup;
+import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayoutHelper;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.popup.DebugMenuPopup;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.state.TooltipController;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.state.TooltipController;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -51,7 +51,7 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, TopBarLayoutHelper.ButtonGroup group) {
+    public void render(GuiGraphics g, int mouseX, int mouseY, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         
         selected[0] = debugPopup != null && debugPopup.isOpen();            
         selected[1] = debugPopup != null && debugPopup.isDebugOverlayEnabled(); 
@@ -59,14 +59,14 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
     }
 
     @Override
-    protected void renderExtra(GuiGraphics g, int mouseX, int mouseY, TopBarLayoutHelper.ButtonGroup group) {
+    protected void renderExtra(GuiGraphics g, int mouseX, int mouseY, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         tickChunkTooltip(mouseX, mouseY, group);
         renderFoldArrow(g, group);
     }
 
     
 
-    private void tickChunkTooltip(int mouseX, int mouseY, TopBarLayoutHelper.ButtonGroup group) {
+    private void tickChunkTooltip(int mouseX, int mouseY, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         var rect = group.rect(1);
         boolean hovered = rect.contains(mouseX, mouseY);
         boolean popupOpen = debugPopup != null && debugPopup.isOpen();
@@ -74,7 +74,7 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
     }
 
     
-    public void renderTooltipOverlay(GuiGraphics g, TopBarLayoutHelper.ButtonGroup group,
+    public void renderTooltipOverlay(GuiGraphics g, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group,
                                       int screenW, int screenH) {
         if (!chunkBtnTooltip.shouldRender()) return;
 
@@ -91,7 +91,7 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
 
     
 
-    private void renderFoldArrow(GuiGraphics g, TopBarLayoutHelper.ButtonGroup group) {
+    private void renderFoldArrow(GuiGraphics g, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         var rect = group.rect(0);
         boolean arrowActive = debugPopup != null && debugPopup.isOpen();
         if (arrowActive != prevArrowActive) {
@@ -127,7 +127,7 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
     
 
     
-    public TopBarLayoutHelper.Rect getPopupAnchor(TopBarLayoutHelper.ButtonGroup group) {
+    public com.rtsbuilding.uifw.window.button.ButtonGroupRect getPopupAnchor(com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         return group.rect(0);
     }
 }

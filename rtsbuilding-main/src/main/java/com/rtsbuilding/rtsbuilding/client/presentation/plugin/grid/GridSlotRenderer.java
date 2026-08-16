@@ -1,10 +1,10 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.rtsbuilding.rtsbuilding.client.util.render.GuiItemRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.GuiRenderTypes;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.SpriteRegion;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.TextureInfo;
+import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.GuiRenderTypes;
+import com.rtsbuilding.uifw.render.model.SpriteRegion;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;

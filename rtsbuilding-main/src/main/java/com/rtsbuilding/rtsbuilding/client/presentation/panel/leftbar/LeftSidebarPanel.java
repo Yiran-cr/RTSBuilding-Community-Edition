@@ -1,7 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
+import com.rtsbuilding.uifw.window.api.UiPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.ActionButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.BuildDestroyButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.SelectButtonGroup;
@@ -12,7 +12,7 @@ import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.Objects;
 
-public final class LeftSidebarPanel implements RtsPanelApi {
+public final class LeftSidebarPanel implements UiPanelApi {
 
     
 
@@ -25,7 +25,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
     
 
     
-    private BuilderScreen screen;
+    private com.rtsbuilding.uifw.window.api.UiPanelHost screen;
 
     
     private int currentWidth = LeftSidebarLayoutHelper.SIDEBAR_WIDTH;
@@ -51,7 +51,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
 
     
     public void setCurrentWidth(int width) {
-        this.currentWidth = Math.max(30, Math.min(width, this.screen != null ? this.screen.width / 4 : 2000));
+        this.currentWidth = Math.max(30, Math.min(width, this.screen != null ? this.screen.getUiWidth() / 4 : 2000));
     }
 
     
@@ -60,7 +60,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
     }
 
     @Override
-    public void init(BuilderScreen screen) {
+    public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
         this.screen = Objects.requireNonNull(screen,
                 "LeftSidebarPanel.init() called with null screen");
     }
@@ -184,7 +184,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
 
     private LeftSidebarLayoutHelper.Rect layoutRect() {
         return layout.sidebarRect(
-                this.screen.width, this.screen.height, this.currentWidth);
+                this.screen.getUiWidth(), this.screen.getUiHeight(), this.currentWidth);
     }
 
     
@@ -202,7 +202,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
 
     
     private int shapeGroupX() {
-        return screen.getRtsVirtualWidth() - screen.getRightSidebarWidth()
+        return ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).getRtsVirtualWidth() - ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).getRightSidebarWidth()
                 - ShapeButtonGroup.DEFAULT_BTN_SIZE - SHAPE_GROUP_RIGHT_MARGIN;
     }
 
@@ -223,19 +223,19 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         selectGroup.render(g, mouseX, mouseY, bx, baseY);
 
         
-        boolean showBind = screen != null && screen.isInteractiveMode();
+        boolean showBind = screen != null && ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).isInteractiveMode();
         actionGroup.setShowBindButton(showBind);
 
         
-        boolean showRotate = screen == null || !screen.isInteractiveMode();
+        boolean showRotate = screen == null || !((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).isInteractiveMode();
         actionGroup.setShowRotateButton(showRotate);
 
         
-        boolean blueprint = screen != null && screen.isBlueprintMode();
+        boolean blueprint = screen != null && ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).isBlueprintMode();
         actionGroup.setBlueprintMode(blueprint);
 
         
-        boolean buildMode = screen != null && screen.isBuildMode();
+        boolean buildMode = screen != null && ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).isBuildMode();
         buildDestroyGroup.setShow(buildMode);
         // 连锁挖掘指示灯：点亮状态每帧同步按住 ULTIMINE_KEY 的按键状态
         ultimineGroup.setShow(buildMode);
@@ -297,7 +297,7 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         if (selectGroup.mouseClicked(mouseX, mouseY, bx, baseY) >= 0) {
             
             if (isClickButtonSelected() && screen != null) {
-                screen.clearBoxSelection();
+                ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).clearBoxSelection();
             }
             return true;
         }
@@ -347,16 +347,16 @@ public final class LeftSidebarPanel implements RtsPanelApi {
         int ultimineY = buildDestroyY + buildDestroyGroup.visibleHeight() + CROSS_GAP;
 
         selectGroup.renderTooltipOverlay(g, bx, baseY,
-                this.screen.width, this.screen.height);
+                this.screen.getUiWidth(), this.screen.getUiHeight());
         actionGroup.renderTooltipOverlay(g, bx, actionY,
-                this.screen.width, this.screen.height);
+                this.screen.getUiWidth(), this.screen.getUiHeight());
         buildDestroyGroup.renderTooltipOverlay(g, bx, buildDestroyY,
-                this.screen.width, this.screen.height);
+                this.screen.getUiWidth(), this.screen.getUiHeight());
         ultimineGroup.renderTooltipOverlay(g, bx, ultimineY,
-                this.screen.width, this.screen.height);
+                this.screen.getUiWidth(), this.screen.getUiHeight());
         if (this.screen != null) {
             shapeGroup.renderTooltipOverlay(g, shapeGroupX(), shapeGroupY(),
-                    this.screen.getRtsVirtualWidth(), this.screen.getRtsVirtualHeight());
+                    ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).getRtsVirtualWidth(), ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).getRtsVirtualHeight());
         }
     }
 }

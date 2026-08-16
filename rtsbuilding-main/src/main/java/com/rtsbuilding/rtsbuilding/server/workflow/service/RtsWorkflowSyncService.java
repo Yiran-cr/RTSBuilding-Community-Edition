@@ -35,7 +35,7 @@ public final class RtsWorkflowSyncService {
             entries.add(new S2CRtsWorkflowProgressPayload(
                     (byte) i,
                     totalCountByte,
-                    status.type() != null ? (byte) status.type().ordinal() : (byte) -1,
+                    status.type() != null ? (byte) status.type().id() : (byte) -1,
                     (byte) status.priority().rank(),
                     status.totalBlocks(),
                     status.completedBlocks(),

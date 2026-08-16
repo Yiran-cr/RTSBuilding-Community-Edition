@@ -17,6 +17,7 @@ Minecraft RTS-style top-down building mod. NeoForge 1.21.1 / Forge 1.20.1 (branc
 - `rtsbuilding-common` — shared gameplay logic (packages: `common`, `core`, `server`, `util`), no loader-specific code.
 - `rtsbuilding-api` — public API module for addons / other mods to depend on.
 - `rtsbuilding-main` — the main mod's NeoForge platform module. Loader-specific code in `client`, `network`, `platform`, `mixin`, `compat`, `server`, `common`.
+- `rtsbuilding-ui` — **uifw**: standalone, mod-agnostic UI framework (package `com.rtsbuilding.uifw`, modId `uifw`). SDF rendering, animation/theme, window & component library. Independent version `uifw_version`; merges into the main JAR (its own `META-INF/neoforge.mods.toml` is excluded there) and is separately distributable. Must NOT contain any RTS gameplay logic.
 - `rtsbuilding-technologized` — built-in addon mod (`rtsbuilding_technologized`): energy & power system. Separate project, packaged inside the main mod JAR.
 - `rtsaddon-ae2/`, `rtsaddon-beyonddimensions/`, `rtsaddon-refinedstorage/`, `rtsaddon-sophisticatedbackpacks/` — built-in addon mods (host-mod integrations: AE2, Refined Storage, BeyondDimensions, Sophisticated Backpacks). Each is a separate project at the repo root, packaged inside the main mod JAR.
 
@@ -34,6 +35,7 @@ Minecraft RTS-style top-down building mod. NeoForge 1.21.1 / Forge 1.20.1 (branc
 所有**用户可见 UI 文案**必须通过 lang 语言文件管理，禁止硬编码中文：
 
 - Lang 文件：`rtsbuilding-main/src/main/resources/assets/rtsbuilding/lang/zh_cn.json`（中文）与 `en_us.json`（英文），两个文件 key 必须同步。
+- **uifw 模块**的文案走它自己的 lang：`rtsbuilding-ui/src/main/resources/assets/uifw/lang/zh_cn.json` 与 `en_us.json`，key 前缀 `screen.uifw.*` 等。UI 库组件不得引用主 mod 的 `*.rtsbuilding.*` key；宿主 mod 传入的 key 由宿主自己定义。
 - Key 前缀约定：`screen.rtsbuilding.*`（面板/界面）、`ui.rtsbuilding.*`（小组件/标签）、`message.rtsbuilding.*`（聊天/提示消息）、`button.rtsbuilding.*`（按钮）、`tooltip.rtsbuilding.*`（提示）、`key.rtsbuilding.*`（按键）。
 - 代码中通过 `Component.translatable(key, args)`（Component）或 `Component.translatable(key, args).getString()`（String）取文案；带参数用 `%d`/`%s` 占位符。
 - **不迁移**（保留硬编码）：日志输出（`LOGGER.*`）、异常消息（`throw new ...Exception`）、代码注释、测试断言消息。

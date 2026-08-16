@@ -41,6 +41,15 @@ public final class RtsSessionServiceImpl implements RtsService {
     private final RtsServer server = RtsServer.get();
     private final RtsPageServiceImpl RtsPageServiceImpl = server.page();
 
+    /**
+     * 构造期访问 {@code server.page()}（会话的页面刷新依赖 page 服务），
+     * 声明依赖使装配阶段按拓扑排序（阶段四 4.1）。
+     */
+    @Override
+    public java.util.List<Class<? extends RtsService>> dependencies() {
+        return java.util.List.of(RtsPageServiceImpl.class);
+    }
+
     public RtsStorageSession getOrCreate(ServerPlayer player) {
         return sessions.computeIfAbsent(player.getUUID(), uuid -> {
             RtsStorageSession session = new RtsStorageSession();

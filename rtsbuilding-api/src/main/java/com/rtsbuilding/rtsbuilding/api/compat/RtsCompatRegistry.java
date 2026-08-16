@@ -13,8 +13,20 @@ public final class RtsCompatRegistry {
     private static final List<RtsFluidNetworkProvider> fluidProviders = new ArrayList<>();
     private static final List<RtsBackpackProvider> backpackProviders = new ArrayList<>();
     private static final List<RtsIconResolver> iconResolvers = new ArrayList<>();
+    private static final List<RtsIntegration> integrations = new ArrayList<>();
 
     private RtsCompatRegistry() {}
+
+    /** 注册宿主 mod 集成（统一生命周期抽象，见 {@link RtsIntegration}）。 */
+    public static void registerIntegration(RtsIntegration integration) {
+        if (integration != null) {
+            integrations.add(integration);
+        }
+    }
+
+    public static List<RtsIntegration> getIntegrations() {
+        return Collections.unmodifiableList(integrations);
+    }
 
     public static void register(RtsStorageNetworkProvider provider) {
         storageProviders.add(provider);

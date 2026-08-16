@@ -204,7 +204,9 @@ public final class RtsPlacementQuickBuild {
 
         // 延迟落位（BuildingGadgets2「动画即落位」语义）：客户端收到动画包立即播放生长动画，
         // 服务端在动画周期结束后才真正 setBlock —— 方块"生长完成即出现"。
-        // 落位前该位置保持空气/可替换状态；落位失败时退回已提取的物品。
+        // 落位前该位置保持空气/可替换状态；支持支撑依赖重试（对齐 BG2 retryList）：
+        // 落位时 canSurvive 失败（支撑方块尚未落位，如墙先于其上的火把）→ 延迟重试一次；
+        // 重试仍失败或 setBlock 失败 → 退回已提取的物品。
         // 需要被延迟回调捕获的局部变量均转为 final 拷贝。
         ItemStack commitPlacementStack = placementStack;
         ItemStack commitExtracted = extracted;
@@ -212,32 +214,42 @@ public final class RtsPlacementQuickBuild {
         boolean commitFromCarried = fromCarried;
         List<IItemHandler> commitExtractHandlers = extractHandlers;
         List<IItemHandler> commitInsertHandlers = insertHandlers;
-        RtsBlockAnimationCommitter.schedulePlace(player, targetPos, plan.state(), () -> {
-            // 落位本身不依赖玩家：玩家下线时仍 setBlock，保证已扣物品的方块不丢失
-            boolean placed = BlockPlacer.setBlock(level, targetPos, plan.state());
-            if (!placed) {
-                refundExtracted(player, commitExtracted, commitInsertHandlers, commitFromCarried, commitRefundOnFailure);
-                return;
-            }
-            BlockState placedState = level.getBlockState(targetPos);
-            if (placedState.is(plan.state().getBlock())) {
-                BlockPlacer.applyQuickBuildBlockEntity(level, targetPos, commitPlacementStack, placedState, player);
-            }
-            // 完全改为使用储存空间的方块进行放置，不再从主手扣除
-            BlockPlacer.trackPlaced(level, targetPos);
-            // 玩家相关的后置逻辑（声音/页面/续货）仅在玩家仍在线时执行
-            if (!RtsBlockAnimationCommitter.isPlayerStillOnline(player)) {
-                return;
-            }
-            RtsPlacementSound.playRemotePlacedBlockSound(player, level, targetPos);
-            RtsServer.get().page().recordRecentItem(session, plan.itemId(), S2CRtsStoragePagePayload.RECENT_ITEM_PLACED, 1L);
-            if (commitFromCarried) {
-                // 方案2：自动续货——放置成功消耗后从网络补回差额，carried 始终保持满组
-                RtsPlacementExtractor.replenishCarried(player, commitExtractHandlers, plan.item(), plan.templateStack());
-                // 同步权威 carried 状态（已被续货补充）给客户端
-                Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
-            }
-        });
+        RtsBlockAnimationCommitter.schedulePlace(player, targetPos, plan.state(),
+                () -> {
+                    // 支撑依赖未就绪（邻居尚未落位）→ 请求延迟重试
+                    if (!plan.state().canSurvive(level, targetPos)) {
+                        return false;
+                    }
+                    // 落位本身不依赖玩家：玩家下线时仍 setBlock，保证已扣物品的方块不丢失
+                    boolean placed = BlockPlacer.setBlock(level, targetPos, plan.state());
+                    if (!placed) {
+                        refundExtracted(player, commitExtracted, commitInsertHandlers, commitFromCarried, commitRefundOnFailure);
+                        return true;
+                    }
+                    BlockState placedState = level.getBlockState(targetPos);
+                    if (placedState.is(plan.state().getBlock())) {
+                        BlockPlacer.applyQuickBuildBlockEntity(level, targetPos, commitPlacementStack, placedState, player);
+                    }
+                    // 完全改为使用储存空间的方块进行放置，不再从主手扣除
+                    BlockPlacer.trackPlaced(level, targetPos);
+                    // 玩家相关的后置逻辑（声音/页面/续货）仅在玩家仍在线时执行
+                    if (!RtsBlockAnimationCommitter.isPlayerStillOnline(player)) {
+                        return true;
+                    }
+                    RtsPlacementSound.playRemotePlacedBlockSound(player, level, targetPos);
+                    RtsServer.get().page().recordRecentItem(session, plan.itemId(), S2CRtsStoragePagePayload.RECENT_ITEM_PLACED, 1L);
+                    if (commitFromCarried) {
+                        // 方案2：自动续货——放置成功消耗后从网络补回差额，carried 始终保持满组
+                        RtsPlacementExtractor.replenishCarried(player, commitExtractHandlers, plan.item(), plan.templateStack());
+                        // 同步权威 carried 状态（已被续货补充）给客户端
+                        Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+                    }
+                    return true;
+                },
+                () -> {
+                    // 重试次数用尽仍无法落位：退回已提取的物品
+                    refundExtracted(player, commitExtracted, commitInsertHandlers, commitFromCarried, commitRefundOnFailure);
+                });
         return true;
     }
 

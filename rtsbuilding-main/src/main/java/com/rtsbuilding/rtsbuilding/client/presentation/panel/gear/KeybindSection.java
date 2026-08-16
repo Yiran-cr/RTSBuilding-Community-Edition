@@ -2,13 +2,13 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.gear;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeybinds;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.SettingsSection;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ResetButton;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
-import com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.window.component.SettingsSection;
+import com.rtsbuilding.uifw.component.ResetButton;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.render.UiPalette;
+import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -96,9 +96,9 @@ public final class KeybindSection extends SettingsSection {
         boolean hovering = mx >= x && mx < x + BIND_BTN_W && my >= y && my < y + BIND_BTN_H;
         boolean active = capturingRow == row;
         float t = bindHover[row].track(hovering || active);
-        int fill = lerpColor(DarkUiPalette.bg(), DarkUiPalette.accent(), t);
+        int fill = lerpColor(UiPalette.bg(), UiPalette.accent(), t);
         SdfRenderer.drawBorderedRoundedRect(g, x, y, BIND_BTN_W, BIND_BTN_H, 3,
-                DarkUiPalette.black(), fill, 1);
+                UiPalette.black(), fill, 1);
 
         String text = active ? CAPTURE_PENDING_TEXT : bindText(row);
         String trimmed = TextRenderer.trimToWidth(Minecraft.getInstance().font, text, BIND_BTN_W - BIND_TEXT_PAD * 2);

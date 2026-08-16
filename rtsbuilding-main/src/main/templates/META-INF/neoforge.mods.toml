@@ -15,6 +15,18 @@ Build, manage storage, and interact with your base from an overhead RTS-style bu
 '''
 
 [[mods]]
+modId="uifw"
+version="${mod_version}"
+displayName="uifw - UI Framework"
+credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
+authors="${mod_authors}"
+description='''
+Standalone, mod-agnostic Minecraft UI framework: SDF rendering, animation/theme
+system, and a reusable window & component library. Bundled dependency of the
+main RTS Building mod; also distributable on its own.
+'''
+
+[[mods]]
 modId="rtsbuilding_technologized"
 version="${mod_version}"
 displayName="RTSbuilding Technologized"
@@ -76,6 +88,27 @@ config="${mod_id}.mixins.json"
     side="BOTH"
 
 [[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="uifw"
+    type="required"
+    versionRange="[${mod_version},)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.uifw]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.uifw]]
     modId="minecraft"
     type="required"
     versionRange="${minecraft_version_range}"

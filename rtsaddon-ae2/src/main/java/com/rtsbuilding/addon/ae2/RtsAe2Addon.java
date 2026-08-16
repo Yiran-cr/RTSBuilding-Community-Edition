@@ -27,27 +27,55 @@ import java.util.Iterator;
 import java.util.List;
 
 @Mod("rtsbuilding_addon_ae2")
-public class RtsAe2Addon {
+public class RtsAe2Addon implements RtsIntegration {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("RTSBuilding/AE2");
     private final IEventBus modEventBus;
     private final ModContainer modContainer;
+    private final Ae2Reflection reflection;
+    private final String loadError;
 
     public RtsAe2Addon(IEventBus modEventBus, ModContainer modContainer) {
         this.modEventBus = modEventBus;
         this.modContainer = modContainer;
         if (!ModList.get().isLoaded("ae2")) {
             LOGGER.info("AE2 not detected — addon will not register providers");
+            this.reflection = null;
+            this.loadError = null;
             return;
         }
         var reflection = new Ae2Reflection();
         if (!reflection.loaded) {
             LOGGER.warn("AE2 found but reflection load failed — skipping registration");
+            this.reflection = null;
+            this.loadError = "reflection load failed";
+            // 仍注册 integration，让设置面板/日志能显示"宿主存在但绑定失败"
+            RtsCompatRegistry.registerIntegration(this);
             return;
         }
-        RtsCompatRegistry.register(new Ae2StorageProvider(reflection));
-        RtsCompatRegistry.register(new Ae2FluidProvider(reflection));
-        RtsCompatRegistry.register(new Ae2IconResolverProvider(reflection));
+        this.reflection = reflection;
+        this.loadError = null;
+        // 统一走 RtsIntegration 注册入口（阶段二：Addon 集成统一抽象）
+        RtsCompatRegistry.registerIntegration(this);
+        LOGGER.info("AE2 integration registered (storage/fluid/icon)");
+    }
+
+    @Override public String integrationId() { return "ae2"; }
+
+    @Override public boolean available() { return reflection != null && reflection.loaded; }
+
+    @Override @Nullable
+    public String selfCheck() {
+        if (loadError != null) return loadError;
+        return reflection == null ? "ae2 not loaded" : reflection.selfCheck();
+    }
+
+    @Override
+    public void register(RtsCompatRegistry registry) {
+        if (reflection == null) return;
+        registry.register(new Ae2StorageProvider(reflection));
+        registry.register(new Ae2FluidProvider(reflection));
+        registry.register(new Ae2IconResolverProvider(reflection));
         LOGGER.info("AE2 storage/fluid/icon providers registered");
     }
 
@@ -261,7 +289,7 @@ public class RtsAe2Addon {
 
     private static final class Ae2Reflection {
         boolean loaded = false;
-        private Class<?> clKeyCounter, clMEStorage, clStorageService, clItemKey, clFluidKey, clGridHost, clGridNode, clGrid;
+        private Class<?> clKeyCounter, clMEStorage, clStorageService, clItemKey, clFluidKey, clGridNode, clGrid;
         private MethodHandle mhGetGridNode, mhGetGrid, mhGetStorageService, mhGetCachedInventory, mhGetAvailableStacks;
         private MethodHandle mhKeyCounterIterator, mhKeyGetDisplayStack, mhKeyGetAmount;
         private MethodHandle mhToItemKey, mhToStack, mhInsert, mhExtract;
@@ -273,7 +301,6 @@ public class RtsAe2Addon {
                 var lookup = MethodHandles.publicLookup();
                 var classLoader = getClass().getClassLoader();
 
-                clGridHost = Class.forName("appeng.api.networking.IGridNode", false, classLoader);
                 clGridNode = Class.forName("appeng.api.networking.IGridNode", false, classLoader);
                 clGrid = Class.forName("appeng.api.networking.IGrid", false, classLoader);
                 clStorageService = Class.forName("appeng.api.networking.storage.IStorageService", false, classLoader);
@@ -311,10 +338,9 @@ public class RtsAe2Addon {
                 mhKeyCounterIterator = lookup.findVirtual(clKeyCounter, "iterator",
                         MethodType.methodType(Iterator.class));
 
-                // AEKey methods
-                mhKeyGetDisplayStack = lookup.findVirtual(clKey, "getDisplayStack",
-                        MethodType.methodType(ItemStack.class));
-
+                // AEKey / KeyCount methods
+                // KeyCount.getKey 取资源键；AEKey.getDisplayStack 由 KeyCount 条目经由 getKey 后再转换，
+                // 因此只绑定一次（getKey），避免二次覆盖。
                 var clKeyCount = Class.forName("appeng.api.stacks.KeyCount", false, classLoader);
                 mhKeyGetAmount = lookup.findVirtual(clKeyCount, "getAmount",
                         MethodType.methodType(long.class));
@@ -343,6 +369,26 @@ public class RtsAe2Addon {
             } catch (Throwable e) {
                 LOGGER.warn("AE2 reflection load failed: {}", e.getMessage());
             }
+        }
+
+        /** 自检反射绑定健康度：缺失关键句柄时返回诊断串，健康返回 null。 */
+        @Nullable
+        String selfCheck() {
+            if (!loaded) return "reflection load failed";
+            StringBuilder missing = new StringBuilder();
+            if (mhGetGridNode == null) missing.append("mhGetGridNode,");
+            if (mhGetGrid == null) missing.append("mhGetGrid,");
+            if (mhGetStorageService == null) missing.append("mhGetStorageService,");
+            if (mhGetAvailableStacks == null) missing.append("mhGetAvailableStacks,");
+            if (mhKeyCounterIterator == null) missing.append("mhKeyCounterIterator,");
+            if (mhKeyGetDisplayStack == null) missing.append("mhKeyGetDisplayStack,");
+            if (mhKeyGetAmount == null) missing.append("mhKeyGetAmount,");
+            if (mhToItemKey == null) missing.append("mhToItemKey,");
+            if (mhToStack == null) missing.append("mhToStack,");
+            if (mhInsert == null) missing.append("mhInsert,");
+            if (mhExtract == null) missing.append("mhExtract,");
+            if (aeKeyMapsInstance == null) missing.append("aeKeyMapsInstance,");
+            return missing.length() == 0 ? null : "missing: " + missing;
         }
 
         @Nullable Object findStorageService(net.minecraft.server.level.ServerLevel level, BlockPos pos) {

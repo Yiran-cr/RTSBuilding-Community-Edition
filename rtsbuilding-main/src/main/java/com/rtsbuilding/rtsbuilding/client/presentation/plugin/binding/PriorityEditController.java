@@ -3,8 +3,8 @@ package com.rtsbuilding.rtsbuilding.client.presentation.plugin.binding;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.storage.StorageModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
-import com.rtsbuilding.rtsbuilding.client.util.animate.Easing;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.Easing;
 import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 

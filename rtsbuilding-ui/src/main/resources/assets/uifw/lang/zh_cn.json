@@ -1,0 +1,6 @@
+{
+  "screen.uifw.color_picker.title": "调色盘",
+  "screen.uifw.color_picker.input_label": "颜色编码",
+  "screen.uifw.color_picker.mode.hex": "十六进制",
+  "screen.uifw.color_picker.mode.dec": "十进制"
+}

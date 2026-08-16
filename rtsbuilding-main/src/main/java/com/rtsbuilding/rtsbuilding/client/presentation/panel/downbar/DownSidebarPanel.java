@@ -1,27 +1,27 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.api.RtsPanelApi;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.EdgeResizeHandler;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.DownOverlayLayer;
+import com.rtsbuilding.uifw.window.api.UiPanelApi;
+import com.rtsbuilding.uifw.window.component.EdgeResizeHandler;
+import com.rtsbuilding.uifw.window.overlay.DownOverlayLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.overlay.LeftDownOverlayLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.overlay.RightDownOverlayLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.render.DarkUiPalette;
+import com.rtsbuilding.uifw.render.UiPalette;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.Objects;
 
-public final class DownSidebarPanel implements RtsPanelApi {
+public final class DownSidebarPanel implements UiPanelApi {
 
     
-    private BuilderScreen screen;
+    private com.rtsbuilding.uifw.window.api.UiPanelHost screen;
 
     
     private int currentHeight = DownSidebarLayoutHelper.DOWN_BAR_HEIGHT;
 
     
     public void setCurrentHeight(int height) {
-        this.currentHeight = Math.max(8, Math.min(height, this.screen != null ? this.screen.height / 4 : 2000));
+        this.currentHeight = Math.max(8, Math.min(height, this.screen != null ? this.screen.getUiHeight() / 4 : 2000));
     }
 
     
@@ -78,7 +78,7 @@ public final class DownSidebarPanel implements RtsPanelApi {
     private static final int OVERLAY_MIN_SIZE = 160;
 
     @Override
-    public void init(BuilderScreen screen) {
+    public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
         this.screen = Objects.requireNonNull(screen,
                 "DownSidebarPanel.init() called with null screen");
     }
@@ -110,7 +110,7 @@ public final class DownSidebarPanel implements RtsPanelApi {
     
     private DownSidebarLayoutHelper.Rect layoutRect() {
         return layout.downBarRect(
-                this.screen.width, this.screen.height, this.screen.getRightSidebarWidth(), this.currentHeight);
+                this.screen.getUiWidth(), this.screen.getUiHeight(), ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).getRightSidebarWidth(), this.currentHeight);
     }
 
     
@@ -120,7 +120,7 @@ public final class DownSidebarPanel implements RtsPanelApi {
         DownSidebarLayoutHelper.Rect db = layoutRect();
         if (db.width() <= 0 || db.height() <= 0) return;
 
-        g.fill(db.x(), db.y(), db.x() + db.width(), db.y() + db.height(), DarkUiPalette.bg());
+        g.fill(db.x(), db.y(), db.x() + db.width(), db.y() + db.height(), UiPalette.bg());
     }
 
     
@@ -159,7 +159,7 @@ public final class DownSidebarPanel implements RtsPanelApi {
 
     
     private boolean isMouseInLayer(DownOverlayLayer layer, int mouseX, int mouseY) {
-        if (this.screen == null || this.screen.isMouseOverUI(mouseX, mouseY)) return false;
+        if (this.screen == null || ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) this.screen).isMouseOverUI(mouseX, mouseY)) return false;
         return layer.contains(mouseX, mouseY);
     }
 
@@ -223,7 +223,7 @@ public final class DownSidebarPanel implements RtsPanelApi {
         DownSidebarLayoutHelper.Rect db = layoutRect();
         return resizeHandler.tryBegin(mouseY, mouseX,
                 db.y(), db.x(), db.width(),
-                currentHeight, this.screen.height);
+                currentHeight, this.screen.getUiHeight());
     }
 
     @Override

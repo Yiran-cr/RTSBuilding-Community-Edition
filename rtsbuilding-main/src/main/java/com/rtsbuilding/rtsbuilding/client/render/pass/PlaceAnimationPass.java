@@ -27,15 +27,13 @@ import net.neoforged.neoforge.client.model.data.ModelData;
  * （对齐其 {@code RenderType.cutout()} 放置虚影），带真实纹理与光照。
  * 非完整模型方块（流体等）回退为不透明色块，保证任何方块都有可见反馈。
  *
- * <p>动画时长与服务端落位周期（12 ticks=600ms）对齐：动画结束瞬间服务端落位、方块出现
- * （BuildingGadgets2「动画即落位」触发/结束语义）。
+ * <p>动画总时长取<b>服务端权威</b>的 {@code durationMs}（动画包 durationTicks × 50ms）：
+ * 服务端在该时长后真正落位方块，客户端动画结束瞬间 BlockUpdate 到达方块出现 ——
+ * 「动画结束 = 方块落位」的节奏由服务端控制，客户端不再硬编码时长。</p>
  *
- * <p>每帧渲染后调用 {@link GhostRingBuffer#prune} 清理过期条目。</p>
+ * <p>每帧渲染后调用 {@link GhostRingBuffer#prune} 按条目时长清理过期条目。</p>
  */
 public final class PlaceAnimationPass implements RenderPass {
-
-    /** 生长动画时长（毫秒）：方块从 0 放大到 1。与服务端落位周期（12 ticks=600ms）对齐。 */
-    private static final long GROW_DURATION_MS = 600L;
 
     private static final CornerBracketRenderer.Rgb color = new CornerBracketRenderer.Rgb();
 
@@ -56,21 +54,21 @@ public final class PlaceAnimationPass implements RenderPass {
 
         BlockRenderDispatcher dispatcher = Minecraft.getInstance().getBlockRenderer();
 
-        buffer.forEach((key, state, addedAtMs) -> {
+        buffer.forEach((key, state, addedAtMs, durationMs) -> {
             long age = now - addedAtMs;
-            if (age < 0 || age >= GROW_DURATION_MS) return;
+            if (age < 0 || age >= durationMs) return;
             BlockPos p = BlockPos.of(key);
 
-            // 生长进度 0 → 1（easeOutCubic，收尾柔和）
-            double growT = Math.min(1.0, age / (double) GROW_DURATION_MS);
+            // 生长进度 0 → 1（easeOutCubic，收尾柔和），总时长由服务端权威控制
+            double growT = Math.min(1.0, age / (double) durationMs);
             float scale = (float) (1.0 - Math.pow(1.0 - growT, 3.0));
             if (scale <= 0.01F) return;
 
             renderScaledBlock(mc.level, p, state, scale, dispatcher, poseStack, alloc);
         });
 
-        // 清理过期条目，避免缓冲累积
-        buffer.prune(now, GROW_DURATION_MS);
+        // 清理过期条目（按各自服务端权威时长），避免缓冲累积
+        buffer.prune(now);
     }
 
     /**

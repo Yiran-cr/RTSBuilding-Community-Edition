@@ -3,8 +3,8 @@ package com.rtsbuilding.rtsbuilding.client.presentation.plugin.workflow;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.workflow.WorkflowModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.ScrollBar;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.OverlayContext;
+import com.rtsbuilding.uifw.window.component.ScrollBar;
+import com.rtsbuilding.uifw.window.overlay.OverlayContext;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;

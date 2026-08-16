@@ -1,6 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar;
 
-import com.rtsbuilding.rtsbuilding.client.util.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.AnimFloat;
 
 /**
  * 轨道球的可变状态 —— 位置、拖拽状态、光标状态与六段轴的悬停动画。

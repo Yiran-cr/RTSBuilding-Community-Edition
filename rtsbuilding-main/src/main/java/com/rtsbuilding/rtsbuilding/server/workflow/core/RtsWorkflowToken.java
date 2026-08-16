@@ -1,6 +1,7 @@
 package com.rtsbuilding.rtsbuilding.server.workflow.core;
 
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
+import com.rtsbuilding.rtsbuilding.server.workflow.model.WorkflowState;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
@@ -196,8 +197,7 @@ public record RtsWorkflowToken(
      */
     public void suspend() {
         RtsWorkflowEntry entry = resolveEntry();
-        if (entry != null) {
-            entry.setSuspended(true);
+        if (entry != null && entry.transition(WorkflowState.SUSPENDED)) {
             entry.setDetailMessage(net.minecraft.network.chat.Component
                     .translatable("message.rtsbuilding.workflow.waiting_items").getString());
             engine.notifyPlayer(playerId, dimension);
@@ -209,8 +209,7 @@ public record RtsWorkflowToken(
      */
     public void pause() {
         RtsWorkflowEntry entry = resolveEntry();
-        if (entry != null) {
-            entry.setPaused(true);
+        if (entry != null && entry.transition(WorkflowState.PAUSED)) {
             engine.notifyPlayer(playerId, dimension);
         }
     }
@@ -222,8 +221,7 @@ public record RtsWorkflowToken(
      */
     public boolean unpause() {
         RtsWorkflowEntry entry = resolveEntry();
-        if (entry != null && entry.paused()) {
-            entry.setPaused(false);
+        if (entry != null && entry.transition(WorkflowState.RUNNING)) {
             engine.notifyPlayer(playerId, dimension);
             return true;
         }
@@ -250,8 +248,7 @@ public record RtsWorkflowToken(
      */
     public boolean resume() {
         RtsWorkflowEntry entry = resolveEntry();
-        if (entry != null && entry.suspended()) {
-            entry.setSuspended(false);
+        if (entry != null && entry.transition(WorkflowState.RUNNING)) {
             entry.setDetailMessage("");
             engine.notifyPlayer(playerId, dimension);
             return true;

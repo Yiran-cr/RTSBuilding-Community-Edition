@@ -88,7 +88,7 @@ public final class StorageState {
         this.scanStartedMs = System.currentTimeMillis();
         this.pageRequestCount++;
         RtsClientPacketGateway.sendRequestStoragePage(page, storageSearch, storageCategory,
-                com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort.byId(storageSort), storageSortAscending, storagePageSize);
+                com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort.fromId(storageSort), storageSortAscending, storagePageSize);
     }
 
     void applyStoragePage(S2CRtsStoragePagePayload payload) {

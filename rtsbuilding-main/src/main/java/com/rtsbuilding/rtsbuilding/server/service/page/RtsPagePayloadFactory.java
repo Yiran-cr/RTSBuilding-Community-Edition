@@ -52,7 +52,7 @@ public final class RtsPagePayloadFactory {
                 linkedRefs.priorities(), linkedRefs.iconItemIds(), linkedRefs.worldAvailable(),
                 0, 1, 0,
                 session.browser.search, session.browser.category,
-                (byte) session.browser.sort.ordinal(), session.browser.ascending,
+                (byte) session.browser.sort.id(), session.browser.ascending,
                 session.sessionFlags.autoStoreMinedDrops, session.sessionFlags.useBdNetwork,
                 List.of(RtsPageSharedHelpers.CATEGORY_ALL),
                 List.of(), List.of(), List.of(), List.of(), List.of(),

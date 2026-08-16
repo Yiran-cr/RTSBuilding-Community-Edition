@@ -111,6 +111,23 @@ public record RtsBlueprint(
     }
 
     /**
+     * 仅返回<b>显式记录</b>的材质 ID（{@code materialItemId} + AE2 线缆/总线 NBT 扫描），
+     * <b>不含</b> {@code asItem()} 兜底。空列表表示该格没有显式材质，应由掉落物导向逻辑
+     * （BuildingGadgets2 战利品表方式）计算。
+     */
+    public static List<ResourceLocation> explicitMaterialItemIds(RtsBlueprintBlock block) {
+        if (block == null || block.isMissingBlock()) {
+            return List.of();
+        }
+        LinkedHashSet<ResourceLocation> ids = new LinkedHashSet<>();
+        addMaterialItemIds(ids, block.materialItemId());
+        if (shouldScanBlockEntityMaterialIds(block)) {
+            collectMaterialItemIds(block.blockEntityTag(), ids);
+        }
+        return ids.isEmpty() ? List.of() : List.copyOf(ids);
+    }
+
+    /**
      * Determine whether to scan the block entity NBT for material IDs.
      * <p>
      * Currently only applies to AE2 (Applied Energistics 2) cables and buses,

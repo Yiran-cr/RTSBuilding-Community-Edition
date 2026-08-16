@@ -1,19 +1,19 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.button.AbstractButtonGroup;
-import com.rtsbuilding.rtsbuilding.client.util.animate.ColorAnimation;
-import com.rtsbuilding.rtsbuilding.client.util.render.SpriteRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.SpriteRegion;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.TextureInfo;
-import com.rtsbuilding.rtsbuilding.client.util.state.TooltipController;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.render.SpriteRenderer;
+import com.rtsbuilding.uifw.render.model.SpriteRegion;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
+import com.rtsbuilding.uifw.state.TooltipController;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 /**
  * 建造形状按钮组：单方块、线、墙、平面、体、圆面、球。
- * 背景沿用其他按钮组的矢量绘制（{@link com.rtsbuilding.rtsbuilding.client.util.render.SdfRenderer#drawButtonBg}），
+ * 背景沿用其他按钮组的矢量绘制（{@link com.rtsbuilding.uifw.render.SdfRenderer#drawButtonBg}），
  * 图案使用与其余左面板按钮一致的贴图（1024x512 水平主题对），并缩小到按钮的 3/4 居中绘制。
  * 互斥单选，默认选中单方块。
  */

@@ -1,7 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.application.service;
 
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsFloatingWindowLayer;
+import com.rtsbuilding.uifw.window.window.FloatingWindowLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.DownSidebarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.InteractionPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
@@ -35,7 +35,7 @@ public final class ScreenCoordinator {
         return interactionPanel;
     }
 
-    public void showContainerScreen(Screen screen, RtsFloatingWindowLayer floatingWindowLayer, BuilderScreen builderScreen) {
+    public void showContainerScreen(Screen screen, FloatingWindowLayer floatingWindowLayer, BuilderScreen builderScreen) {
         if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return;
 
         InteractionPanel panel = getOrCreateInteractionPanel(builderScreen);
@@ -80,7 +80,7 @@ public final class ScreenCoordinator {
     }
 
     public boolean isMouseOverUI(double mouseX, double mouseY,
-                                 RtsFloatingWindowLayer floatingWindowLayer, TopBarPanel topBarPanel) {
+                                 FloatingWindowLayer floatingWindowLayer, TopBarPanel topBarPanel) {
         if (floatingWindowLayer != null
                 && floatingWindowLayer.isMouseOverWindowOrResizableBorder(mouseX, mouseY)) {
             return true;
@@ -88,8 +88,8 @@ public final class ScreenCoordinator {
         return topBarPanel != null && topBarPanel.isMouseOverAnyPopup((int) mouseX, (int) mouseY);
     }
 
-    public boolean isMouseOverRtsPanelApi(double mouseX, double mouseY, int width, int height,
-                                          RtsFloatingWindowLayer floatingWindowLayer, TopBarPanel topBarPanel,
+    public boolean isMouseOverUiPanelApi(double mouseX, double mouseY, int width, int height,
+                                          FloatingWindowLayer floatingWindowLayer, TopBarPanel topBarPanel,
                                           DownSidebarPanel downSidebarPanel) {
         if (floatingWindowLayer != null
                 && floatingWindowLayer.isMouseOverWindowOrResizableBorder(mouseX, mouseY)) {

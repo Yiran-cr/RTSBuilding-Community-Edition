@@ -6,8 +6,11 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayDeque;
 
 /**
- * 特效环形缓冲：保存最近的特效条目（位置 + 方块状态 + 加入时间），
+ * 特效环形缓冲：保存最近的特效条目（位置 + 方块状态 + 加入时间 + 服务端权威动画时长），
  * 供渲染 pass 消费。
+ *
+ * <p><b>服务端权威时长：</b>每个条目携带由服务端动画包下发的 {@code durationMs}（服务端 tick × 50ms），
+ * 渲染 pass 按条目自身的时长播放动画并清理，动画节奏由服务端控制而非客户端硬编码。</p>
  *
  * <p><b>容量策略：</b>批量操作（区域破坏/批量放置每 tick 最多 64 格）会在短时间内
  * 写入大量条目，容量不足会把<strong>正在播放的动画</strong>挤出。因此本缓冲采用
@@ -16,7 +19,7 @@ import java.util.ArrayDeque;
  * 由渲染 pass 每帧 {@link #drainPending} 在环形区释放后补入——动画只延迟不丢失，
  * 不会出现"一帧同时爆发、超限直接丢弃"的不完整现象。</p>
  *
- * <p><b>同位置重复写入：</b>同 key 已存在时只刷新方块状态、<strong>保留原播放进度
+ * <p><b>同位置重复写入：</b>同 key 已存在时只刷新方块状态与时长、<strong>保留原播放进度
  * （{@code addedAtMs} 不变）</strong>，避免"破坏→放置"高速交替时动画反复从头播放
  * 产生跳变。</p>
  *
@@ -36,13 +39,14 @@ public final class GhostRingBuffer {
     private final long[] keys;
     private final BlockState[] states;
     private final long[] addedAtMs;
+    private final long[] durationMs;
     private final boolean[] active;
     private int head;
     private int count;
     private final ArrayDeque<PendingEffect> pending = new ArrayDeque<>();
 
-    /** 等待补入的排期特效：startMs 为预期动画启动时刻（毫秒时间戳）。 */
-    private record PendingEffect(long key, BlockState state, long startMs) {
+    /** 等待补入的排期特效：startMs 为预期动画启动时刻（毫秒时间戳），durationMs 为服务端权威动画时长。 */
+    private record PendingEffect(long key, BlockState state, long startMs, long durationMs) {
     }
 
     public GhostRingBuffer() {
@@ -58,6 +62,7 @@ public final class GhostRingBuffer {
         this.keys = new long[c];
         this.states = new BlockState[c];
         this.addedAtMs = new long[c];
+        this.durationMs = new long[c];
         this.active = new boolean[c];
     }
 
@@ -71,13 +76,14 @@ public final class GhostRingBuffer {
      * <p>先补入等待队列，再尝试写入环形区；环形区满时进入等待队列，
      * 由后续 {@link #drainPending} 补入。等待队列超限时丢弃该条目。
      *
-     * @param startMs 预期的动画启动时刻（毫秒时间戳），可用于错峰（如
-     *                {@code now + seq * staggerMs}）
+     * @param startMs    预期的动画启动时刻（毫秒时间戳），可用于错峰（如
+     *                   {@code now + seq * staggerMs}）
+     * @param durationMs 服务端权威动画时长（毫秒），渲染 pass 按此播放
      */
-    public void schedule(BlockPos pos, BlockState state, long startMs) {
+    public void schedule(BlockPos pos, BlockState state, long startMs, long durationMs) {
         drainPending();
-        if (!addToSlot(pos.asLong(), state, startMs) && pending.size() < MAX_PENDING) {
-            pending.addLast(new PendingEffect(pos.asLong(), state, startMs));
+        if (!addToSlot(pos.asLong(), state, startMs, durationMs) && pending.size() < MAX_PENDING) {
+            pending.addLast(new PendingEffect(pos.asLong(), state, startMs, durationMs));
         }
     }
 
@@ -88,7 +94,7 @@ public final class GhostRingBuffer {
     public void drainPending() {
         while (!pending.isEmpty()) {
             PendingEffect e = pending.peekFirst();
-            if (!addToSlot(e.key(), e.state(), e.startMs())) {
+            if (!addToSlot(e.key(), e.state(), e.startMs(), e.durationMs())) {
                 break;
             }
             pending.removeFirst();
@@ -101,17 +107,18 @@ public final class GhostRingBuffer {
      * @return {@code true} 写入成功；缓冲已满时返回 {@code false}（调用方应使用
      *         {@link #schedule} 让其进入等待队列而非直接丢弃）
      */
-    public boolean add(BlockPos pos, BlockState state, long nowMs) {
-        return addToSlot(pos.asLong(), state, nowMs);
+    public boolean add(BlockPos pos, BlockState state, long nowMs, long durationMs) {
+        return addToSlot(pos.asLong(), state, nowMs, durationMs);
     }
 
-    private boolean addToSlot(long key, BlockState state, long startMs) {
+    private boolean addToSlot(long key, BlockState state, long startMs, long entryDurationMs) {
         // 全槽去重（prune 可能产生空洞，不能依赖连续窗口）
         for (int i = 0; i < capacity; i++) {
             if (active[i] && keys[i] == key) {
-                // 同位置重复写入：保留原播放进度（addedAtMs 不变），只刷新方块状态，
+                // 同位置重复写入：保留原播放进度（addedAtMs 不变），只刷新方块状态与时长，
                 // 避免"破坏→放置"高速交替时动画反复从头播放产生跳变
                 states[i] = state;
+                durationMs[i] = entryDurationMs;
                 return true;
             }
         }
@@ -121,6 +128,7 @@ public final class GhostRingBuffer {
                 keys[i] = key;
                 states[i] = state;
                 addedAtMs[i] = startMs;
+                durationMs[i] = entryDurationMs;
                 active[i] = true;
                 count++;
                 return true;
@@ -136,17 +144,17 @@ public final class GhostRingBuffer {
     public void forEach(SlotConsumer consumer) {
         for (int i = 0; i < capacity; i++) {
             if (active[i]) {
-                consumer.accept(keys[i], states[i], addedAtMs[i]);
+                consumer.accept(keys[i], states[i], addedAtMs[i], durationMs[i]);
             }
         }
     }
 
     /**
-     * 清理超过 {@code maxAgeMs} 的过期条目，并重新统计活跃数。
+     * 清理已超过<b>各自服务端权威时长</b>的过期条目，并重新统计活跃数。
      */
-    public void prune(long nowMs, long maxAgeMs) {
+    public void prune(long nowMs) {
         for (int i = 0; i < capacity; i++) {
-            if (active[i] && (nowMs - addedAtMs[i]) > maxAgeMs) {
+            if (active[i] && (nowMs - addedAtMs[i]) > durationMs[i]) {
                 active[i] = false;
             }
         }
@@ -176,6 +184,6 @@ public final class GhostRingBuffer {
 
     @FunctionalInterface
     public interface SlotConsumer {
-        void accept(long key, BlockState state, long addedAtMs);
+        void accept(long key, BlockState state, long addedAtMs, long durationMs);
     }
 }

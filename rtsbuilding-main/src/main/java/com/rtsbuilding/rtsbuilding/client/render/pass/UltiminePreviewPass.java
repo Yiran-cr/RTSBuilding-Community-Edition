@@ -6,7 +6,7 @@ import com.rtsbuilding.rtsbuilding.client.render.RenderPass;
 import com.rtsbuilding.rtsbuilding.client.render.util.ActionRadiusFilter;
 import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import com.rtsbuilding.rtsbuilding.client.render.util.UltimineBlockMerger;
-import com.rtsbuilding.rtsbuilding.client.util.state.FeatureAdjusterState;
+import com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState;
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;

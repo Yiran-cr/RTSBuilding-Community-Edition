@@ -35,14 +35,12 @@ public final class WorkflowModule implements FeatureModule {
         if (idx < 0 || idx >= WorkflowProgress.MAX_SLOTS) return;
 
         RtsWorkflowStatus[] arr = this.progress.statuses();
-        if (payload.workflowType() >= 0 && payload.workflowType() < RtsWorkflowType.values().length) {
-            RtsWorkflowType type = RtsWorkflowType.values()[payload.workflowType()];
-            byte pri = payload.priority();
-            RtsWorkflowPriority priority = pri >= 0 && pri < RtsWorkflowPriority.values().length
-                    ? RtsWorkflowPriority.values()[pri] : RtsWorkflowPriority.NORMAL;
-            arr[idx] = RtsWorkflowStatus.fromRaw(type, priority, payload.totalBlocks(),
+        if (payload.workflowType() >= 0) {
+            RtsWorkflowType type = RtsWorkflowType.fromId(payload.workflowType());
+            RtsWorkflowPriority priority = RtsWorkflowPriority.fromRank(payload.priority());
+            arr[idx] = (type == null ? RtsWorkflowStatus.idle() : RtsWorkflowStatus.fromRaw(type, priority, payload.totalBlocks(),
                     payload.completedBlocks(), payload.failedBlocks(), payload.missingItems(),
-                    payload.detailMessage(), payload.holdType(), payload.workflowEntryId());
+                    payload.detailMessage(), payload.holdType(), payload.workflowEntryId()));
         } else {
             arr[idx] = RtsWorkflowStatus.idle();
         }

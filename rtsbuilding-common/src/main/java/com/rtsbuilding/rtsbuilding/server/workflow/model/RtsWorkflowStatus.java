@@ -70,9 +70,16 @@ public record RtsWorkflowStatus(
         return completedBlocks + "/" + (totalBlocks > 0 ? totalBlocks : 0);
     }
 
-    public String typeLabel() {
-        if (type == null) return net.minecraft.network.chat.Component
-                .translatable("screen.rtsbuilding.workflow.type.idle").getString();
+    /**
+     * 工作流类型对应的 lang key（如 {@code screen.rtsbuilding.workflow.type.area_mine}）。
+     *
+     * <p>纯逻辑层只返回 key，不触碰 {@link net.minecraft.network.chat.Component}（UI 文案由
+     * client 层统一 {@code Component.translatable(key)} 解析，见阶段三 3.1 边界净化）。
+     *
+     * @return 完整 lang key；type 为 null（空闲）时返回 idle key
+     */
+    public String typeLabelKey() {
+        if (type == null) return "screen.rtsbuilding.workflow.type.idle";
         String key = switch (type) {
             case MINE_SINGLE  -> "mine_single";
             case ULTIMINE     -> "ultimine";
@@ -84,7 +91,6 @@ public record RtsWorkflowStatus(
             case BLUEPRINT_BUILD -> "blueprint_build";
             case STOP_MINING  -> "stop_mining";
         };
-        return net.minecraft.network.chat.Component
-                .translatable("screen.rtsbuilding.workflow.type." + key).getString();
+        return "screen.rtsbuilding.workflow.type." + key;
     }
 }

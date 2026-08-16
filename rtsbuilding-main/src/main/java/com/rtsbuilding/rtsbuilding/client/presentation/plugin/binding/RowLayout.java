@@ -1,6 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin.binding;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 public final class RowLayout {
     int y;
@@ -31,12 +32,17 @@ public final class RowLayout {
 
         ButtonBar(Minecraft mc, boolean scrollBarVisible, int parentX, int parentW) {
             this(
-                    mc.font.width("解绑") + BTN_PAD_H * 2,
-                    Math.max(mc.font.width("双向"), mc.font.width("仅提取")) + BTN_PAD_H * 2,
-                    Math.max(mc.font.width("开启位置"), mc.font.width("关闭显示")) + BTN_PAD_H * 2,
+                    mc.font.width(tr("ui.rtsbuilding.binding.unbind")) + BTN_PAD_H * 2,
+                    Math.max(mc.font.width(tr("ui.rtsbuilding.binding.bidirectional")), mc.font.width(tr("ui.rtsbuilding.binding.extract_only"))) + BTN_PAD_H * 2,
+                    Math.max(mc.font.width(tr("ui.rtsbuilding.binding.show_location")), mc.font.width(tr("ui.rtsbuilding.binding.hide_location"))) + BTN_PAD_H * 2,
                     parentX + LEFT_PAD + (parentW - LEFT_PAD - SCROLLBAR_W - RIGHT_MARGIN)
                             - (scrollBarVisible ? 2 : 0) - 1
             );
+        }
+
+        /** 翻译 lang key（UI 文案统一走 lang，见 AGENTS.md 语言约定）。 */
+        private static String tr(String key) {
+            return Component.translatable(key).getString();
         }
     }
 }

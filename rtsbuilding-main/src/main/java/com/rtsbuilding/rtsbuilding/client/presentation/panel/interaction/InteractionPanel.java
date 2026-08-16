@@ -2,10 +2,10 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.window.RtsPanel;
+import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -39,7 +39,7 @@ import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.Builder
  * 图标解析见 {@link ContainerIconResolver}，输入转发见 {@link ContainerInputForwarder}，
  * 标签栏渲染见 {@link PageTabBar}。本类仅负责协调与窗口管理。</p>
  */
-public final class InteractionPanel extends RtsPanel {
+public final class InteractionPanel extends UiPanel {
 
     // ==================== 布局常量 ====================
 
@@ -639,7 +639,7 @@ public final class InteractionPanel extends RtsPanel {
             inputForwarder.mouseClicked(containerLocalX(mouseX), containerLocalY(mouseY), button);
             if (!before.isEmpty() && menu != null && menu.getCarried().isEmpty()
                     && screen != null) {
-                screen.cancelGridSelectionIf(before);
+                ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).cancelGridSelectionIf(before);
             }
         }
     }
@@ -770,7 +770,7 @@ public final class InteractionPanel extends RtsPanel {
     // ==================== 生命周期 ====================
 
     @Override
-    public void init(BuilderScreen screen) {
+    public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
         super.init(screen);
         // 容器页打开时窗口尺寸必然已初始化，直接按实际窗口同步容器基准
         syncContainerScreen();
@@ -989,15 +989,15 @@ public final class InteractionPanel extends RtsPanel {
     @Override
     public void clampWindowToScreen() {
         if (this.screen == null) return;
-        int maxX = Math.max(0, this.screen.width - bounds.getWidth());
+        int maxX = Math.max(0, this.screen.getUiWidth() - bounds.getWidth());
         bounds.setX(Mth.clamp(bounds.getX(), 0, maxX));
 
-        if (bounds.getHeight() > this.screen.height) {
-            int minY = this.screen.height - bounds.getHeight();
+        if (bounds.getHeight() > this.screen.getUiHeight()) {
+            int minY = this.screen.getUiHeight() - bounds.getHeight();
             int maxY = 0;
             bounds.setY(Mth.clamp(bounds.getY(), minY, maxY));
         } else {
-            int maxY = Math.max(0, this.screen.height - getTitleBarHeight());
+            int maxY = Math.max(0, this.screen.getUiHeight() - getTitleBarHeight());
             bounds.setY(Mth.clamp(bounds.getY(), 0, maxY));
         }
     }
@@ -1005,13 +1005,13 @@ public final class InteractionPanel extends RtsPanel {
     @Override
     protected void computeDefaultPosition() {
         if (screen == null) return;
-        setWindowX(Math.max(8, (screen.width - getWindowWidth()) / 2));
-        if (getWindowHeight() > screen.height) {
+        setWindowX(Math.max(8, (screen.getUiWidth() - getWindowWidth()) / 2));
+        if (getWindowHeight() > screen.getUiHeight()) {
             setWindowY(TOP_H + 6);
         } else {
-            setWindowY(Mth.clamp((screen.height - getWindowHeight()) / 2,
+            setWindowY(Mth.clamp((screen.getUiHeight() - getWindowHeight()) / 2,
                     TOP_H + 6,
-                    Math.max(TOP_H + 6, screen.height - getWindowHeight() - 8)));
+                    Math.max(TOP_H + 6, screen.getUiHeight() - getWindowHeight() - 8)));
         }
     }
 

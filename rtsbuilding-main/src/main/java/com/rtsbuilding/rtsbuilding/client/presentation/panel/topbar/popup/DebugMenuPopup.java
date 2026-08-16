@@ -1,9 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.popup;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.popup.BasePopup;
-import com.rtsbuilding.rtsbuilding.client.util.render.CrossFadeRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.window.popup.BasePopup;
+import com.rtsbuilding.uifw.render.CrossFadeRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.debug.DebugRenderer;

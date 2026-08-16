@@ -1,12 +1,14 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.popup;
 
+import com.rtsbuilding.uifw.render.UiPalette;
+
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.popup.BasePopup;
-import com.rtsbuilding.rtsbuilding.client.util.render.SpriteRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.TextRenderer;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.SpriteRegion;
-import com.rtsbuilding.rtsbuilding.client.util.render.model.TextureInfo;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.window.popup.BasePopup;
+import com.rtsbuilding.uifw.render.SpriteRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.model.SpriteRegion;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -44,11 +46,6 @@ public final class LogoMenuPopup extends BasePopup {
     private static final int SETTING_ICON_SIZE = 17;
 
     
-
-    
-    private static final int LIGHT_SHORTCUT_COLOR = 0xFF777777;
-    
-    private static final int DARK_SHORTCUT_COLOR = 0xFF888888;
 
     
     private static final int LABEL_TO_SHORTCUT_GAP = 12;
@@ -116,7 +113,7 @@ public final class LogoMenuPopup extends BasePopup {
         TextRenderer.draw(g, label, textX, textY, textColor);
 
         
-        int shortcutColor = ThemeManager.getInstance().isLightMode() ? LIGHT_SHORTCUT_COLOR : DARK_SHORTCUT_COLOR;
+        int shortcutColor = UiPalette.get("tooltip_shortcut");
         String shortcutLabel = RtsKeyMappings.OPEN_GEAR_MENU_KEY.getTranslatedKeyMessage().getString();
         int shortcutX = textX + Minecraft.getInstance().font.width(label) + LABEL_TO_SHORTCUT_GAP;
         TextRenderer.draw(g, shortcutLabel, shortcutX, textY, shortcutColor);

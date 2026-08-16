@@ -75,6 +75,7 @@ public final class BlueprintExecutePipe implements PipelinePipe<PipelineContext>
 
         // ── 预计算所有方块的放置计划 ─────────────────────────────
         List<PlacementPlan> plans = BlockPlacementPlanner.compute(
+                bctx.player().serverLevel(),
                 blueprint, anchor, centerOffset,
                 bctx.getYRotationSteps(),
                 bctx.getXRotationSteps(),

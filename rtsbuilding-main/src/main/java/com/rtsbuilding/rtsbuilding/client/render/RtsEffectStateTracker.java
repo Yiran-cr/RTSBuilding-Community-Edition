@@ -29,13 +29,13 @@ import java.util.Map;
  */
 public final class RtsEffectStateTracker {
 
-    /** 等待状态就绪的破坏动画：posKey → (登记时刻, 破坏前状态)。 */
+    /** 等待状态就绪的破坏动画：posKey → (登记时刻, 破坏前状态, 服务端权威动画时长)。 */
     private static final Map<Long, PendingBreak> PENDING_BREAK = new HashMap<>();
 
     /** 状态变化等待超时（毫秒）：超过仍未等到对应状态变化则延迟播放兜底。 */
     private static final long PENDING_TIMEOUT_MS = 2000L;
 
-    private record PendingBreak(long registeredMs, BlockState state) {
+    private record PendingBreak(long registeredMs, BlockState state, long durationMs) {
     }
 
     private RtsEffectStateTracker() {
@@ -46,30 +46,33 @@ public final class RtsEffectStateTracker {
      *
      * <p>BuildingGadgets2 触发/结束语义：服务端在发送动画包后将真实方块落位延迟到动画周期结束，
      * 因此动画包先于方块落位到达客户端。客户端收到动画包<b>立即播放生长动画</b>（不再等待
-     * 状态就绪），动画结束瞬间（服务端落位、BlockUpdate 到达）方块出现 —— 「生长完成即落位」。</p>
+     * 状态就绪），动画总时长 = 服务端权威 {@code durationMs}，动画结束瞬间（服务端落位、
+     * BlockUpdate 到达）方块出现 —— 「生长完成即落位」。</p>
      *
      * <p>若因网络乱序 BlockUpdate 先到（方块已落位），立即播放仍成立（生长动画叠加在已落位
      * 方块上，退化为旧行为，视觉可接受）。</p>
+     *
+     * @param durationMs 服务端权威动画时长（毫秒），来自动画包 {@code durationTicks * 50}
      */
-    public static void registerPlace(BlockPos pos, BlockState targetState) {
-        RingBufferHolder.INSTANCE.schedule(pos, targetState, System.currentTimeMillis());
+    public static void registerPlace(BlockPos pos, BlockState targetState, long durationMs) {
+        RingBufferHolder.INSTANCE.schedule(pos, targetState, System.currentTimeMillis(), durationMs);
     }
 
     /**
      * 登记一次破坏动画。若目标位置客户端状态已就绪（已变为空气，BlockUpdate 先到），立即播放；
      * 否则等待 {@link #onBlockChanged} 捕获到该位置变为空气时播放。
-     * 碎块颜色取破坏前的 {@code breakBeforeState}。
+     * 动画时长使用服务端权威 {@code durationMs}。
      */
-    public static void registerBreak(BlockPos pos, BlockState breakBeforeState) {
+    public static void registerBreak(BlockPos pos, BlockState breakBeforeState, long durationMs) {
         Level level = Minecraft.getInstance().level;
         if (level != null) {
             BlockState cur = level.getBlockState(pos);
             if (cur.isAir()) {
-                RingBufferHolder.BREAK_EFFECTS.schedule(pos, breakBeforeState, System.currentTimeMillis());
+                RingBufferHolder.BREAK_EFFECTS.schedule(pos, breakBeforeState, System.currentTimeMillis(), durationMs);
                 return;
             }
         }
-        PENDING_BREAK.put(pos.asLong(), new PendingBreak(System.currentTimeMillis(), breakBeforeState));
+        PENDING_BREAK.put(pos.asLong(), new PendingBreak(System.currentTimeMillis(), breakBeforeState, durationMs));
     }
 
     /**
@@ -91,7 +94,7 @@ public final class RtsEffectStateTracker {
         long nowMs = System.currentTimeMillis();
         PendingBreak p = PENDING_BREAK.remove(key);
         if (p != null) {
-            RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs);
+            RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs, p.durationMs());
         }
     }
 
@@ -117,10 +120,10 @@ public final class RtsEffectStateTracker {
             BlockState cur = level.getBlockState(pos);
             if (cur.isAir()) {
                 it.remove();
-                RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs);
+                RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs, p.durationMs());
             } else if (nowMs - p.registeredMs() > PENDING_TIMEOUT_MS) {
                 it.remove();
-                RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs);
+                RingBufferHolder.BREAK_EFFECTS.schedule(pos, p.state(), nowMs, p.durationMs());
             }
         }
     }

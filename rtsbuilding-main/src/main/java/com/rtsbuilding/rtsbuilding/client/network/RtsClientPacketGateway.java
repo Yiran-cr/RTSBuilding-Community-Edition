@@ -28,7 +28,7 @@ public final class RtsClientPacketGateway {
     private static CompoundTag tag() { return new CompoundTag(); }
 
     public static void sendSetMode(BuilderMode mode) {
-        var t = tag(); t.putByte("mode", (byte) mode.ordinal());
+        var t = tag(); t.putByte("mode", (byte) mode.id());
         PacketDistributor.sendToServer(act(ActionType.SET_MODE, t));
     }
 
@@ -70,7 +70,7 @@ public final class RtsClientPacketGateway {
                                                boolean ascending, int pageSize) {
         var t = tag(); t.putInt("page", page); t.putString("search", search == null ? "" : search);
         t.putString("category", category == null ? "" : category);
-        t.putByte("sort", (byte) sort.ordinal()); t.putBoolean("ascending", ascending); t.putInt("pageSize", pageSize);
+        t.putByte("sort", (byte) sort.id()); t.putBoolean("ascending", ascending); t.putInt("pageSize", pageSize);
         PacketDistributor.sendToServer(act(ActionType.REQUEST_PAGE, t));
     }
 

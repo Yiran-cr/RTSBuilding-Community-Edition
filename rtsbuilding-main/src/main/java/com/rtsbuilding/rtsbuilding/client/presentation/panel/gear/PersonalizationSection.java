@@ -1,9 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.gear;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.component.SettingsSection;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ResetButton;
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.component.ToggleSwitch;
-import com.rtsbuilding.rtsbuilding.client.util.theme.ThemeManager;
+import com.rtsbuilding.uifw.window.component.SettingsSection;
+import com.rtsbuilding.uifw.component.ResetButton;
+import com.rtsbuilding.uifw.component.ToggleSwitch;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;

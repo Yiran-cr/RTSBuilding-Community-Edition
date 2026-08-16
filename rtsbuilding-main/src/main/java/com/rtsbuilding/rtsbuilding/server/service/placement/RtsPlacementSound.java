@@ -59,7 +59,8 @@ public final class RtsPlacementSound {
 
     /**
      * 向玩家发送给定位置的方块放置动画数据包。
-     * <p>数据包携带服务端 tick 与同 tick 内序号（{@code seq}）。当前客户端不再据此错峰，
+     * <p>数据包携带服务端 tick、同 tick 内序号（{@code seq}）与服务端权威的动画时长
+     * （{@code durationTicks}）。当前客户端不再据此错峰，
      * 而是以「方块状态实际变化的瞬间」作为动画启动时刻——因此快速建造路径在
      * {@code setBlock} 之前调用本方法（预知目标 state），让动画包先于 BlockUpdate 到达，
      * 消除网络 RTT 造成的动画滞后。
@@ -69,20 +70,32 @@ public final class RtsPlacementSound {
         if (player == null || pos == null) {
             return;
         }
-        playRemotePlacedBlockAnimation(player, pos, player.serverLevel().getBlockState(pos));
+        playRemotePlacedBlockAnimation(player, pos, player.serverLevel().getBlockState(pos),
+                RtsBlockAnimationCommitter.PLACE_ANIMATION_TICKS);
     }
 
     /**
      * 使用预知的目标方块状态发送放置动画数据包（快速建造路径在 {@code setBlock} 之前调用）。
+     * 动画时长使用服务端统一放置周期 {@link RtsBlockAnimationCommitter#PLACE_ANIMATION_TICKS}。
      */
     public static void playRemotePlacedBlockAnimation(ServerPlayer player, BlockPos pos, BlockState state) {
+        playRemotePlacedBlockAnimation(player, pos, state, RtsBlockAnimationCommitter.PLACE_ANIMATION_TICKS);
+    }
+
+    /**
+     * 使用预知的目标方块状态与<b>服务端权威动画时长</b>发送放置动画数据包。
+     *
+     * @param durationTicks 动画时长（服务端 tick，50ms/tick）；服务端在该时长后落位真实方块，
+     *                      客户端据此播放生长动画，保证「动画结束 = 方块落位」节奏由服务端控制。
+     */
+    public static void playRemotePlacedBlockAnimation(ServerPlayer player, BlockPos pos, BlockState state, int durationTicks) {
         if (player == null || pos == null) {
             return;
         }
         ServerLevel level = player.serverLevel();
         long tick = level.getGameTime();
         int seq = nextPlaceSeq(player, tick);
-        Platform.sendPacket(player, new S2CRtsPlaceAnimationPayload(pos.immutable(), state, tick, seq));
+        Platform.sendPacket(player, new S2CRtsPlaceAnimationPayload(pos.immutable(), state, tick, seq, durationTicks));
         // 建造光束：只对其他玩家可见（主控不接收），两端追踪方块位置与无人机摄像头位置
         RtsDroneBeamService.broadcastPlace(player, pos);
     }

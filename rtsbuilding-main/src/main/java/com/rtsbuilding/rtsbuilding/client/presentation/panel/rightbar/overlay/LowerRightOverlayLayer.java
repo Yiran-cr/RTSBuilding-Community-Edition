@@ -1,6 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.rightbar.overlay;
 
-import com.rtsbuilding.rtsbuilding.client.presentation.panel.base.overlay.DownOverlayLayer;
+import com.rtsbuilding.uifw.window.overlay.DownOverlayLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.plugin.FeatureAdjusters;
 import net.minecraft.client.gui.GuiGraphics;
 
