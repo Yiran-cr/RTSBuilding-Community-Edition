@@ -2,5 +2,7 @@
   "screen.uifw.color_picker.title": "Color Picker",
   "screen.uifw.color_picker.input_label": "Color Code",
   "screen.uifw.color_picker.mode.hex": "HEX",
-  "screen.uifw.color_picker.mode.dec": "DEC"
+  "screen.uifw.color_picker.mode.dec": "DEC",
+  "screen.uifw.color_picker.hue": "Hue",
+  "screen.uifw.color_picker.saturation": "Saturation"
 }

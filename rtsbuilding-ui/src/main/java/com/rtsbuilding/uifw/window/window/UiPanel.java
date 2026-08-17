@@ -69,6 +69,21 @@ public abstract class UiPanel implements UiPanelApi {
     protected abstract int getDefaultHeight();
     protected abstract void computeDefaultPosition();
 
+    /**
+     * 将窗口居中于宿主屏幕，并受顶部/底部内边距约束（所有 UiPanel 子类统一的开局位置基准）：
+     * 水平居中；垂直居中，但顶部不低于 {@code topInset}、底部不超出屏幕底边 {@code bottomInset}。
+     *
+     * @param topInset    顶部最小内边距（用于避开顶栏/按钮区等）
+     * @param bottomInset 底部最小内边距
+     */
+    protected void positionCentered(int topInset, int bottomInset) {
+        if (this.screen == null) return;
+        setWindowX(Math.max(8, (this.screen.getUiWidth() - getWindowWidth()) / 2));
+        setWindowY(Mth.clamp((this.screen.getUiHeight() - getWindowHeight()) / 2,
+                topInset,
+                Math.max(topInset, this.screen.getUiHeight() - getWindowHeight() - bottomInset)));
+    }
+
     @Override
     public void init(UiPanelHost screen) {
         this.screen = screen;

@@ -61,6 +61,11 @@ public final class ShapeButtonGroup extends AbstractButtonGroup {
             "single_block", "line", "wall", "plane", "solid", "circle_face", "sphere"
     };
 
+    /** 全部图标纹理，供 mipmap 预注册使用。 */
+    public static final ResourceLocation[] ALL_ICON_TEX = {
+            SINGLE_TEX, LINE_TEX, WALL_TEX, PLANE_TEX, SOLID_TEX, CIRCLE_FACE_TEX, SPHERE_TEX
+    };
+
     /** 自行构建的贴图 region（与 {@link AbstractButtonGroup} 的 hasBg 模式一致），供缩小居中绘制。 */
     private final SpriteRegion[] regions = new SpriteRegion[BUTTON_COUNT];
 
@@ -83,7 +88,7 @@ public final class ShapeButtonGroup extends AbstractButtonGroup {
         for (int i = 0; i < BUTTON_COUNT; i++) {
             if (patternTextures[i] == null) continue;
             var info = new TextureInfo(patternTextures[i], TEX_W, ICON_TEX_H,
-                    TextureInfo.ThemeLayout.HORIZONTAL_PAIR, TextureInfo.FilterMode.PIXEL);
+                    TextureInfo.ThemeLayout.HORIZONTAL_PAIR, TextureInfo.FilterMode.HQ);
             regions[i] = new SpriteRegion(info, 0, 0, HALF_W, ICON_TEX_H);
         }
         for (int i = 0; i < BUTTON_COUNT; i++) {

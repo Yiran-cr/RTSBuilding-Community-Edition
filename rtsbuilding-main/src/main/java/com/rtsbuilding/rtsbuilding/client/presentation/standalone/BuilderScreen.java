@@ -183,14 +183,14 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         
         this.screenBackgroundPanel.init(this);
         this.colorPickerPanel.init(this);
-        this.floatingWindowLayer.frontToBackWindows().add(this.colorPickerPanel);
+        addFloatingWindowIfAbsent(this.colorPickerPanel);
         long t1 = System.nanoTime();
         this.gearMenuPanel.init(this);
-        this.floatingWindowLayer.frontToBackWindows().add(this.gearMenuPanel);
+        addFloatingWindowIfAbsent(this.gearMenuPanel);
         this.blueprintSavePanel.init(this);
-        this.floatingWindowLayer.frontToBackWindows().add(this.blueprintSavePanel);
+        addFloatingWindowIfAbsent(this.blueprintSavePanel);
         this.blueprintLibraryPanel.init(this);
-        this.floatingWindowLayer.frontToBackWindows().add(this.blueprintLibraryPanel);
+        addFloatingWindowIfAbsent(this.blueprintLibraryPanel);
         long t2 = System.nanoTime();
         panelRegistry.initAll(this);
         long t3 = System.nanoTime();
@@ -245,6 +245,15 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     public FloatingWindowLayer getFloatingWindowLayer() {
         return this.floatingWindowLayer;
+    }
+
+    /**
+     * 将浮动窗口面板加入渲染列表（窗口 resize 会重复触发 init()，需防止同一面板被重复添加）。
+     */
+    private void addFloatingWindowIfAbsent(UiPanel panel) {
+        if (!this.floatingWindowLayer.frontToBackWindows().contains(panel)) {
+            this.floatingWindowLayer.frontToBackWindows().add(panel);
+        }
     }
 
     /** {@link UiPanelHost}：宿主屏幕宽度（逻辑像素）。 */
@@ -442,10 +451,10 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     }
 
     /**
-     * RTS 虚拟画布宽度（物理像素 ÷ RTS GUI 缩放）。
-     * <p>鼠标事件与 {@link #tick()} 中的漏斗检测都使用 RTS 虚拟坐标，
-     * 而 {@code this.width} 在非渲染帧期间是原版 GUI 缩放坐标，
-     * 两者只有 GUI 缩放等于 RTS GUI 缩放时才一致。面板/世界区域判定统一用虚拟尺寸，避免错位。</p>
+     * RTS 虚拟画布宽度（物理像素 ÷ RTS GUI 缩放基准）。
+     * <p>鼠标事件经 {@code BuilderScreenScaleManager} 统一换算到该虚拟坐标系，
+     * 渲染也在同一坐标系下完成（GUI 缩放 ≠ RTS 基准时按基准缩放显示），
+     * 因此面板/世界区域判定统一用虚拟尺寸，避免坐标错位。</p>
      */
     public int getRtsVirtualWidth() {
         return Math.max(1, (int) Math.round(
@@ -453,7 +462,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     }
 
     /**
-     * RTS 虚拟画布高度（物理像素 ÷ RTS GUI 缩放）。
+     * RTS 虚拟画布高度（物理像素 ÷ RTS GUI 缩放基准），与 {@link #getRtsVirtualWidth()} 同坐标系。
      */
     public int getRtsVirtualHeight() {
         return Math.max(1, (int) Math.round(

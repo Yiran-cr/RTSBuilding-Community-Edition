@@ -64,8 +64,9 @@ public final class TopBarPanel implements UiPanelApi {
 
     
     private LogoMenuPopup logoPopup;
-    
-    private Runnable pendingOnGearMenuToggle;
+
+    /** Logo 菜单「RTS 设置」点击动作（始终保存最新值：init 重建 popup 后需重新绑定）。 */
+    private Runnable gearMenuToggleAction;
 
     
     private DebugMenuPopup debugPopup;
@@ -73,16 +74,16 @@ public final class TopBarPanel implements UiPanelApi {
     /** 「文件」按钮下拉菜单：蓝图文件管理 / 导入。 */
     private FileMenuPopup filePopup;
 
-    /** 待应用的「蓝图文件」菜单动作（filePopup 创建前暂存）。 */
-    private Runnable pendingOpenBlueprintLibrary;
+    /** 「蓝图文件」菜单项点击动作（init 重建 filePopup 后重新绑定）。 */
+    private Runnable openBlueprintLibraryAction;
 
-    /** 待应用的「导入」菜单动作（filePopup 创建前暂存）。 */
-    private Runnable pendingImportBlueprint;
-
-    
+    /** 「导入」菜单项点击动作（init 重建 filePopup 后重新绑定）。 */
+    private Runnable importBlueprintAction;
 
     
-    private static final ResourceLocation LOGO_TEXTURE =
+
+    
+    public static final ResourceLocation LOGO_TEXTURE =
             ResourceLocation.tryParse("rtsbuilding:textures/gui/top/logo.png");
     
     private static final int LOGO_SIZE = TopBarLayoutHelper.LOGO_SIZE;
@@ -140,22 +141,21 @@ public final class TopBarPanel implements UiPanelApi {
         this.logoPopup = createLogoPopup();
         this.logoPopup.positionFromButton(LOGO_SIZE / 2, LOGO_SIZE, screen.getUiWidth());
         
-        if (this.pendingOnGearMenuToggle != null) {
-            this.logoPopup.setOnGearMenuToggle(this.pendingOnGearMenuToggle);
-            this.pendingOnGearMenuToggle = null;
+        // 窗口 resize 会触发 init() 重建 logoPopup，此处需重新绑定菜单动作，
+        // 否则新实例的 onGearMenuToggle 为 null，点击「RTS 设置」无反应。
+        if (this.gearMenuToggleAction != null) {
+            this.logoPopup.setOnGearMenuToggle(this.gearMenuToggleAction);
         }
 
         this.filePopup = new FileMenuPopup();
         // 文件按钮点击切换下拉菜单
         this.fileButtonAction = () -> filePopup.toggle();
-        // 应用 filePopup 创建前暂存的菜单动作（BuilderScreen 构造时早于本 init 注册回调）
-        if (this.pendingOpenBlueprintLibrary != null) {
-            this.filePopup.setOnOpenBlueprints(this.pendingOpenBlueprintLibrary);
-            this.pendingOpenBlueprintLibrary = null;
+        // init 重建 filePopup 后重新绑定菜单动作（resize 后不丢失）
+        if (this.openBlueprintLibraryAction != null) {
+            this.filePopup.setOnOpenBlueprints(this.openBlueprintLibraryAction);
         }
-        if (this.pendingImportBlueprint != null) {
-            this.filePopup.setOnImport(this.pendingImportBlueprint);
-            this.pendingImportBlueprint = null;
+        if (this.importBlueprintAction != null) {
+            this.filePopup.setOnImport(this.importBlueprintAction);
         }
     }
 
@@ -167,7 +167,7 @@ public final class TopBarPanel implements UiPanelApi {
 
     
     public void setOnGearMenuToggle(Runnable runnable) {
-        this.pendingOnGearMenuToggle = runnable;
+        this.gearMenuToggleAction = runnable;
         if (this.logoPopup != null) {
             this.logoPopup.setOnGearMenuToggle(runnable);
         }
@@ -305,7 +305,7 @@ public final class TopBarPanel implements UiPanelApi {
         TextureInfo logoInfo = new TextureInfo(
                 LOGO_TEXTURE, LOGO_SHEET_WIDTH, LOGO_SHEET_HEIGHT,
                 TextureInfo.ThemeLayout.NONE,
-                TextureInfo.FilterMode.NORMAL);
+                TextureInfo.FilterMode.HQ);
         SpriteRenderer.drawSprite(g, new SpriteRegion(logoInfo, 0, 0, LOGO_SHEET_WIDTH, LOGO_SHEET_HEIGHT),
                 0, 0, LOGO_SIZE, LOGO_SIZE);
     }
@@ -411,19 +411,17 @@ public final class TopBarPanel implements UiPanelApi {
 
     /** 设置「文件」菜单中「蓝图文件」项点击动作（打开蓝图文件面板）。 */
     public void setOnOpenBlueprintLibrary(Runnable runnable) {
+        this.openBlueprintLibraryAction = runnable;
         if (this.filePopup != null) {
             this.filePopup.setOnOpenBlueprints(runnable);
-        } else {
-            this.pendingOpenBlueprintLibrary = runnable;
         }
     }
 
     /** 设置「文件」菜单中「导入」项点击动作（导入外部蓝图）。 */
     public void setOnImportBlueprint(Runnable runnable) {
+        this.importBlueprintAction = runnable;
         if (this.filePopup != null) {
             this.filePopup.setOnImport(runnable);
-        } else {
-            this.pendingImportBlueprint = runnable;
         }
     }
 

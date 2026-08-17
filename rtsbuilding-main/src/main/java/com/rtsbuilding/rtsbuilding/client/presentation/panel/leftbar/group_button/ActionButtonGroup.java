@@ -6,6 +6,7 @@ import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.SdfRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.uifw.state.TooltipController;
 import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
@@ -16,13 +17,13 @@ import net.minecraft.resources.ResourceLocation;
 public final class ActionButtonGroup extends AbstractButtonGroup {
 
     
-    private static final ResourceLocation BIND_BTN = ResourceLocation.tryParse(
+    public static final ResourceLocation BIND_BTN = ResourceLocation.tryParse(
             "rtsbuilding:textures/gui/left/button/bind.png");
     
-    private static final ResourceLocation DIRECTION_ROTATE_BTN = ResourceLocation.tryParse(
+    public static final ResourceLocation DIRECTION_ROTATE_BTN = ResourceLocation.tryParse(
             "rtsbuilding:textures/gui/left/button/direction_rotation.png");
     
-    private static final ResourceLocation ITEM_PICKUP_BTN = ResourceLocation.tryParse(
+    public static final ResourceLocation ITEM_PICKUP_BTN = ResourceLocation.tryParse(
             "rtsbuilding:textures/gui/left/button/item_pickup.png");
 
     
@@ -46,6 +47,7 @@ public final class ActionButtonGroup extends AbstractButtonGroup {
     public ActionButtonGroup() {
         super(Direction.VERTICAL, DEFAULT_BTN_SIZE, DEFAULT_INNER_GAP, true,
                 null, null, null,
+                TextureInfo.FilterMode.HQ,
                 BIND_BTN, DIRECTION_ROTATE_BTN, ITEM_PICKUP_BTN);
     }
 

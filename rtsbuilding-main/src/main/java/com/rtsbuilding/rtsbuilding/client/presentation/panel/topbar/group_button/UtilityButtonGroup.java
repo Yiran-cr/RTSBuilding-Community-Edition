@@ -8,6 +8,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.popup.DebugM
 import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.uifw.state.TooltipController;
 import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.gui.GuiGraphics;
@@ -28,7 +29,7 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
     private static final ResourceLocation UP_BG = ResourceLocation.tryParse(
             "rtsbuilding:textures/gui/base/button/up_button.png");
 
-    private static final ResourceLocation CHUNK_DISPLAY =
+    public static final ResourceLocation CHUNK_DISPLAY =
             ResourceLocation.tryParse("rtsbuilding:textures/gui/top/button/chunk_display.png");
 
     private static final int FOLD_ARROW_SIZE = 11;
@@ -46,7 +47,8 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
         
         super(Direction.HORIZONTAL, TopBarLayoutHelper.BTN_SIZE, DEFAULT_INNER_GAP, true,
                 DOWN_BG, MIDDLE_BG, UP_BG,
-                null, CHUNK_DISPLAY);
+                TextureInfo.FilterMode.HQ,
+                (ResourceLocation) null, CHUNK_DISPLAY);
         this.debugPopup = debugPopup;
     }
 

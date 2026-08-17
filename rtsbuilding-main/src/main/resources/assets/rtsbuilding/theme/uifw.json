@@ -47,6 +47,7 @@
     "slider_track": "#662E3B4C",
     "slider_thumb": "#586A80",
     "slider_thumb_active": "#6A7E96",
+    "slider_row_bg": "#DD1A232E",
 
     "_开关": "",
     "toggle_track_off": "#555555",
@@ -142,6 +143,7 @@
     "slider_track": "#FFD9DEE5",
     "slider_thumb": "#8A94A6",
     "slider_thumb_active": "#6E7A8E",
+    "slider_row_bg": "#F0F3F6",
 
     "toggle_track_off": "#B5BCC6",
     "toggle_thumb": "#FFFFFF",

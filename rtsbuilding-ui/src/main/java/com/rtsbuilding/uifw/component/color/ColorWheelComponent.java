@@ -60,17 +60,18 @@ public class ColorWheelComponent {
                                  float relX, float relY,
                                  AnimFloat animator,
                                  int mouseX, int mouseY, boolean dragging) {
-        int dotCenterX = (int) Math.round(wheelX + relX * DRAW_SIZE);
-        int dotCenterY = (int) Math.round(wheelY + relY * DRAW_SIZE);
+        // 浮点坐标定位（亚像素精度，避免整数取整造成运动锯齿）
+        float dotCenterX = wheelX + relX * DRAW_SIZE;
+        float dotCenterY = wheelY + relY * DRAW_SIZE;
 
-        int minCenter = wheelX + INDICATOR_RADIUS;
-        int maxCenter = wheelX + DRAW_SIZE - INDICATOR_RADIUS - 1;
+        float minCenter = (float) (wheelX + DRAW_SIZE / 2.0 - WHEEL_RADIUS);
+        float maxCenter = (float) (wheelX + DRAW_SIZE / 2.0 + WHEEL_RADIUS);
         dotCenterX = Math.max(minCenter, Math.min(maxCenter, dotCenterX));
-        minCenter = wheelY + INDICATOR_RADIUS;
-        maxCenter = wheelY + DRAW_SIZE - INDICATOR_RADIUS - 1;
+        minCenter = (float) (wheelY + DRAW_SIZE / 2.0 - WHEEL_RADIUS);
+        maxCenter = (float) (wheelY + DRAW_SIZE / 2.0 + WHEEL_RADIUS);
         dotCenterY = Math.max(minCenter, Math.min(maxCenter, dotCenterY));
 
-        SdfRenderer.drawCircle(g, dotCenterX, dotCenterY, INDICATOR_RADIUS, UiPalette.get("picker_indicator"));
+        SdfRenderer.drawCircleF(g, dotCenterX, dotCenterY, INDICATOR_RADIUS, UiPalette.get("picker_indicator"));
     }
 
     /**
@@ -93,8 +94,8 @@ public class ColorWheelComponent {
         double sat = WHEEL_RADIUS <= 0 ? 0.0 : Math.min(1.0, dist / WHEEL_RADIUS);
         int color = ColorPickerPanel.ColorMath.hsvToRgb((float) hue, (float) sat, 1.0f);
 
-        float relX = (float) ((lx + WHEEL_RADIUS) / (2 * WHEEL_RADIUS));
-        float relY = (float) ((ly + WHEEL_RADIUS) / (2 * WHEEL_RADIUS));
+        float relX = 0.5f + (float) (lx / WHEEL_RADIUS) * RADIUS_RATIO;
+        float relY = 0.5f + (float) (ly / WHEEL_RADIUS) * RADIUS_RATIO;
         return new WheelPickResult(0, 0, relX, relY, color);
     }
 

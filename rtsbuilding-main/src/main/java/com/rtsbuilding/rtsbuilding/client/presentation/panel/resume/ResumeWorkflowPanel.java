@@ -1,6 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.resume;
 
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
+import com.rtsbuilding.uifw.layout.FlexLayout;
+import com.rtsbuilding.uifw.layout.UiBox;
+import com.rtsbuilding.uifw.layout.UiRect;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.uifw.render.UiPalette;
@@ -13,7 +16,11 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.List;
+
 import java.util.Locale;
+
+import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreenConstants.TOP_H;
 
 /**
  * 工作流恢复面板（浮动窗口，每个工作流独立一个实例）：
@@ -158,20 +165,22 @@ public final class ResumeWorkflowPanel extends UiPanel {
             TextRenderer.draw(g, t("screen.rtsbuilding.resume.no_materials"), x, cy, UiPalette.border());
         }
 
-        // 按钮区
+        // 按钮区：FlexLayout 居中（冲突时两个按钮，否则一个）
         int btnY = bounds.getY() + getWindowHeight() - BTN_H - PAD;
         boolean enough = missingItems <= 0;
         boolean conflict = conflictCount > 0;
         int gap = 8;
-        int totalW = conflict ? BTN_W * 2 + gap : BTN_W;
-        int bx = bounds.getX() + (getWindowWidth() - totalW) / 2;
+        List<UiBox> btnBoxes = conflict
+                ? List.of(UiBox.fixed(BTN_W, BTN_H), UiBox.fixed(BTN_W, BTN_H))
+                : List.of(UiBox.fixed(BTN_W, BTN_H));
+        List<UiRect> btnRects = FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.CENTER,
+                FlexLayout.Align.CENTER, gap, bounds.getX(), btnY, getWindowWidth(), BTN_H, btnBoxes);
 
         if (conflict) {
-            renderButton(g, bx, btnY, t("screen.rtsbuilding.resume.skip"), !enough, skipRect, mouseX, mouseY);
-            bx += BTN_W + gap;
-            renderButton(g, bx, btnY, t("screen.rtsbuilding.resume.overwrite"), !enough, overwriteRect, mouseX, mouseY);
+            renderButton(g, btnRects.get(0).x(), btnY, t("screen.rtsbuilding.resume.skip"), !enough, skipRect, mouseX, mouseY);
+            renderButton(g, btnRects.get(1).x(), btnY, t("screen.rtsbuilding.resume.overwrite"), !enough, overwriteRect, mouseX, mouseY);
         } else {
-            renderButton(g, bx, btnY, t("screen.rtsbuilding.resume.start"), !enough, startRect, mouseX, mouseY);
+            renderButton(g, btnRects.get(0).x(), btnY, t("screen.rtsbuilding.resume.start"), !enough, startRect, mouseX, mouseY);
         }
     }
 
@@ -188,16 +197,21 @@ public final class ResumeWorkflowPanel extends UiPanel {
                                    String itemId, String label, int req, long avail) {
         Minecraft mc = Minecraft.getInstance();
 
+        // 行内排布：[图标 fixed, 进度条区 fill]（FlexLayout，渲染与进度条定位一致）
+        List<UiRect> rowRects = FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.START,
+                FlexLayout.Align.CENTER, MAT_ICON_GAP, x, y, rowW, ROW_H,
+                List.of(UiBox.fixed(MAT_ICON_SIZE, MAT_ICON_SIZE), UiBox.fill(1f)));
+        UiRect iconRect = rowRects.get(0);
+        UiRect barRect = rowRects.get(1);
+
         // 左侧绘制材料物品图标（统一走 GuiItemRenderer，防止穿透面板）
         ItemStack stack = GuiItemRenderer.resolveItemStack(itemId);
         if (!stack.isEmpty()) {
-            int iconX = x;
-            int iconY = y + (ROW_H - MAT_ICON_SIZE) / 2;
-            GuiItemRenderer.drawItem(g, stack, iconX, iconY);
+            GuiItemRenderer.drawItem(g, stack, iconRect.x(), iconRect.y());
         }
 
-        int barX = x + MAT_ICON_SIZE + MAT_ICON_GAP;
-        int barW = rowW - MAT_ICON_SIZE - MAT_ICON_GAP;
+        int barX = barRect.x();
+        int barW = barRect.w();
         int barY = y + (ROW_H - MAT_BAR_H) / 2;
         boolean creative = mc.player != null && mc.player.isCreative();
 
@@ -298,7 +312,7 @@ public final class ResumeWorkflowPanel extends UiPanel {
     @Override
     protected void computeDefaultPosition() {
         if (screen == null) return;
-        setWindowX(Math.max(8, (screen.getUiWidth() - getWindowWidth()) / 2));
-        setWindowY(Math.max(8, (screen.getUiHeight() - getWindowHeight()) / 3));
+        // 统一基准：水平居中 + 垂直居中，顶部避开顶栏（TOP_H+6）、底部留 8px 边距
+        positionCentered(TOP_H + 6, 8);
     }
 }

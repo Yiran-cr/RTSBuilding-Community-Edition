@@ -2,13 +2,17 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.gear;
 
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
+import com.rtsbuilding.uifw.layout.FlexLayout;
+import com.rtsbuilding.uifw.layout.UiBox;
+import com.rtsbuilding.uifw.layout.UiRect;
 import com.rtsbuilding.uifw.window.component.ScrollBar;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.uifw.render.UiPalette;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
+
+import java.util.List;
 
 import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreenConstants.*;
 
@@ -22,6 +26,7 @@ public final class GearMenuPanel extends UiPanel {
     
     private static final int CONTENT_WIDTH_REDUCTION = 6;
     
+    /** 分区卡片顶部内边距（px）。内容渲染起点用它补偿，使首个分区贴内容区顶部，与滚动条轨道中心对齐。 */
     private static final int CONTENT_TOP_PAD = 8;
     private CameraModule cameraModule = null;
     private final RenderingSection renderingSection = new RenderingSection();
@@ -31,7 +36,7 @@ public final class GearMenuPanel extends UiPanel {
     private final IntegrationSection integrationSection = new IntegrationSection();
 
     
-    private final ScrollBar scrollBar = new ScrollBar();
+    private final ScrollBar scrollBar = new ScrollBar().withScrollBottomPad(0);
 
     @Override
     public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
@@ -54,12 +59,26 @@ public final class GearMenuPanel extends UiPanel {
 
     
     private int totalSectionHeight(int cw) {
-        return CONTENT_TOP_PAD
-                + renderingSection.totalHeight(cw)
+        return renderingSection.totalHeight(cw)
                 + personalizationSection.totalHeight(cw)
                 + operationSection.totalHeight(cw)
                 + keybindSection.totalHeight(cw)
                 + (integrationSection.hasIntegrations() ? integrationSection.totalHeight(cw) : 0);
+    }
+
+    /**
+     * 五个分区垂直堆叠（ColumnLayout）。渲染与点击命中共用同一布局，保证坐标一致。
+     * 无宿主集成时最后一个分区高度为 0。
+     */
+    private List<UiRect> sectionRects(int cx, int scrolledCy, int cw, int ch) {
+        return FlexLayout.layout(FlexLayout.Direction.COLUMN, FlexLayout.Justify.START,
+                FlexLayout.Align.STRETCH, 0, cx, scrolledCy, cw, ch,
+                List.of(
+                        UiBox.fixed(0, renderingSection.totalHeight(cw)),
+                        UiBox.fixed(0, personalizationSection.totalHeight(cw)),
+                        UiBox.fixed(0, operationSection.totalHeight(cw)),
+                        UiBox.fixed(0, keybindSection.totalHeight(cw)),
+                        UiBox.fixed(0, integrationSection.hasIntegrations() ? integrationSection.totalHeight(cw) : 0)));
     }
 
     
@@ -88,22 +107,20 @@ public final class GearMenuPanel extends UiPanel {
         int sectionRenderW = cw - CONTENT_WIDTH_REDUCTION;
 
         
-        int scrolledCy = cy - scroll;
-        int sectionY = scrolledCy;
-        renderingSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
-        sectionY += renderingSection.totalHeight(cw);
-        personalizationSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
-        sectionY += personalizationSection.totalHeight(cw);
-        operationSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
-        sectionY += operationSection.totalHeight(cw);
-        keybindSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
-        sectionY += keybindSection.totalHeight(cw);
+        // 内容渲染起点：补偿分区卡片顶部内边距（CONTENT_TOP_PAD），使首个分区贴内容区顶部，
+        // 内容块与滚动条轨道 [cy, cy+ch] 中心对齐。
+        int scrolledCy = cy - CONTENT_TOP_PAD - scroll;
+        List<UiRect> sectionRects = sectionRects(cx, scrolledCy, cw, ch);
+        renderingSection.render(g, mouseX, mouseY, cx, sectionRects.get(0).y(), sectionRenderW);
+        personalizationSection.render(g, mouseX, mouseY, cx, sectionRects.get(1).y(), sectionRenderW);
+        operationSection.render(g, mouseX, mouseY, cx, sectionRects.get(2).y(), sectionRenderW);
+        keybindSection.render(g, mouseX, mouseY, cx, sectionRects.get(3).y(), sectionRenderW);
         // 无宿主集成时不显示「宿主集成」分区
         if (integrationSection.hasIntegrations()) {
-            integrationSection.render(g, mouseX, mouseY, cx, sectionY, sectionRenderW);
+            integrationSection.render(g, mouseX, mouseY, cx, sectionRects.get(4).y(), sectionRenderW);
         }
 
-        
+        // 滚动条轨道覆盖整个内容窗口 [cy, cy+ch]，与内容可视区域对齐
         if (scrollBar.isVisible()) {
             int barX = cx + cw - SCROLLBAR_RIGHT_GAP;
             scrollBar.render(g, barX, cy, ch);
@@ -132,19 +149,15 @@ public final class GearMenuPanel extends UiPanel {
             int sectionClickW = cw - CONTENT_WIDTH_REDUCTION;
 
             int scroll = scrollBar.getScroll();
-            int scrolledCy = cy - scroll;
+            int scrolledCy = cy - CONTENT_TOP_PAD - scroll;
+            List<UiRect> sectionRects = sectionRects(cx, scrolledCy, cw, ch);
 
-            int sectionCY = scrolledCy;
-            if (renderingSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
-            sectionCY += renderingSection.totalHeight(cw);
-            if (personalizationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
-            sectionCY += personalizationSection.totalHeight(cw);
-            if (operationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
-            sectionCY += operationSection.totalHeight(cw);
-            if (keybindSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW)) return;
-            sectionCY += keybindSection.totalHeight(cw);
+            if (renderingSection.handleClick(mouseX, mouseY, cx, sectionRects.get(0).y(), sectionClickW)) return;
+            if (personalizationSection.handleClick(mouseX, mouseY, cx, sectionRects.get(1).y(), sectionClickW)) return;
+            if (operationSection.handleClick(mouseX, mouseY, cx, sectionRects.get(2).y(), sectionClickW)) return;
+            if (keybindSection.handleClick(mouseX, mouseY, cx, sectionRects.get(3).y(), sectionClickW)) return;
             if (integrationSection.hasIntegrations()) {
-                integrationSection.handleClick(mouseX, mouseY, cx, sectionCY, sectionClickW);
+                integrationSection.handleClick(mouseX, mouseY, cx, sectionRects.get(4).y(), sectionClickW);
             }
         }
     }
@@ -291,10 +304,8 @@ public final class GearMenuPanel extends UiPanel {
 
     @Override
     protected void computeDefaultPosition() {
-        setWindowX(Math.max(8, (this.screen.getUiWidth() - getWindowWidth()) / 2));
-        setWindowY(Mth.clamp((this.screen.getUiHeight() - getWindowHeight()) / 2,
-                TOP_H + 6,
-                Math.max(TOP_H + 6, this.screen.getUiHeight() - getWindowHeight() - 8)));
+        // 统一基准：水平居中 + 垂直居中，顶部避开顶栏（TOP_H+6）、底部留 8px 边距
+        positionCentered(TOP_H + 6, 8);
     }
 
     public CameraModule getCameraModule() {

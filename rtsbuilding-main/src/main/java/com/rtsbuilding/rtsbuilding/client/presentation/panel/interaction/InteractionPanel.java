@@ -1005,14 +1005,8 @@ public final class InteractionPanel extends UiPanel {
     @Override
     protected void computeDefaultPosition() {
         if (screen == null) return;
-        setWindowX(Math.max(8, (screen.getUiWidth() - getWindowWidth()) / 2));
-        if (getWindowHeight() > screen.getUiHeight()) {
-            setWindowY(TOP_H + 6);
-        } else {
-            setWindowY(Mth.clamp((screen.getUiHeight() - getWindowHeight()) / 2,
-                    TOP_H + 6,
-                    Math.max(TOP_H + 6, screen.getUiHeight() - getWindowHeight() - 8)));
-        }
+        // 统一基准：水平居中 + 垂直居中，顶部避开顶栏（TOP_H+6）、底部留 8px 边距
+        positionCentered(TOP_H + 6, 8);
     }
 
     // ==================== 目标扫描与交互 ====================

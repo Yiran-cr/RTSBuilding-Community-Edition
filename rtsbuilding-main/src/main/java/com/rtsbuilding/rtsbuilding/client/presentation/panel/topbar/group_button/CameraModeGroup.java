@@ -5,6 +5,7 @@ import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayoutHelper;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.uifw.state.TooltipController;
 import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.gui.GuiGraphics;
@@ -13,9 +14,9 @@ import net.minecraft.resources.ResourceLocation;
 
 public final class CameraModeGroup extends AbstractButtonGroup {
 
-    private static final ResourceLocation FREE_MODE =
+    public static final ResourceLocation FREE_MODE =
             ResourceLocation.tryParse("rtsbuilding:textures/gui/top/button/free_mode.png");
-    private static final ResourceLocation SURROUND_MODE =
+    public static final ResourceLocation SURROUND_MODE =
             ResourceLocation.tryParse("rtsbuilding:textures/gui/top/button/surround_mode.png");
 
     
@@ -40,6 +41,7 @@ public final class CameraModeGroup extends AbstractButtonGroup {
         
         super(Direction.HORIZONTAL, TopBarLayoutHelper.BTN_SIZE, DEFAULT_INNER_GAP, true,
                 DOWN_BG, MIDDLE_BG, UP_BG,
+                TextureInfo.FilterMode.HQ,
                 FREE_MODE, SURROUND_MODE);
         this.cameraModule = cameraModule;
     }

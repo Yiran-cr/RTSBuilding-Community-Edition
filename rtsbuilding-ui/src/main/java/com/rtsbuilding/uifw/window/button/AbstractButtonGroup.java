@@ -85,6 +85,18 @@ public abstract class AbstractButtonGroup {
     protected AbstractButtonGroup(Direction direction, int buttonSize, int innerGap, boolean hasBg,
                                   ResourceLocation downBg, ResourceLocation middleBg, ResourceLocation upBg,
                                   ResourceLocation... patterns) {
+        this(direction, buttonSize, innerGap, hasBg, downBg, middleBg, upBg,
+                TextureInfo.FilterMode.PIXEL, patterns);
+    }
+
+    /**
+     * 带过滤模式的主构造：pattern 贴图统一使用指定 {@link TextureInfo.FilterMode}。
+     * 默认走 {@link TextureInfo.FilterMode#PIXEL}（像素风，无插值）；传 {@code HQ} 时需由宿主
+     * 提前把对应纹理注册为带 mipmap 的加载器，否则会导致纹理不完整。
+     */
+    protected AbstractButtonGroup(Direction direction, int buttonSize, int innerGap, boolean hasBg,
+                                  ResourceLocation downBg, ResourceLocation middleBg, ResourceLocation upBg,
+                                  TextureInfo.FilterMode filterMode, ResourceLocation... patterns) {
         this.direction = direction;
         this.buttonSize = buttonSize;
         this.innerGap = innerGap;
@@ -112,7 +124,7 @@ public abstract class AbstractButtonGroup {
                 this.patternTexInfoCache[i] = new TextureInfo(
                         patterns[i], TEX_W, ICON_TEX_H,
                         TextureInfo.ThemeLayout.HORIZONTAL_PAIR,
-                        TextureInfo.FilterMode.PIXEL);
+                        filterMode);
                 this.patternRegions[i] = new SpriteRegion(patternTexInfoCache[i], 0, 0, HALF_W, ICON_TEX_H);
             }
         } else {
@@ -122,7 +134,7 @@ public abstract class AbstractButtonGroup {
                 this.patternTexInfoCache[i] = new TextureInfo(
                         patterns[i], TEX_W, TEX_H,
                         TextureInfo.ThemeLayout.HORIZONTAL_PAIR,
-                        TextureInfo.FilterMode.PIXEL);
+                        filterMode);
                 this.patternRegions[i * 3]     = new SpriteRegion(patternTexInfoCache[i], 0, 0,          HALF_W, STATE_H);
                 this.patternRegions[i * 3 + 1] = new SpriteRegion(patternTexInfoCache[i], 0, STATE_H,    HALF_W, STATE_H);
                 this.patternRegions[i * 3 + 2] = new SpriteRegion(patternTexInfoCache[i], 0, STATE_H * 2, HALF_W, STATE_H);

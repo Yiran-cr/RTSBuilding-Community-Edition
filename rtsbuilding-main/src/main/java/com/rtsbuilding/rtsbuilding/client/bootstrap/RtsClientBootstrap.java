@@ -43,6 +43,10 @@ public final class RtsClientBootstrap {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
+            // 左面板按钮图标预注册 mipmap 纹理（启动时立即加载并生成 mipmap 链，
+            // 资源重载后的保持由 RtsMipmapTextures 的 reload 监听器负责）
+            RtsMipmapTextures.registerAll();
+
             // RTS 按键不再注册到原版"按键绑定"界面，改由 RTS 设置面板内的
             // "按键设置"折叠条目配置；此处加载自定义绑定并应用到 KeyMapping 对象。
             RtsKeybinds.load();

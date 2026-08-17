@@ -38,7 +38,7 @@ public final class LogoMenuPopup extends BasePopup {
     
 
     
-    private static final ResourceLocation SETTING_TEXTURE = ResourceLocation.tryParse(
+    public static final ResourceLocation SETTING_TEXTURE = ResourceLocation.tryParse(
             "rtsbuilding:textures/gui/top/setting.png");
     private static final int SETTING_TEX_W = 1024;
     private static final int SETTING_TEX_H = 512;
@@ -100,7 +100,7 @@ public final class LogoMenuPopup extends BasePopup {
         TextureInfo settingTex = new TextureInfo(
                 SETTING_TEXTURE, SETTING_TEX_W, SETTING_TEX_H,
                 TextureInfo.ThemeLayout.HORIZONTAL_PAIR,
-                TextureInfo.FilterMode.PIXEL);
+                TextureInfo.FilterMode.HQ);
         SpriteRegion iconRegion = new SpriteRegion(settingTex, 0, 0, SETTING_HALF_W, SETTING_TEX_H).withTheme();
         SpriteRenderer.drawSprite(g, iconRegion,
                 iconX, iconY, SETTING_ICON_SIZE, SETTING_ICON_SIZE);

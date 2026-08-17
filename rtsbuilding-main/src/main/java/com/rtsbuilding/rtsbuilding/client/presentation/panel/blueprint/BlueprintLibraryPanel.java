@@ -1,9 +1,14 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint;
 
 import com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore;
+import com.rtsbuilding.uifw.component.DeleteButton;
+import com.rtsbuilding.uifw.layout.FlexLayout;
+import com.rtsbuilding.uifw.layout.UiBox;
+import com.rtsbuilding.uifw.layout.UiRect;
 import com.rtsbuilding.uifw.window.component.ScrollBar;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
+import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreenConstants.TOP_H;
 import com.rtsbuilding.uifw.render.UiPalette;
 import com.rtsbuilding.uifw.render.SdfRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
@@ -50,10 +55,10 @@ public final class BlueprintLibraryPanel extends UiPanel {
     private static final long CURSOR_BLINK_MS = 500;
     /** 文件列表行高。 */
     private static final int ROW_H = 20;
-    /** 删除按钮尺寸。 */
-    private static final int DEL_BTN_W = 14;
 
     private final ScrollBar scrollBar = new ScrollBar();
+    /** 行内删除按钮（矢量，复用同一实例渲染/命中，坐标随行变化）。 */
+    private final DeleteButton deleteButton = new DeleteButton();
     /** 本地全部蓝图文件（打开时扫描，搜索时保持不丢失全量）。 */
     private final List<Path> allFiles = new ArrayList<>();
     /** 过滤后显示的蓝图文件。 */
@@ -199,12 +204,13 @@ public final class BlueprintLibraryPanel extends UiPanel {
     @Override
     protected void computeDefaultPosition() {
         if (this.screen != null) {
-            int left = 8;
-            int top = 60;
-            int availableW = this.screen.getUiWidth() - left * 2;
+            // 尺寸：保持自适应（不超过屏幕，留边距），位置统一为屏幕居中基准
+            int margin = 8;
+            int availableW = this.screen.getUiWidth() - margin * 2;
             int w = Math.min(getDefaultWidth(), availableW);
-            int h = Math.min(getDefaultHeight(), Math.max(getMinWindowHeight(), this.screen.getUiHeight() - top - 8));
-            setBounds(left, top, w, h);
+            int h = Math.min(getDefaultHeight(), Math.max(getMinWindowHeight(), this.screen.getUiHeight() - TOP_H - 6 - margin));
+            setSize(w, h);
+            positionCentered(TOP_H + 6, margin);
         }
     }
 
@@ -301,10 +307,15 @@ public final class BlueprintLibraryPanel extends UiPanel {
                 }
                 g.fill(cx, y, cx + listW, y + ROW_H, rowBg);
 
+                // 行内排布：[内容区 fill, 删除按钮 fixed] 右对齐
+                List<UiRect> rowRects = computeRowRects(cx, y, listW);
+                UiRect contentRect = rowRects.get(0);
+                UiRect delRect = rowRects.get(1);
+
                 if (file.equals(renamingFile)) {
                     // 重命名编辑态：绘制输入框 + 缓冲文本 + 光标
-                    int editX = cx + 4;
-                    int editW = listW - DEL_BTN_W - 10;
+                    int editX = contentRect.x() + 4;
+                    int editW = contentRect.w() - 8;
                     SdfRenderer.drawInputBox(g, editX, y + 1, editW, ROW_H - 2,
                             1f, 0f, 3);
                     String editText = renameBuffer.toString();
@@ -318,24 +329,15 @@ public final class BlueprintLibraryPanel extends UiPanel {
                     }
                 } else {
                     String name = file.getFileName().toString();
-                    TextRenderer.draw(g, name, cx + 6, y + (ROW_H - Minecraft.getInstance().font.lineHeight) / 2 + 1, textColor);
+                    TextRenderer.draw(g, name, contentRect.x() + 6, y + (ROW_H - Minecraft.getInstance().font.lineHeight) / 2 + 1, textColor);
                 }
 
                 // 删除按钮（悬停行时显示，需二次点击确认）
-                int delX = cx + listW - DEL_BTN_W - 3;
-                int delY = y + (ROW_H - DEL_BTN_W) / 2;
-                boolean delHover = mouseX >= delX && mouseX < delX + DEL_BTN_W
-                        && mouseY >= delY && mouseY < delY + DEL_BTN_W;
+                int delX = delRect.x();
+                int delY = delRect.y();
+                boolean delHover = deleteButton.hit(mouseX, mouseY, delX, delY);
                 if (hovering || delHover) {
-                    int delBg = pendingDelete == file
-                            ? UiPalette.get("list_delete")
-                            : (delHover ? UiPalette.get("list_btn_hover") : UiPalette.get("list_btn"));
-                    SdfRenderer.drawRoundedRect(g, delX, delY, DEL_BTN_W, DEL_BTN_W, 3, delBg);
-                    TextRenderer.drawCentered(g, Minecraft.getInstance().font,
-                            pendingDelete == file ? "?" : "x",
-                            delX + DEL_BTN_W / 2,
-                            delY + (DEL_BTN_W - Minecraft.getInstance().font.lineHeight) / 2 + 1,
-                            UiPalette.get("tooltip_text"));
+                    deleteButton.render(g, mouseX, mouseY, delX, delY, pendingDelete == file);
                 }
             }
             y += ROW_H;
@@ -345,6 +347,16 @@ public final class BlueprintLibraryPanel extends UiPanel {
         if (statusMessage != null) {
             TextRenderer.draw(g, statusMessage, cx + 6, listY + listH - Minecraft.getInstance().font.lineHeight - 2, UiPalette.get("status_error"));
         }
+    }
+
+    /**
+     * 行内排布：[内容区 fill, 删除按钮 fixed] 右对齐。渲染与点击命中共用同一布局，
+     * 保证两者坐标一致。
+     */
+    private static List<UiRect> computeRowRects(int cx, int y, int listW) {
+        return FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.START,
+                FlexLayout.Align.CENTER, 3, cx, y, listW, ROW_H,
+                List.of(UiBox.fill(1f), UiBox.fixed(DeleteButton.SIZE, DeleteButton.SIZE)));
     }
 
     @Override
@@ -395,7 +407,6 @@ public final class BlueprintLibraryPanel extends UiPanel {
         }
 
         int listW = cw - (scrollBar.isVisible() ? 14 : 4);
-        int delX = cx + listW - DEL_BTN_W - 3;
 
         int y = listY - scroll;
         for (Path file : files) {
@@ -405,7 +416,8 @@ public final class BlueprintLibraryPanel extends UiPanel {
             }
             if (y >= listY + listH) break;
             if (mouseY >= y && mouseY < y + ROW_H) {
-                boolean onDelete = mouseX >= delX && mouseX < delX + DEL_BTN_W;
+                UiRect delRect = computeRowRects(cx, y, listW).get(1);
+                boolean onDelete = deleteButton.hit(mouseX, mouseY, delRect.x(), delRect.y());
                 if (onDelete) {
                     // 重命名编辑态下不响应删除
                     if (renamingFile == null) {

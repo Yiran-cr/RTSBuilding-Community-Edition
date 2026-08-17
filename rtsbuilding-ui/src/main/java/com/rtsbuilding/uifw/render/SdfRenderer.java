@@ -14,6 +14,12 @@ public final class SdfRenderer {
 
     public static void drawRoundedRect(GuiGraphics g, int x, int y, int w, int h,
                                         float radius, int color, float alpha) {
+        drawRoundedRect(g, (float) x, (float) y, w, h, radius, color, alpha);
+    }
+
+    /** 浮点坐标版本的圆角矩形绘制（SDF shader，亚像素精度，用于平滑取色器指示器）。 */
+    public static void drawRoundedRect(GuiGraphics g, float x, float y, float w, float h,
+                                        float radius, int color, float alpha) {
         if (w <= 0 || h <= 0) return;
 
         g.flush();
@@ -24,8 +30,6 @@ public final class SdfRenderer {
         float halfW = w / 2f;
         float halfH = h / 2f;
         float clampedRadius = Math.min(radius, Math.min(halfW, halfH));
-        float cx = x + halfW;
-        float cy = y + halfH;
 
         float r = ((color >> 16) & 0xFF) / 255f;
         float gr = ((color >> 8) & 0xFF) / 255f;
@@ -126,6 +130,12 @@ public final class SdfRenderer {
     public static void drawCircle(GuiGraphics g, int cx, int cy, int radius, int color) {
         int d = radius * 2;
         drawPill(g, cx - radius, cy - radius, d, d, color);
+    }
+
+    /** 浮点坐标版本圆绘制（亚像素精度，用于平滑取色器指示器）。 */
+    public static void drawCircleF(GuiGraphics g, float cx, float cy, int radius, int color) {
+        float d = radius * 2;
+        drawRoundedRect(g, cx - radius, cy - radius, d, d, radius, color, 1f);
     }
 
     /**
@@ -744,6 +754,37 @@ public final class SdfRenderer {
         g.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(140f));
         drawChevron(g, -as / 2, -as / 2, as, as, color, 0.5f);
         g.pose().popPose();
+    }
+
+    /**
+     * 矢量垃圾桶图标（删除）：由盖子横条 + 提手竖条 + 桶身圆角矩形 + 中央分隔线
+     * 四段 SDF 圆角矩形组合而成，无贴图。
+     *
+     * @param x,y   图标左上角（所在区域）
+     * @param size  图标边长（px）
+     * @param color 图标颜色
+     */
+    public static void drawTrashIcon(GuiGraphics g, int x, int y, int size, int color) {
+        if (size <= 0) return;
+        int lidW = (int) Math.round(size * 0.72f);
+        int lidH = Math.max(2, (int) Math.round(size * 0.2f));
+        int lidX = x + (size - lidW) / 2;
+        int handleW = Math.max(2, (int) Math.round(size * 0.14f));
+        int handleH = Math.max(2, (int) Math.round(size * 0.18f));
+        int handleX = x + (size - handleW) / 2;
+        int binW = (int) Math.round(size * 0.56f);
+        int binX = x + (size - binW) / 2;
+        int binY = y + lidH;
+        int divW = Math.max(1, (int) Math.round(size * 0.06f));
+        int divX = x + (size - divW) / 2;
+        int divY = binY + (int) Math.round(size * 0.15f);
+        int divH = Math.max(2, (int) Math.round(size * 0.4f));
+
+        int rad = Math.max(1, size / 8);
+        drawRoundedRect(g, lidX, y, lidW, lidH, rad, color);
+        drawRoundedRect(g, handleX, y - handleH, handleW, handleH, handleW / 2f, color);
+        drawRoundedRect(g, binX, binY, binW, size - lidH, rad, color);
+        drawRoundedRect(g, divX, divY, divW, divH, divW / 2f, color);
     }
 
     public static void drawTexturedRect(GuiGraphics g, int x, int y, int w, int h,

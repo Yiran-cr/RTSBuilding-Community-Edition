@@ -22,7 +22,7 @@ void main() {
         fragColor = vec4(0.0);
         return;
     }
-    float hue = atan(texCoord0.y, texCoord0.x) / 6.28318530718 + 0.5;
+    float hue = fract(atan(texCoord0.y, texCoord0.x) / 6.28318530718 + 1.0);
     float sat = clamp(dist / radius, 0.0, 1.0);
     vec3 rgb = hsv2rgb(vec3(hue, sat, 1.0));
     // 圆形边缘抗锯齿

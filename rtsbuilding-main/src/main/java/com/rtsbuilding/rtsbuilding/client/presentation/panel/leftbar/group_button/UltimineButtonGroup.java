@@ -5,6 +5,7 @@ import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.SdfRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.uifw.state.TooltipController;
 import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
@@ -21,7 +22,7 @@ import net.minecraft.resources.ResourceLocation;
 public final class UltimineButtonGroup extends AbstractButtonGroup {
 
     
-    private static final ResourceLocation ULTIMINE_BTN = ResourceLocation.tryParse(
+    public static final ResourceLocation ULTIMINE_BTN = ResourceLocation.tryParse(
             "rtsbuilding:textures/gui/left/button/ultimine.png");
 
     
@@ -34,6 +35,7 @@ public final class UltimineButtonGroup extends AbstractButtonGroup {
     public UltimineButtonGroup() {
         super(Direction.VERTICAL, DEFAULT_BTN_SIZE, DEFAULT_INNER_GAP, true,
                 null, null, null,
+                TextureInfo.FilterMode.HQ,
                 ULTIMINE_BTN);
     }
 

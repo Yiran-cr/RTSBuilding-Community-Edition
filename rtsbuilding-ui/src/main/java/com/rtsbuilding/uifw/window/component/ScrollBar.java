@@ -56,6 +56,8 @@ public class ScrollBar {
     private int thumbHoverColor = UiPalette.get("scroll_thumb_hover");
     private int minThumbSize = MIN_THUMB_SIZE;
     private ThumbStyle thumbStyle = ThumbStyle.PILL;
+    /** 滚动到底时轨道底部预留的空白余量（px），默认 6。设为 0 可使内容底与轨道底精确贴齐。 */
+    private int scrollBottomPad = 6;
 
     
 
@@ -81,7 +83,7 @@ public class ScrollBar {
     public void setContent(int totalContent, int visibleContent) {
         this.totalContent = Math.max(1, totalContent);
         this.visibleContent = Math.max(1, visibleContent);
-        this.maxScroll = Math.max(0, this.totalContent - this.visibleContent + 6);
+        this.maxScroll = Math.max(0, this.totalContent - this.visibleContent + this.scrollBottomPad);
         this.scroll = Mth.clamp(this.scroll, 0, this.maxScroll);
     }
 
@@ -274,6 +276,12 @@ public class ScrollBar {
 
     public ScrollBar withMinThumbSize(int size) {
         this.minThumbSize = size;
+        return this;
+    }
+
+    /** 设置滚动到底时轨道底部的预留空白（px）。0 表示内容底与轨道底精确贴齐。 */
+    public ScrollBar withScrollBottomPad(int pad) {
+        this.scrollBottomPad = Math.max(0, pad);
         return this;
     }
 

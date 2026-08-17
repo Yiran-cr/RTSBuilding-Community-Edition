@@ -8,6 +8,7 @@ import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Matrix4f;
 
 public final class SpriteRenderer {
 
@@ -45,27 +46,16 @@ public final class SpriteRenderer {
     
     public static void drawSprite(GuiGraphics g, SpriteRegion region,
                                    int dstX, int dstY, int dstW, int dstH) {
-        if (dstW <= 0 || dstH <= 0) return;
-        var texture = region.texture().location();
-        var texInfo = region.texture();
-        int texW = texInfo.fullWidth();
-        int texH = texInfo.fullHeight();
-        var renderType = GuiRenderTypes.fromTextureInfo(texture, texInfo.filterMode());
-        var buffer = g.bufferSource().getBuffer(renderType);
-        var matrix = g.pose().last().pose();
-        float u0 = (float) region.u() / texW;
-        float v0 = (float) region.v() / texH;
-        float u1 = (float) (region.u() + region.regionWidth()) / texW;
-        float v1 = (float) (region.v() + region.regionHeight()) / texH;
-        buffer.addVertex(matrix, dstX, dstY + dstH, 0).setUv(u0, v1).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX + dstW, dstY + dstH, 0).setUv(u1, v1).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX + dstW, dstY, 0).setUv(u1, v0).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX, dstY, 0).setUv(u0, v0).setColor(1f, 1f, 1f, 1f);
+        drawSprite(g, region, 0, dstX, dstY, dstW, dstH);
     }
 
-    
     public static void drawSprite(GuiGraphics g, SpriteRegion region, int themeOffset,
                                    int dstX, int dstY, int dstW, int dstH) {
+        drawSprite(g, region, themeOffset, dstX, dstY, dstW, dstH, 1f);
+    }
+
+    public static void drawSprite(GuiGraphics g, SpriteRegion region, int themeOffset,
+                                   int dstX, int dstY, int dstW, int dstH, float alpha) {
         if (dstW <= 0 || dstH <= 0) return;
         var texture = region.texture().location();
         var texInfo = region.texture();
@@ -74,17 +64,12 @@ public final class SpriteRenderer {
         var renderType = GuiRenderTypes.fromTextureInfo(texture, texInfo.filterMode());
         var buffer = g.bufferSource().getBuffer(renderType);
         var matrix = g.pose().last().pose();
-        float u0 = (float) (region.u() + themeOffset) / texW;
-        float v0 = (float) region.v() / texH;
-        float u1 = (float) (region.u() + themeOffset + region.regionWidth()) / texW;
-        float v1 = (float) (region.v() + region.regionHeight()) / texH;
-        buffer.addVertex(matrix, dstX, dstY + dstH, 0).setUv(u0, v1).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX + dstW, dstY + dstH, 0).setUv(u1, v1).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX + dstW, dstY, 0).setUv(u1, v0).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX, dstY, 0).setUv(u0, v0).setColor(1f, 1f, 1f, 1f);
+        emitQuad(buffer, matrix, texW, texH,
+                region.u() + themeOffset, region.v(),
+                region.regionWidth(), region.regionHeight(),
+                dstX, dstY, dstW, dstH, alpha);
     }
 
-    
     private static void drawSpriteImmediate(GuiGraphics g, SpriteRegion region, int themeOffset,
                                              int dstX, int dstY, int dstW, int dstH) {
         if (dstW <= 0 || dstH <= 0) return;
@@ -96,14 +81,29 @@ public final class SpriteRenderer {
         var renderType = GuiRenderTypes.fromTextureInfo(texture, texInfo.filterMode());
         var buffer = g.bufferSource().getBuffer(renderType);
         var matrix = g.pose().last().pose();
-        float u0 = (float) (region.u() + themeOffset) / texW;
-        float v0 = (float) region.v() / texH;
-        float u1 = (float) (region.u() + themeOffset + region.regionWidth()) / texW;
-        float v1 = (float) (region.v() + region.regionHeight()) / texH;
-        buffer.addVertex(matrix, dstX, dstY + dstH, 0).setUv(u0, v1).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX + dstW, dstY + dstH, 0).setUv(u1, v1).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX + dstW, dstY, 0).setUv(u1, v0).setColor(1f, 1f, 1f, 1f);
-        buffer.addVertex(matrix, dstX, dstY, 0).setUv(u0, v0).setColor(1f, 1f, 1f, 1f);
+        emitQuad(buffer, matrix, texW, texH,
+                region.u() + themeOffset, region.v(),
+                region.regionWidth(), region.regionHeight(),
+                dstX, dstY, dstW, dstH, 1f);
+    }
+
+    /**
+     * 写一个带 UV 归一化的 QUAD 顶点。
+     * 源区域用整数像素坐标 (sx,sy,sw,sh)，除以整幅纹理宽高得到归一化 UV，
+     * 目标位置 dst 用整数屏幕坐标，统一保证所有精灵绘制的精度口径一致。
+     */
+    private static void emitQuad(VertexConsumer buffer, Matrix4f matrix,
+                                 int texW, int texH,
+                                 int sx, int sy, int sw, int sh,
+                                 int dstX, int dstY, int dstW, int dstH, float alpha) {
+        float u0 = (float) sx / texW;
+        float v0 = (float) sy / texH;
+        float u1 = (float) (sx + sw) / texW;
+        float v1 = (float) (sy + sh) / texH;
+        buffer.addVertex(matrix, dstX, dstY + dstH, 0).setUv(u0, v1).setColor(1f, 1f, 1f, alpha);
+        buffer.addVertex(matrix, dstX + dstW, dstY + dstH, 0).setUv(u1, v1).setColor(1f, 1f, 1f, alpha);
+        buffer.addVertex(matrix, dstX + dstW, dstY, 0).setUv(u1, v0).setColor(1f, 1f, 1f, alpha);
+        buffer.addVertex(matrix, dstX, dstY, 0).setUv(u0, v0).setColor(1f, 1f, 1f, alpha);
     }
 
     
@@ -150,16 +150,8 @@ public final class SpriteRenderer {
         NineSliceTiler.forEachTile(
                 u, v, regionW, regionH, border,
                 dstX, dstY, dstW, dstH,
-                (sx, sy, sw, sh, dx, dy, dw, dh) -> {
-                    float u0 = (float) sx / texW;
-                    float v0 = (float) sy / texH;
-                    float u1 = (float) (sx + sw) / texW;
-                    float v1 = (float) (sy + sh) / texH;
-                    buffer.addVertex(matrix, dx,     dy + dh, 0).setUv(u0, v1).setColor(1f, 1f, 1f, alpha);
-                    buffer.addVertex(matrix, dx + dw, dy + dh, 0).setUv(u1, v1).setColor(1f, 1f, 1f, alpha);
-                    buffer.addVertex(matrix, dx + dw, dy,      0).setUv(u1, v0).setColor(1f, 1f, 1f, alpha);
-                    buffer.addVertex(matrix, dx,     dy,      0).setUv(u0, v0).setColor(1f, 1f, 1f, alpha);
-                });
+                (sx, sy, sw, sh, dx, dy, dw, dh) ->
+                        emitQuad(buffer, matrix, texW, texH, sx, sy, sw, sh, dx, dy, dw, dh, alpha));
     }
 
     private static void drawNineSliceRaw(GuiGraphics g, TextureInfo texInfo,
@@ -173,27 +165,7 @@ public final class SpriteRenderer {
     
     public static void drawTiledRow(GuiGraphics g, SpriteRegion region,
                                      int dstX, int dstY, int tileW, int tileH, int cols) {
-        if (cols <= 0 || tileW <= 0 || tileH <= 0) return;
-        var texture = region.texture().location();
-        var texInfo = region.texture();
-        int texW = texInfo.fullWidth();
-        int texH = texInfo.fullHeight();
-        var renderType = GuiRenderTypes.fromTextureInfo(texture, texInfo.filterMode());
-        var buffer = g.bufferSource().getBuffer(renderType);
-        var matrix = g.pose().last().pose();
-
-        float u0 = (float) region.u() / texW;
-        float v0 = (float) region.v() / texH;
-        float u1 = (float) (region.u() + region.regionWidth()) / texW;
-        float v1 = (float) (region.v() + region.regionHeight()) / texH;
-
-        for (int col = 0; col < cols; col++) {
-            int dx = dstX + col * tileW;
-            buffer.addVertex(matrix, dx,     dstY + tileH, 0).setUv(u0, v1).setColor(1f, 1f, 1f, 1f);
-            buffer.addVertex(matrix, dx + tileW, dstY + tileH, 0).setUv(u1, v1).setColor(1f, 1f, 1f, 1f);
-            buffer.addVertex(matrix, dx + tileW, dstY,       0).setUv(u1, v0).setColor(1f, 1f, 1f, 1f);
-            buffer.addVertex(matrix, dx,     dstY,       0).setUv(u0, v0).setColor(1f, 1f, 1f, 1f);
-        }
+        drawTiledRowRange(g, region, 0, dstX, dstY, tileW, tileH, 0, cols - 1);
     }
 
     
@@ -221,21 +193,16 @@ public final class SpriteRenderer {
         var buffer = g.bufferSource().getBuffer(renderType);
         var matrix = g.pose().last().pose();
 
-        float u0 = (float) (region.u() + themeOffset) / texW;
-        float v0 = (float) region.v() / texH;
-        float u1 = (float) (region.u() + themeOffset + region.regionWidth()) / texW;
-        float v1 = (float) (region.v() + region.regionHeight()) / texH;
-
         int stride = tileH + gap;
         for (int row = 0; row < rows; row++) {
             int rowY = originY + row * stride - scroll;
             if (rowY + tileH <= clipTop || rowY >= clipBottom) continue;
             for (int col = 0; col < cols; col++) {
                 int dx = originX + col * (tileW + gap);
-                buffer.addVertex(matrix, dx,         rowY + tileH, 0).setUv(u0, v1).setColor(1f, 1f, 1f, 1f);
-                buffer.addVertex(matrix, dx + tileW, rowY + tileH, 0).setUv(u1, v1).setColor(1f, 1f, 1f, 1f);
-                buffer.addVertex(matrix, dx + tileW, rowY,         0).setUv(u1, v0).setColor(1f, 1f, 1f, 1f);
-                buffer.addVertex(matrix, dx,         rowY,         0).setUv(u0, v0).setColor(1f, 1f, 1f, 1f);
+                emitQuad(buffer, matrix, texW, texH,
+                        region.u() + themeOffset, region.v(),
+                        region.regionWidth(), region.regionHeight(),
+                        dx, rowY, tileW, tileH, 1f);
             }
         }
     }
@@ -253,17 +220,12 @@ public final class SpriteRenderer {
         var buffer = g.bufferSource().getBuffer(renderType);
         var matrix = g.pose().last().pose();
 
-        float u0 = (float) (region.u() + themeOffset) / texW;
-        float v0 = (float) region.v() / texH;
-        float u1 = (float) (region.u() + themeOffset + region.regionWidth()) / texW;
-        float v1 = (float) (region.v() + region.regionHeight()) / texH;
-
         for (int col = startCol; col <= endCol; col++) {
             int dx = dstX + col * tileW;
-            buffer.addVertex(matrix, dx,         dstY + tileH, 0).setUv(u0, v1).setColor(1f, 1f, 1f, 1f);
-            buffer.addVertex(matrix, dx + tileW, dstY + tileH, 0).setUv(u1, v1).setColor(1f, 1f, 1f, 1f);
-            buffer.addVertex(matrix, dx + tileW, dstY,         0).setUv(u1, v0).setColor(1f, 1f, 1f, 1f);
-            buffer.addVertex(matrix, dx,         dstY,         0).setUv(u0, v0).setColor(1f, 1f, 1f, 1f);
+            emitQuad(buffer, matrix, texW, texH,
+                    region.u() + themeOffset, region.v(),
+                    region.regionWidth(), region.regionHeight(),
+                    dx, dstY, tileW, tileH, 1f);
         }
     }
 

@@ -29,15 +29,17 @@ public final class BuilderScreenScaleManager {
 
     
 
+    /**
+     * 当前 RTS GUI 虚拟坐标缩放基准，渲染 / 射线 / UI 命中统一使用。
+     * <p>RTS UI 始终在「固定 RTS GUI 缩放」的虚拟坐标系下布局与渲染
+     * （{@link #renderWithFixedRtsGuiScale} 以 {@code fixedRtsGuiScale} 为基准换算，
+     * 窗口原版 GUI 缩放 ≠ 该基准时通过 {@code pose.scale} 缩放显示），
+     * 因此这里<b>始终返回 {@code fixedRtsGuiScale}</b>；auto 模式即默认
+     * {@link BuilderScreenConstants#DEFAULT_RTS_GUI_SCALE}（2.0）。</p>
+     * <p>切勿返回 {@code mc.getWindow().getGuiScale()}：否则窗口 GUI 缩放 ≠ RTS
+     * 基准时，射线、UI 命中、世界区域判断的坐标与渲染坐标系错位（画面/瞄准偏移）。</p>
+     */
     public double getRtsGuiScale() {
-        // 自动模式：跟随原版当前 GUI 缩放（Minecraft 窗口 resize 时自动更新）
-        if (this.autoRtsGuiScale) {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.getWindow() != null && mc.getWindow().getGuiScale() > 0.0D) {
-                return mc.getWindow().getGuiScale();
-            }
-            return BuilderScreenConstants.DEFAULT_RTS_GUI_SCALE;
-        }
         return this.fixedRtsGuiScale;
     }
 
@@ -184,6 +186,13 @@ public final class BuilderScreenScaleManager {
     }
 
     
+    /**
+     * 鼠标拖拽事件缩放。
+     * <p>坐标（mouseX/mouseY）需随 RTS GUI 缩放换算为虚拟坐标供 UI 命中判断使用；
+     * 但拖拽增量（dragX/dragY）是屏幕像素位移，<b>不随 GUI 缩放</b>——
+     * 旋转/平移的灵敏度应只取决于实际鼠标移动量，否则缩放系数 ≠1 时拖拽量被缩小，
+     * 触发不了 {@code CameraInputLayer} 的拖拽阈值（5px），导致相机旋转/平移完全无响应。</p>
+     */
     public boolean scaleMouseEventQuad(BuilderScreen screen, double mouseX, double mouseY,
                                         int button, double dragX, double dragY,
                                         QuadHandler handler) {
@@ -194,7 +203,7 @@ public final class BuilderScreenScaleManager {
             this.fixedRtsScaleInputPass = true;
             try {
                 double s = frame.scale();
-                return handler.apply(mouseX / s, mouseY / s, button, dragX / s, dragY / s);
+                return handler.apply(mouseX / s, mouseY / s, button, dragX, dragY);
             } finally {
                 this.fixedRtsScaleInputPass = false;
                 frame.close();

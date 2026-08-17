@@ -3,6 +3,9 @@ package com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint;
 import com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.kernel.StateEvent;
+import com.rtsbuilding.uifw.layout.FlexLayout;
+import com.rtsbuilding.uifw.layout.UiBox;
+import com.rtsbuilding.uifw.layout.UiRect;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.uifw.component.TextInputBox;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
@@ -18,7 +21,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.List;
 import java.nio.file.Path;
+
+import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreenConstants.TOP_H;
 
 /**
  * 蓝图保存对话框 —— 蓝图模式框选完成后按回车弹出，
@@ -139,8 +145,8 @@ public final class BlueprintSavePanel extends UiPanel {
     @Override
     protected void computeDefaultPosition() {
         if (this.screen != null) {
-            setWindowX(Math.max(8, (this.screen.getUiWidth() - getWindowWidth()) / 2));
-            setWindowY(Math.max(60, (this.screen.getUiHeight() - getWindowHeight()) / 2));
+            // 统一基准：水平居中 + 垂直居中，顶部避开顶栏（TOP_H+6）、底部留 8px 边距
+            positionCentered(TOP_H + 6, 8);
         }
     }
 
@@ -152,34 +158,53 @@ public final class BlueprintSavePanel extends UiPanel {
         int textColor = ThemeManager.getTextColor();
         var font = Minecraft.getInstance().font;
 
+        SaveLayout layout = computeLayout(cx, cy, cw);
+
         // 区域尺寸说明
         if (boxMin != null && boxMax != null) {
             int w = boxMax.getX() - boxMin.getX() + 1;
             int h = boxMax.getY() - boxMin.getY() + 1;
             int d = boxMax.getZ() - boxMin.getZ() + 1;
             String region = Component.translatable("screen.rtsbuilding.blueprint.save.region", w, h, d).getString();
-            TextRenderer.draw(g, region, cx + 10, cy + 6, textColor);
+            TextRenderer.draw(g, region, layout.labelX(), layout.labelY(), textColor);
         }
 
         // 名称输入框
-        int inputY = cy + 22;
-        int inputW = cw - 20;
         String placeholder = Component.translatable("screen.rtsbuilding.blueprint.save.name_placeholder").getString();
-        nameInput.render(g, mouseX, mouseY, cx + 10, inputY, inputW, placeholder);
+        nameInput.render(g, mouseX, mouseY, layout.inputX(), layout.inputY(), layout.inputW(), placeholder);
 
-        // 保存 / 取消 按钮
-        int btnRowY = inputY + TextInputBox.INPUT_H + 14;
-        int btnRowX = cx + (cw - BTN_W * 2 - BTN_GAP) / 2;
-        renderButton(g, mouseX, mouseY, btnRowX, btnRowY,
+        // 保存 / 取消 按钮（FlexLayout 居中）
+        renderButton(g, mouseX, mouseY, layout.btnRowX(), layout.btnRowY(),
                 Component.translatable("button.rtsbuilding.blueprint.save"));
-        renderButton(g, mouseX, mouseY, btnRowX + BTN_W + BTN_GAP, btnRowY,
+        renderButton(g, mouseX, mouseY, layout.btnRowX() + BTN_W + BTN_GAP, layout.btnRowY(),
                 Component.translatable("button.rtsbuilding.blueprint.cancel"));
 
         // 状态提示（成功/错误）
         if (statusMessage != null) {
             int statusColor = statusIsError ? UiPalette.get("status_error") : UiPalette.get("status_success");
-            TextRenderer.draw(g, statusMessage, cx + 10, btnRowY + BTN_H + 6, statusColor);
+            TextRenderer.draw(g, statusMessage, layout.statusX(), layout.statusY(), statusColor);
         }
+    }
+
+    /**
+     * 保存面板内容布局：垂直堆叠（标签 / 输入框 / 按钮行 / 状态），按钮行用 {@link FlexLayout} 居中。
+     * 渲染与点击命中共用同一布局。
+     */
+    private record SaveLayout(int labelX, int labelY, int inputX, int inputY, int inputW,
+                              int btnRowX, int btnRowY, int statusX, int statusY) {}
+
+    private static SaveLayout computeLayout(int cx, int cy, int cw) {
+        int inputY = cy + 22;
+        int inputW = cw - 20;
+        int btnRowY = inputY + TextInputBox.INPUT_H + 14;
+        List<UiRect> btnRects = FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.CENTER,
+                FlexLayout.Align.CENTER, BTN_GAP, cx, btnRowY, cw, BTN_H,
+                List.of(UiBox.fixed(BTN_W, BTN_H), UiBox.fixed(BTN_W, BTN_H)));
+        return new SaveLayout(
+                cx + 10, cy + 6,
+                cx + 10, inputY, inputW,
+                btnRects.get(0).x(), btnRowY,
+                cx + 10, btnRowY + BTN_H + 6);
     }
 
     private void renderButton(GuiGraphics g, int mouseX, int mouseY, int x, int y, Component label) {
@@ -197,19 +222,17 @@ public final class BlueprintSavePanel extends UiPanel {
         int cy = contentY();
         int cw = contentWidth();
 
-        int inputY = cy + 22;
-        int inputW = cw - 20;
-        if (nameInput.handleClick(mouseX, mouseY, cx + 10, inputY, inputW, nameInput.getBufferText())) {
+        SaveLayout layout = computeLayout(cx, cy, cw);
+        if (nameInput.handleClick(mouseX, mouseY, layout.inputX(), layout.inputY(), layout.inputW(),
+                nameInput.getBufferText())) {
             return;
         }
 
-        int btnRowY = inputY + TextInputBox.INPUT_H + 14;
-        int btnRowX = cx + (cw - BTN_W * 2 - BTN_GAP) / 2;
-        if (isInButton(mouseX, mouseY, btnRowX, btnRowY)) {
+        if (isInButton(mouseX, mouseY, layout.btnRowX(), layout.btnRowY())) {
             confirmSave();
             return;
         }
-        if (isInButton(mouseX, mouseY, btnRowX + BTN_W + BTN_GAP, btnRowY)) {
+        if (isInButton(mouseX, mouseY, layout.btnRowX() + BTN_W + BTN_GAP, layout.btnRowY())) {
             setOpen(false);
         }
     }

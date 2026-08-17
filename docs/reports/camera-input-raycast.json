@@ -1,0 +1,78 @@
+{
+  "id": "camera-input-raycast",
+  "title": "摄像机拖拽旋转/平移 与 射线链路",
+  "subtitle": "鼠标中键旋转、Shift+右键平移摄像机的输入链路 + 拾取射线的一致性链路检查",
+  "tags": {
+    "module": "client/infrastructure/module/camera + client/render",
+    "status": "已修复",
+    "counts": "4 类 2 修复",
+    "result": "编译 + 129 测试通过"
+  },
+  "classes": [
+    { "name": "CameraInputLayer", "path": "client/input/layer/", "desc": "鼠标中键/Shift+右键拖拽的输入层：按下记录 <code>pressedButton</code>，拖拽累计距离超过 5px 阈值后调用 <code>queueRotateDrag/queueDragMove</code>" },
+    { "name": "BuilderScreenScaleManager", "path": "client/presentation/panel/handler/", "desc": "RTS GUI 缩放管理：鼠标事件坐标除以缩放系数换算为虚拟坐标，拖拽增量曾被一并缩放（bug 所在）" },
+    { "name": "CameraModule", "path": "client/infrastructure/module/camera/", "desc": "相机状态机：<code>onRenderFrame</code> 消耗 pending 旋转/平移输入 → <code>entitySync.snapToState</code> 更新镜像相机实体" },
+    { "name": "CameraEntitySync", "path": "client/infrastructure/module/camera/", "desc": "镜像相机实体 <code>RtsCameraEntity</code> 同步，<code>setAsCameraEntity</code> 使其成为 <code>mc</code> 的观察实体，渲染画面与射线共用其姿态" },
+    { "name": "CursorRaycaster", "path": "client/render/util/", "desc": "射线计算：基于 <code>mc.gameRenderer.getMainCamera()</code> 的位置/朝向 + 内容区坐标映射计算拾取射线" },
+    { "name": "ViewCaptureService", "path": "client/render/", "desc": "AFTER_LEVEL 阶段捕获主帧缓冲为 <code>captured_frame</code>，BuilderScreen 中央内容区显示，构成 RTS 世界画面" }
+  ],
+  "sections": [
+    {
+      "title": "输入链路（按下→拖拽→姿态更新）",
+      "type": "table",
+      "headers": ["环节", "类/方法", "说明"],
+      "rows": [
+        ["中键按下", "CameraInputLayer.onMouseClicked", "<code>matchesBind(CAMERA_ROTATE_KEY, 2)</code> 记录 <code>pressedButton=2</code>"],
+        ["Shift+右键按下", "CameraInputLayer.onMouseClicked", "<code>matchesBind(CAMERA_PAN_KEY, 1)</code>（严格校验 Shift，避免与建造右键冲突）"],
+        ["拖拽", "BuilderScreen.mouseDragged → scaleMouseEventQuad", "坐标除以缩放系数；<b>拖拽增量 bug：曾被一并 /scale</b>"],
+        ["拖拽阈值", "CameraInputLayer.onMouseDragged", "<code>accumulatedDragDistance ≥ 5px</code> 才派发旋转/平移，否则仅消费"],
+        ["派发", "CameraModule.queueRotateDrag/queueDragMove", "写入 <code>state.pendingRawRotate*/pendingPan*</code>"],
+        ["帧更新", "CameraModule.onRenderFrame → FreeCameraMode.processInput", "消耗 pending，更新 <code>localYaw/localPitch/localX/Z</code>"],
+        ["渲染同步", "CameraEntitySync.snapToState", "镜像相机实体姿态 = 状态，渲染画面随其移动/旋转"]
+      ]
+    },
+    {
+      "title": "射线与画面的一致性",
+      "type": "table",
+      "headers": ["环节", "说明"],
+      "rows": [
+        ["画面", "世界渲染基于 <code>mc.gameRenderer.getMainCamera()</code>（即镜像相机实体），AFTER_LEVEL 捕获为 <code>captured_frame</code> 显示在中央内容区"],
+        ["射线", "<code>CursorRaycaster.computeCursorRay</code> 用同一 <code>getMainCamera()</code> 的位置与 yaw/pitch 计算方向"],
+        ["一致性", "两者共用 mainCamera，姿态始终一致；前提是拖拽输入真正到达相机层并驱动姿态更新"]
+      ]
+    },
+    {
+      "title": "问题根因（两处）",
+      "type": "note",
+      "note": "① 拖拽增量缩放：<code>scaleMouseEventQuad</code> 把拖拽增量 <code>dragX/dragY</code> 也除以缩放系数，窗口 GUI 缩放 ≠ 2 时拖拽量被缩小，<code>CameraInputLayer</code> 的 5px 阈值迟迟不满足 → 旋转/平移无响应。<b>② 坐标基准不一致：</b><code>getRtsGuiScale()</code> 在 auto 模式返回 <code>mc.getWindow().getGuiScale()</code>，而渲染始终以 <code>fixedRtsGuiScale</code>（默认 2.0）为虚拟坐标基准（<code>pose.scale(2/guiScale)</code>）。guiScale ≠ 2 时，射线/命中/世界区域判断用的虚拟坐标与渲染坐标系错位 → 画面动了瞄准不跟、拾取偏移。"
+    },
+    {
+      "title": "修复",
+      "type": "cards",
+      "cards": [
+        { "title": "BuilderScreenScaleManager.scaleMouseEventQuad", "text": "仅缩放坐标 <code>mouseX/s、mouseY/s</code>，拖拽增量保持原值 <code>dragX、dragY</code>（屏幕像素位移，不随 GUI 缩放）" },
+        { "title": "BuilderScreenScaleManager.getRtsGuiScale", "text": "始终返回 <code>fixedRtsGuiScale</code>（auto 即默认 2.0），与渲染虚拟坐标基准一致；同步更新 <code>getRtsVirtualWidth/Height</code> 过时注释" },
+        { "title": "验证", "text": "<code>:rtsbuilding-main:compileJava</code> + <code>:rtsbuilding-main:test</code>（129 测试）全部通过" }
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 中键/Shift+右键拖拽摄像机无响应（画面完全不动）",
+      "status": "fixed",
+      "why": "<code>scaleMouseEventQuad</code>（BuilderScreenScaleManager.java:197）把拖拽增量 <code>dragX/dragY</code> 与坐标一并除以 RTS GUI 缩放系数。窗口 GUI 缩放 ≠ 2 时拖拽量被缩小，<code>CameraInputLayer</code> 的 5px 拖拽阈值始终不满足 → <code>queueRotateDrag/queueDragMove</code> 永不触发。修复：拖拽增量保持屏幕像素原值（仅坐标缩放），旋转/平移恢复正常。"
+    },
+    {
+      "title": "② GUI 缩放 ≠ 2 时画面与瞄准/射线偏移",
+      "status": "fixed",
+      "why": "<code>getRtsGuiScale()</code>（BuilderScreenScaleManager.java:32）auto 模式错误返回 <code>mc.getWindow().getGuiScale()</code>，但 RTS 渲染始终以 <code>fixedRtsGuiScale</code>（默认 2.0）为虚拟坐标基准。guiScale ≠ 2 时 <code>CursorRaycaster</code>、<code>isMouseOverUiPanelApi</code>、<code>isWorldArea</code>、<code>InteractionTargetPass</code>、<code>CursorWrapHandler</code> 等所有依赖 <code>getRtsGuiScale()/getRtsVirtualWidth()</code> 的坐标换算与渲染坐标系错位 → 瞄准/拾取偏移。修复：<code>getRtsGuiScale()</code> 始终返回 <code>fixedRtsGuiScale</code>，与渲染基准统一。"
+    }
+  ],
+  "boundaries": [
+    "RTS 模式世界画面 = 镜像相机实体视角的帧捕获（captured_frame），每帧随 <code>CameraState</code> 姿态刷新；渲染与射线共用 <code>getMainCamera()</code>，姿态一致。",
+    "RTS UI 渲染与所有鼠标坐标换算统一使用「RTS GUI 缩放基准」<code>fixedRtsGuiScale</code>（默认 2.0），不随窗口原版 GUI 缩放变化；窗口缩放 ≠ 基准时通过 <code>pose.scale</code> 缩放显示。",
+    "拖拽增量是屏幕像素位移，与 GUI 缩放无关，只影响旋转/平移灵敏度，不应参与坐标缩放。",
+    "<code>CameraInputLayer</code> 的 5px 拖拽阈值用于区分「点击」与「拖拽」（中键单击 = 拾取方块），修复后阈值判定使用真实像素位移。",
+    "Shift+右键在 <code>matchesBind</code> 做严格修饰键校验，避免与建造侧右键放置/画笔交互冲突；中键无修饰键直接匹配。"
+  ]
+}

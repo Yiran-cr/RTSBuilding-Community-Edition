@@ -29,6 +29,8 @@ Minecraft RTS-style top-down building mod. NeoForge 1.21.1 / Forge 1.20.1 (branc
 - Keep logic out of loader-specific modules; put shared behavior in `common`, expose cross-mod hooks via `rtsbuilding-api`.
 - The main mod must not compile-reference the built-in addon modules (`rtsbuilding-technologized`, `rtsaddon-*`) — they inject their services via bridges in `common`; the main mod JAR merges all built-in addon outputs and declares them in `neoforge.mods.toml`.
 - New host-mod integrations go under `rtsaddon-<host>/` at the repo root, must be registered in `settings.gradle`, merged into the main JAR, and declared in `rtsbuilding-main/src/main/templates/META-INF/neoforge.mods.toml`.
+- **UI 布局规范**：新增面板 / 重构 UI 排布时，一律使用 uifw 布局包 `com.rtsbuilding.uifw.layout`（`FlexLayout` 行/列 + justify/align/gap/flex 权重、`GridLayout` 网格、`UiBox`/`UiSize` 尺寸声明），禁止再手写散落坐标。行内排布（标签 + 控件 + 右对齐按钮）用 `FlexLayout`；规则网格用 `GridLayout`；渲染与命中检测必须复用同一布局计算，保证坐标一致。现有稳定面板不强改（tooltip/滚动/命中坐标耦合），后续重构时按此规范迁移。
+- **大尺寸贴图必须模糊化（mipmap）**：凡源图 ≥256px、实际绘制到 ≤24px（约 20 倍以上缩小）的 GUI 贴图，一律使用 mipmap 平滑方案，禁止像素风采样。三要素缺一不可：① `TextureInfo` 的 `FilterMode` 用 `HQ`（linear+mipmap=true，绘制由 `TextureStateShard` 强制 `setFilter(true,true)`）；② 启动/资源重载时把纹理注册进 `RtsMipmapTextures.registerAll()`（用 `MipmapTexture` 加载并生成完整 mip 链）；③ 贴图尺寸必须为 2 的幂（非 2 次幂无法生成 mipmap）。**不要**给这类贴图写 `blur:true` 的 `.mcmeta`——`TextureStateShard` 每次绘制会用 `setFilter` 覆盖它，无效且误导；vanilla `SimpleTexture` 永不生成 mipmap（`NativeImage.upload` 的 mipmap 参数恒 false），所以靠 mcmeta 无法平滑大缩小。已迁移：`textures/gui/left/right_button`、`textures/gui/left/button`、`textures/gui/top` 全部图标。
 
 ## 语言文件（lang）约定
 

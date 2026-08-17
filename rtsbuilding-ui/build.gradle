@@ -11,6 +11,15 @@ base {
 version = providers.gradleProperty('uifw_version').getOrElse('1.0.0')
 
 dependencies {
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.0"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.0"
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
 }
 
 neoForge {

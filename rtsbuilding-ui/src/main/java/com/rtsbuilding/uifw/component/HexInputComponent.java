@@ -25,7 +25,7 @@ public class HexInputComponent {
     public static final int INPUT_H = 18;
     private static final int LABEL_GAP = 4;
     public static final int MODE_BTN_HPAD = 6;
-    private static final int MODE_GAP = 4;
+    private static final int MODE_GAP = 6;
     private static final long CURSOR_BLINK_MS = 600;
     private static final int INPUT_PAD = 4;
 
@@ -41,12 +41,19 @@ public class HexInputComponent {
     private final AnimFloat inputFocusAnim = AnimFloat.of(0f, 100L, Easing.EASE_OUT_QUAD);
     private final AnimFloat inputHoverAnim = AnimFloat.hover();
     private boolean prevHexEditMode;
+    /** 模式按钮（HEX/DEC）相对右边缘向左偏移量，供调用方与预览区左侧对齐。 */
+    private int modeBtnRightOffset;
 
     @Nullable
     private IntConsumer onColorParsed;
 
     public void setOnColorParsed(@Nullable IntConsumer callback) {
         this.onColorParsed = callback;
+    }
+
+    /** 设置模式按钮左移量（从右边缘内缩的距离）。 */
+    public void setModeBtnRightOffset(int offset) {
+        this.modeBtnRightOffset = Math.max(0, offset);
     }
 
     public void render(GuiGraphics g, int mouseX, int mouseY, int previewX, int previewW, int inputY, int currentColor) {
@@ -131,7 +138,7 @@ public class HexInputComponent {
             g.drawString(font, displayText, textX, textY, inputTextColor, false);
         }
 
-        int btnX = previewX + previewW - modeBtnW;
+        int btnX = previewX + previewW - modeBtnW - modeBtnRightOffset;
         int btnY = inputY;
         boolean modeBtnHovered = mouseX >= btnX && mouseX < btnX + modeBtnW
                 && mouseY >= btnY && mouseY < btnY + INPUT_H;
@@ -172,8 +179,8 @@ public class HexInputComponent {
                 : "screen.uifw.color_picker.mode.dec");
         String modeTextStr = modeText.getString();
         int modeBtnW = font.width(modeTextStr) + MODE_BTN_HPAD * 2;
-        int inputW = previewW - labelW - LABEL_GAP - modeBtnW - MODE_GAP;
-        int btnX = previewX + previewW - modeBtnW;
+        int inputW = previewW - labelW - LABEL_GAP - modeBtnW - MODE_GAP - modeBtnRightOffset;
+        int btnX = previewX + previewW - modeBtnW - modeBtnRightOffset;
 
         if (mouseX >= btnX && mouseX < btnX + modeBtnW
                 && mouseY >= hexInputY && mouseY < hexInputY + INPUT_H) {
