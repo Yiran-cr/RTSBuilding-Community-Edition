@@ -16,7 +16,7 @@ import java.util.List;
  * 菜单项：
  * <ul>
  *   <li>蓝图文件：打开本地蓝图文件管理面板（列表浏览/删除）；</li>
- *   <li>导入：从系统文件对话框选择其他模组蓝图文件，
+ *   <li>导入：打开蓝图导入面板（网页式上传区），选择其他模组蓝图文件，
  *       经 {@code BlueprintReaders} 转换为本模组蓝图并存入本地蓝图目录。</li>
  * </ul>
  */
@@ -52,7 +52,7 @@ public final class FileMenuPopup extends BasePopup {
 
     /** 「蓝图文件」菜单项动作（打开蓝图文件面板）。 */
     private Runnable onOpenBlueprints;
-    /** 「导入」菜单项动作（打开系统文件选择并导入）。 */
+    /** 「导入」菜单项动作（打开蓝图导入面板）。 */
     private Runnable onImport;
 
     public void setOnOpenBlueprints(Runnable runnable) {

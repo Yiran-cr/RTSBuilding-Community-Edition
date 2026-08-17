@@ -4,5 +4,7 @@
   "screen.uifw.color_picker.mode.hex": "HEX",
   "screen.uifw.color_picker.mode.dec": "DEC",
   "screen.uifw.color_picker.hue": "Hue",
-  "screen.uifw.color_picker.saturation": "Saturation"
+  "screen.uifw.color_picker.saturation": "Saturation",
+  "button.uifw.delete": "Del",
+  "button.uifw.delete_confirm": "Del?"
 }

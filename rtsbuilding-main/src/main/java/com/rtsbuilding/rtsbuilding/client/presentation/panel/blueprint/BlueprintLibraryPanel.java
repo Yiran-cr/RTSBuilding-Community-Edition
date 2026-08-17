@@ -1,6 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint;
 
 import com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore;
+import com.rtsbuilding.uifw.animate.AnimFloat;
+import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.animate.Easing;
 import com.rtsbuilding.uifw.component.DeleteButton;
 import com.rtsbuilding.uifw.layout.FlexLayout;
 import com.rtsbuilding.uifw.layout.UiBox;
@@ -17,17 +20,21 @@ import com.rtsbuilding.rtsbuilding.util.RtsPinyinSearch;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Desktop;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 蓝图文件管理面板 —— 列出本地蓝图目录（config/rts_building/blueprints）中的
@@ -69,6 +76,22 @@ public final class BlueprintLibraryPanel extends UiPanel {
     /** 底部提示消息（删除失败等）。 */
     private Component statusMessage;
 
+    // ── 动画状态（与物品网格 GridRenderer / 工作流 WorkflowRenderer 同款） ──
+    /** 搜索框焦点高亮动画（焦点变化平滑过渡，与物品网格搜索框一致）。 */
+    private final AnimFloat searchFocusAnim = AnimFloat.of(0f, 100L, Easing.EASE_OUT_QUAD);
+    /** 搜索框悬停高亮动画。 */
+    private final AnimFloat searchHoverAnim = AnimFloat.hover();
+    /** 重命名编辑框焦点高亮动画。 */
+    private final AnimFloat renameFocusAnim = AnimFloat.of(0f, 100L, Easing.EASE_OUT_QUAD);
+    /** 上次渲染时的搜索框焦点状态（变化时驱动焦点动画）。 */
+    private boolean prevSearchFocused;
+    /** 上次渲染时是否处于重命名编辑态（变化时驱动编辑框焦点动画）。 */
+    private boolean prevRenaming;
+    /** 文件行悬停动画（按文件关联，各行独立淡入淡出）。 */
+    private final Map<Path, AnimFloat> rowHoverAnims = new HashMap<>();
+    /** 行内「打开文件」按钮悬停动画（按文件关联）。 */
+    private final Map<Path, AnimFloat> openFileBtnHovers = new HashMap<>();
+
     // ── 搜索框状态（与物品网格 GridInputHandler 同款） ──────────────
     /** 搜索框是否聚焦。 */
     private boolean searchFocused;
@@ -109,6 +132,9 @@ public final class BlueprintLibraryPanel extends UiPanel {
         this.pendingDelete = null;
         this.scrollBar.setScroll(0);
         this.statusMessage = null;
+        // 文件集合变化后旧的行 hover 动画缓存不再命中，整体清理避免无界增长
+        this.rowHoverAnims.clear();
+        this.openFileBtnHovers.clear();
         applySearch();
     }
 
@@ -153,18 +179,24 @@ public final class BlueprintLibraryPanel extends UiPanel {
         this.renameCursorBlink = System.currentTimeMillis();
     }
 
-    /** 提交重命名（Enter）：调用本地存储重命名，成功后刷新列表。 */
+    /**
+     * 提交重命名（Enter/点击其他处）：若输入内容与原文件名（不含扩展名）完全一致，
+     * 直接退出编辑态、不做任何写入；否则调用本地存储重命名并提示结果。
+     */
     private void commitRename() {
         if (renamingFile != null) {
             String newName = renameBuffer.toString().trim();
-            try {
-                Path renamed = BlueprintLocalStore.rename(renamingFile, newName);
-                this.statusMessage = Component.translatable("message.rtsbuilding.blueprint.renamed",
-                        renamed.getFileName().toString());
-            } catch (IOException e) {
-                LOG.warn("重命名蓝图文件失败: {} -> {}", renamingFile, newName, e);
-                this.statusMessage = Component.translatable("message.rtsbuilding.blueprint.rename_failed",
-                        e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            String oldName = stripExtension(renamingFile.getFileName().toString());
+            if (!newName.equals(oldName)) {
+                try {
+                    Path renamed = BlueprintLocalStore.rename(renamingFile, newName);
+                    this.statusMessage = Component.translatable("message.rtsbuilding.blueprint.renamed",
+                            renamed.getFileName().toString());
+                } catch (IOException e) {
+                    LOG.warn("重命名蓝图文件失败: {} -> {}", renamingFile, newName, e);
+                    this.statusMessage = Component.translatable("message.rtsbuilding.blueprint.rename_failed",
+                            e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+                }
             }
         }
         this.renamingFile = null;
@@ -222,14 +254,18 @@ public final class BlueprintLibraryPanel extends UiPanel {
         int ch = contentHeight();
         int textColor = ThemeManager.getTextColor();
 
-        // 搜索框（与物品网格 GridRenderer 同款外观）
+        // 搜索框（与物品网格 GridRenderer 同款外观，焦点/悬停高亮带平滑动画）
         int searchX = cx + 8;
         int searchW = cw - 16;
+        if (searchFocused != prevSearchFocused) {
+            searchFocusAnim.target(searchFocused ? 1f : 0f);
+            prevSearchFocused = searchFocused;
+        }
         boolean searchHovered = !searchFocused
                 && mouseX >= searchX && mouseX < searchX + searchW
                 && mouseY >= cy && mouseY < cy + SEARCH_H;
         SdfRenderer.drawInputBox(g, searchX, cy, searchW, SEARCH_H,
-                searchFocused ? 1f : 0f, searchHovered ? 1f : 0f, 4);
+                searchFocusAnim.get(), searchHoverAnim.track(searchHovered), 4);
 
         Font font = Minecraft.getInstance().font;
         String searchText = searchBuffer.toString();
@@ -300,24 +336,30 @@ public final class BlueprintLibraryPanel extends UiPanel {
                 boolean hovering = mouseX >= cx && mouseX < cx + listW
                         && mouseY >= y && mouseY < y + ROW_H;
 
-                // 条目常驻背景：奇偶行交替 + 悬停高亮
-                int rowBg = (index % 2 == 0) ? UiPalette.get("list_row_even") : UiPalette.get("list_row_odd");
-                if (hovering) {
-                    rowBg = UiPalette.get("list_row_hover");
-                }
+                // 条目常驻背景：奇偶行交替 + 悬停高亮（按文件独立平滑过渡）
+                AnimFloat rowHover = rowHoverAnims.computeIfAbsent(file, k -> AnimFloat.hover());
+                int rowBg = ColorAnimation.lerpRGB(
+                        (index % 2 == 0) ? UiPalette.get("list_row_even") : UiPalette.get("list_row_odd"),
+                        UiPalette.get("list_row_hover"),
+                        rowHover.track(hovering));
                 g.fill(cx, y, cx + listW, y + ROW_H, rowBg);
 
-                // 行内排布：[内容区 fill, 删除按钮 fixed] 右对齐
+                // 行内排布：[内容区 fill, 打开文件按钮 fixed, 删除按钮 fixed] 右对齐
                 List<UiRect> rowRects = computeRowRects(cx, y, listW);
                 UiRect contentRect = rowRects.get(0);
-                UiRect delRect = rowRects.get(1);
+                UiRect openRect = rowRects.get(1);
+                UiRect delRect = rowRects.get(2);
 
                 if (file.equals(renamingFile)) {
-                    // 重命名编辑态：绘制输入框 + 缓冲文本 + 光标
+                    // 重命名编辑态：绘制输入框 + 缓冲文本 + 光标（焦点高亮平滑淡入）
+                    if (renamingFile != null != prevRenaming) {
+                        renameFocusAnim.target(renamingFile != null ? 1f : 0f);
+                        prevRenaming = renamingFile != null;
+                    }
                     int editX = contentRect.x() + 4;
                     int editW = contentRect.w() - 8;
                     SdfRenderer.drawInputBox(g, editX, y + 1, editW, ROW_H - 2,
-                            1f, 0f, 3);
+                            renameFocusAnim.get(), 0f, 3);
                     String editText = renameBuffer.toString();
                     String visible = TextRenderer.trimToWidth(font, editText, editW - 8);
                     g.drawString(font, visible, editX + 3,
@@ -330,6 +372,12 @@ public final class BlueprintLibraryPanel extends UiPanel {
                 } else {
                     String name = file.getFileName().toString();
                     TextRenderer.draw(g, name, contentRect.x() + 6, y + (ROW_H - Minecraft.getInstance().font.lineHeight) / 2 + 1, textColor);
+                }
+
+                // 打开文件位置按钮（悬停行时显示）
+                boolean openHover = hitOpenLocation(mouseX, mouseY, openRect);
+                if (hovering || openHover) {
+                    renderOpenLocationButton(g, mouseX, mouseY, openRect, file);
                 }
 
                 // 删除按钮（悬停行时显示，需二次点击确认）
@@ -350,13 +398,69 @@ public final class BlueprintLibraryPanel extends UiPanel {
     }
 
     /**
-     * 行内排布：[内容区 fill, 删除按钮 fixed] 右对齐。渲染与点击命中共用同一布局，
-     * 保证两者坐标一致。
+     * 行内排布：[内容区 fill, 打开文件按钮 fixed, 删除按钮 fixed] 右对齐。
+     * 渲染与点击命中共用同一布局，保证两者坐标一致。
      */
     private static List<UiRect> computeRowRects(int cx, int y, int listW) {
         return FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.START,
                 FlexLayout.Align.CENTER, 3, cx, y, listW, ROW_H,
-                List.of(UiBox.fill(1f), UiBox.fixed(DeleteButton.SIZE, DeleteButton.SIZE)));
+                List.of(UiBox.fill(1f),
+                        UiBox.fixed(openLocationWidth(), DeleteButton.SIZE),
+                        UiBox.fixed(DeleteButton.width(), DeleteButton.SIZE)));
+    }
+
+    /** 打开文件按钮宽度（px）：按当前语言按钮文字的渲染宽度自适应（含左右内边距）。 */
+    private static int openLocationWidth() {
+        Font font = Minecraft.getInstance().font;
+        return font.width(Component.translatable("button.rtsbuilding.blueprint.open_file").getString()) + 12;
+    }
+
+    /** 打开文件位置按钮：本地化文字 + 悬停渐变（与删除按钮同风格）。 */
+    private void renderOpenLocationButton(GuiGraphics g, int mouseX, int mouseY, UiRect rect, Path file) {
+        boolean hovering = hitOpenLocation(mouseX, mouseY, rect);
+        float t = openFileBtnHovers.computeIfAbsent(file, k -> AnimFloat.hover()).track(hovering);
+        int bg = ColorAnimation.lerpRGB(UiPalette.get("list_btn"), UiPalette.get("list_btn_hover"), t);
+        SdfRenderer.drawRoundedRect(g, rect.x(), rect.y(), rect.w(), rect.h(), 3, bg);
+        Font font = Minecraft.getInstance().font;
+        String text = Component.translatable("button.rtsbuilding.blueprint.open_file").getString();
+        TextRenderer.drawCentered(g, font, text,
+                rect.x() + rect.w() / 2, rect.y() + (rect.h() - font.lineHeight) / 2 + 1,
+                UiPalette.get("tooltip_text"));
+    }
+
+    /** 命中检测（与渲染坐标一致）。 */
+    private static boolean hitOpenLocation(double mx, double my, UiRect rect) {
+        return mx >= rect.x() && mx < rect.x() + rect.w()
+                && my >= rect.y() && my < rect.y() + rect.h();
+    }
+
+    /** 用系统文件管理器打开该蓝图文件所在文件夹位置（Windows/macOS 上定位选中该文件）。 */
+    private void openFileLocation(Path file) {
+        try {
+            if (file == null || !Files.exists(file)) {
+                this.statusMessage = Component.translatable("message.rtsbuilding.blueprint.open_file_failed");
+                return;
+            }
+            Path abs = file.toAbsolutePath();
+            if (Util.getPlatform() == Util.OS.WINDOWS) {
+                Runtime.getRuntime().exec(new String[]{"explorer", "/select,", abs.toString()});
+                this.statusMessage = null;
+                return;
+            }
+            if (Util.getPlatform() == Util.OS.OSX) {
+                Runtime.getRuntime().exec(new String[]{"open", "-R", abs.toString()});
+                this.statusMessage = null;
+                return;
+            }
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(file.getParent().toFile());
+                this.statusMessage = null;
+                return;
+            }
+        } catch (IOException | UnsupportedOperationException e) {
+            LOG.warn("打开蓝图文件位置失败: {}", file, e);
+        }
+        this.statusMessage = Component.translatable("message.rtsbuilding.blueprint.open_file_failed");
     }
 
     @Override
@@ -416,7 +520,16 @@ public final class BlueprintLibraryPanel extends UiPanel {
             }
             if (y >= listY + listH) break;
             if (mouseY >= y && mouseY < y + ROW_H) {
-                UiRect delRect = computeRowRects(cx, y, listW).get(1);
+                List<UiRect> rowRects = computeRowRects(cx, y, listW);
+                // 打开文件位置按钮：重命名编辑态下不响应
+                boolean onOpen = hitOpenLocation(mouseX, mouseY, rowRects.get(1));
+                if (onOpen) {
+                    if (renamingFile == null) {
+                        openFileLocation(file);
+                    }
+                    return;
+                }
+                UiRect delRect = rowRects.get(2);
                 boolean onDelete = deleteButton.hit(mouseX, mouseY, delRect.x(), delRect.y());
                 if (onDelete) {
                     // 重命名编辑态下不响应删除
@@ -613,6 +726,14 @@ public final class BlueprintLibraryPanel extends UiPanel {
         this.renameBuffer.setLength(0);
         this.renameCursorPos = 0;
         this.statusMessage = null;
+        // 重置动画与焦点状态，保证下次打开从静止态开始
+        this.searchFocusAnim.snapTo(0f);
+        this.searchHoverAnim.snapTo(0f);
+        this.renameFocusAnim.snapTo(0f);
+        this.prevSearchFocused = false;
+        this.prevRenaming = false;
+        this.rowHoverAnims.clear();
+        this.openFileBtnHovers.clear();
         super.onClose();
     }
 }

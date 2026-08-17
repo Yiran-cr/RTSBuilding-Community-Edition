@@ -458,6 +458,20 @@ public final class SdfRenderer {
     }
 
     /**
+     * 加号图标：横条 + 竖条组成的圆角十字，用于「上传/新增/导入」等语义。
+     *
+     * @param cx,cy 图标中心
+     * @param size  图标外接正方形边长（px）
+     */
+    public static void drawPlusIcon(GuiGraphics g, int cx, int cy, int size, int color) {
+        int bar = Math.max(2, size / 5);
+        int len = Math.max(4, size - bar);
+        int r = bar / 2;
+        drawRoundedRect(g, cx - len / 2, cy - bar / 2, len, bar, r, color);
+        drawRoundedRect(g, cx - bar / 2, cy - len / 2, bar, len, r, color);
+    }
+
+    /**
      * 用矢量线段绘制一个等距视角的正方体线框（12 条棱，正方形外接区域）。
      * 投影采用 2:1 等距：顶面为菱形，左/右两棱的斜率为 1/2。
      */

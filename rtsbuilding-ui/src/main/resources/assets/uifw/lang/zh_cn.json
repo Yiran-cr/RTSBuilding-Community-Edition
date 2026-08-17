@@ -4,5 +4,7 @@
   "screen.uifw.color_picker.mode.hex": "十六进制",
   "screen.uifw.color_picker.mode.dec": "十进制",
   "screen.uifw.color_picker.hue": "色相",
-  "screen.uifw.color_picker.saturation": "饱和度"
+  "screen.uifw.color_picker.saturation": "饱和度",
+  "button.uifw.delete": "删除",
+  "button.uifw.delete_confirm": "删除?"
 }

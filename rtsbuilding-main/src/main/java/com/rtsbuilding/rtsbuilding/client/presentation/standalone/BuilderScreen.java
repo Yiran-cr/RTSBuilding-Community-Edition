@@ -5,6 +5,7 @@ import com.rtsbuilding.uifw.render.UiPalette;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.rtsbuilding.rtsbuilding.client.application.service.ScreenCoordinator;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
+import com.rtsbuilding.rtsbuilding.client.util.TinyFileDialogSupport;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.input.layer.CameraInputLayer;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
@@ -15,6 +16,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.layout.RenderLayer;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.background.ScreenBackgroundPanel;
 import com.rtsbuilding.uifw.window.window.FloatingWindowLayer;
 import com.rtsbuilding.uifw.window.window.UiPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintImportPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintLibraryPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintSavePanel;
 import com.rtsbuilding.uifw.component.color.ColorPickerPanel;
@@ -60,6 +62,9 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     /** 蓝图文件管理面板：顶栏「文件」→「蓝图文件」打开。 */
     private final BlueprintLibraryPanel blueprintLibraryPanel;
 
+    /** 蓝图导入面板：顶栏「文件」→「导入」打开（网页式上传区选择文件转换导入）。 */
+    private final BlueprintImportPanel blueprintImportPanel;
+
     
     private final PanelRegistry panelRegistry = new PanelRegistry();
 
@@ -100,6 +105,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         this.topBarPanel = new TopBarPanel();
         this.blueprintSavePanel = new BlueprintSavePanel();
         this.blueprintLibraryPanel = new BlueprintLibraryPanel();
+        this.blueprintImportPanel = new BlueprintImportPanel();
         long t1 = System.nanoTime();
         panelRegistry.register(topBarPanel, RenderLayer.CONTENT_PANELS);
         panelRegistry.register(leftSidebarPanel, RenderLayer.CONTENT_PANELS);
@@ -112,8 +118,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         });
         // 「文件」→「蓝图文件」：打开蓝图文件管理面板
         this.topBarPanel.setOnOpenBlueprintLibrary(() -> blueprintLibraryPanel.open());
-        // 「文件」→「导入」：导入其他模组蓝图并转换为本模组蓝图
-        this.topBarPanel.setOnImportBlueprint(this::importBlueprintFile);
+        // 「文件」→「导入」：打开蓝图导入面板（网页式上传区选择文件导入）
+        this.topBarPanel.setOnImportBlueprint(() -> blueprintImportPanel.open());
         long t2 = System.nanoTime();
 
         this.selectionHighlight = new SelectionHighlight();
@@ -191,6 +197,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         addFloatingWindowIfAbsent(this.blueprintSavePanel);
         this.blueprintLibraryPanel.init(this);
         addFloatingWindowIfAbsent(this.blueprintLibraryPanel);
+        this.blueprintImportPanel.init(this);
+        addFloatingWindowIfAbsent(this.blueprintImportPanel);
         long t2 = System.nanoTime();
         panelRegistry.initAll(this);
         long t3 = System.nanoTime();
@@ -283,36 +291,34 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         return this.blueprintLibraryPanel;
     }
 
+    /** 蓝图导入面板（顶栏「文件」→「导入」）。 */
+    public BlueprintImportPanel getBlueprintImportPanel() {
+        return this.blueprintImportPanel;
+    }
+
     /**
      * 导入外部蓝图文件（Sponge 结构 / Litematica / Building Gadgets 模板 / 原版结构）。
      * <p>弹出系统文件选择对话框选择蓝图文件，经 {@code BlueprintReaders} 自动转换
      * 为本模组的原版结构 NBT 形式并存入本地蓝图目录；成功后刷新蓝图文件面板。</p>
+     *
+     * @return 保存的蓝图文件路径；用户取消选择返回 null
+     * @throws IOException            读取/写入失败
+     * @throws BlueprintParseException 蓝图格式解析失败
+     * @throws IllegalArgumentException 导入方块数超过上限
      */
-    public void importBlueprintFile() {
+    public Path importBlueprintFile() throws java.io.IOException,
+            com.rtsbuilding.rtsbuilding.common.blueprint.model.BlueprintParseException {
         Minecraft mc = Minecraft.getInstance();
         Path source = chooseBlueprintFile();
         if (source == null) {
-            return;
+            return null;
         }
-        try {
-            var registryAccess = mc.level != null
-                    ? mc.level.registryAccess()
-                    : net.minecraft.core.RegistryAccess.EMPTY;
-            Path saved = com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore.importFile(source, registryAccess);
-            blueprintLibraryPanel.refreshFiles();
-            if (mc.player != null) {
-                mc.player.displayClientMessage(
-                        Component.translatable("message.rtsbuilding.blueprint.import.success",
-                                saved.getFileName().toString()), true);
-            }
-        } catch (Exception ex) {
-            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.warn("导入蓝图失败: {}", source, ex);
-            if (mc.player != null) {
-                mc.player.displayClientMessage(
-                        Component.translatable("message.rtsbuilding.blueprint.import.failed",
-                                ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()), true);
-            }
-        }
+        var registryAccess = mc.level != null
+                ? mc.level.registryAccess()
+                : net.minecraft.core.RegistryAccess.EMPTY;
+        Path saved = com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore.importFile(source, registryAccess);
+        blueprintLibraryPanel.refreshFiles();
+        return saved;
     }
 
     /**
@@ -323,6 +329,29 @@ public class BuilderScreen extends Screen implements UiPanelHost {
      */
     private static Path chooseBlueprintFile() {
         Minecraft mc = Minecraft.getInstance();
+        // 优先使用 LWJGL 内置 TinyFD 原生文件对话框：不经 AWT，不受 java.awt.headless 限制，
+        // 支持 Windows/macOS/Linux 桌面图形后端（与客户端本身同平台）。
+        if (TinyFileDialogSupport.canOpenFileDialog()) {
+            String selected;
+            try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
+                org.lwjgl.PointerBuffer filters = stack.mallocPointer(5);
+                filters.put(stack.UTF8("*.nbt"));
+                filters.put(stack.UTF8("*.schem"));
+                filters.put(stack.UTF8("*.schematic"));
+                filters.put(stack.UTF8("*.litematic"));
+                filters.put(stack.UTF8("*.json"));
+                filters.flip();
+                selected = org.lwjgl.util.tinyfd.TinyFileDialogs.tinyfd_openFileDialog(
+                        Component.translatable("screen.rtsbuilding.blueprint.import.title").getString(),
+                        null, filters, "Blueprint files", false);
+            }
+            if (selected == null || selected.isBlank()) {
+                return null;
+            }
+            return java.nio.file.Path.of(selected);
+        }
+
+        // AWT 兜底：仅当 TinyFD 探测不到图形后端时使用。
         if (java.awt.GraphicsEnvironment.isHeadless()) {
             com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.warn("当前环境为 headless，无法打开文件选择对话框");
             if (mc.player != null) {
@@ -338,7 +367,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         try {
             java.awt.EventQueue.invokeAndWait(() -> {
                 try {
-                    // 使用 AWT 原生文件对话框：无需额外依赖，且支持 Windows/Linux 桌面环境
+                    // 使用 AWT 原生文件对话框：支持 Windows/Linux 桌面环境
                     java.awt.Frame dummy = new java.awt.Frame();
                     java.awt.FileDialog dialog = new java.awt.FileDialog(dummy,
                             Component.translatable("screen.rtsbuilding.blueprint.import.title").getString(),
