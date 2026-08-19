@@ -615,7 +615,7 @@ public final class GridRenderer {
     }
 
     private void renderEmptyHint(GuiGraphics g) {
-        String hint = "No storage";
+        String hint = Component.translatable("screen.rtsbuilding.rightdown.no_storage").getString();
         Minecraft mc = Minecraft.getInstance();
         int lineH = mc.font.lineHeight;
         TextRenderer.drawCentered(g, mc.font, hint,

@@ -1,6 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.bootstrap;
 
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintImportPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.ActionButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.BuildDestroyButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.SelectButtonGroup;
@@ -72,6 +73,9 @@ public final class RtsMipmapTextures {
                         CameraModeGroup.FREE_MODE,
                         CameraModeGroup.SURROUND_MODE,
                         UtilityButtonGroup.CHUNK_DISPLAY
+                },
+                new ResourceLocation[] {
+                        BlueprintImportPanel.UPDATE_TEXTURE
                 });
     }
 

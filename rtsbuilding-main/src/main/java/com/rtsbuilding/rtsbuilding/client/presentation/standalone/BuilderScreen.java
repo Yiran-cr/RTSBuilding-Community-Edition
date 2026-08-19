@@ -42,6 +42,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BuilderScreen extends Screen implements UiPanelHost {
 
@@ -64,6 +66,9 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     /** 蓝图导入面板：顶栏「文件」→「导入」打开（网页式上传区选择文件转换导入）。 */
     private final BlueprintImportPanel blueprintImportPanel;
+
+    /** 待处理的拖放文件路径（drop 回调缓存，渲染阶段判定落点后消费）。 */
+    private List<Path> pendingDropPaths;
 
     
     private final PanelRegistry panelRegistry = new PanelRegistry();
@@ -297,37 +302,77 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     }
 
     /**
-     * 导入外部蓝图文件（Sponge 结构 / Litematica / Building Gadgets 模板 / 原版结构）。
-     * <p>弹出系统文件选择对话框选择蓝图文件，经 {@code BlueprintReaders} 自动转换
-     * 为本模组的原版结构 NBT 形式并存入本地蓝图目录；成功后刷新蓝图文件面板。</p>
-     *
-     * @return 保存的蓝图文件路径；用户取消选择返回 null
-     * @throws IOException            读取/写入失败
-     * @throws BlueprintParseException 蓝图格式解析失败
-     * @throws IllegalArgumentException 导入方块数超过上限
+     * 系统文件拖放回调：导入面板打开时缓存拖入的文件路径，落点判定延迟到渲染阶段
+     * （见 {@link #handlePendingFileDrop}），只有落在上传区圆角框内才触发导入。
+     * Minecraft 由 GLFW drop 回调经 {@code MouseHandler} 触发本方法。
      */
-    public Path importBlueprintFile() throws java.io.IOException,
-            com.rtsbuilding.rtsbuilding.common.blueprint.model.BlueprintParseException {
-        Minecraft mc = Minecraft.getInstance();
-        Path source = chooseBlueprintFile();
-        if (source == null) {
-            return null;
+    @Override
+    public void onFilesDrop(List<Path> paths) {
+        if (blueprintImportPanel == null || !blueprintImportPanel.isOpen()
+                || paths == null || paths.isEmpty()) {
+            return;
         }
-        var registryAccess = mc.level != null
-                ? mc.level.registryAccess()
-                : net.minecraft.core.RegistryAccess.EMPTY;
-        Path saved = com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore.importFile(source, registryAccess);
-        blueprintLibraryPanel.refreshFiles();
-        return saved;
+        // drop 回调阶段 RTS 缩放坐标系不稳定（screen.width 可能处于临时改写窗口期），
+        // 先缓存路径，等下一帧渲染时用稳定坐标系判定落点
+        this.pendingDropPaths = paths;
     }
 
     /**
-     * 弹出系统文件选择对话框，返回用户选择的蓝图文件路径；取消返回 null。
-     * <p>AWT 组件必须在事件分发线程（EDT）上创建与显示，这里用
-     * {@link java.awt.EventQueue#invokeAndWait} 包裹，避免在 Minecraft 渲染线程
-     * 直接创建 AWT 对话框导致无法显示。headless 环境下返回 null 并提示。</p>
+     * 当前是否处于 RTS 虚拟坐标层：
+     * <ul>
+     *   <li>固定缩放渲染层内（{@code fixedRtsScaleRenderPass}）——{@code this.width} 已临时改为虚拟宽；</li>
+     *   <li>或 RTS 缩放 == 原版 GUI 缩放（虚拟坐标系即 GUI 坐标系，不会进入固定缩放层）。</li>
+     * </ul>
+     * 两层中 {@code mouseX/mouseY} 与 {@link UiPanel} 的 bounds 均为同一基准，可直接用于命中判断。
      */
-    private static Path chooseBlueprintFile() {
+    private boolean isVirtualCoordinateLayer() {
+        if (scaleManager.isInRenderPass()) {
+            return true;
+        }
+        var window = Minecraft.getInstance().getWindow();
+        return window != null
+                && Math.abs(scaleManager.getRtsGuiScale() - window.getGuiScale()) < 0.001;
+    }
+
+    /**
+     * 渲染阶段处理缓存的拖放文件：此时 RTS 虚拟坐标系稳定、与面板渲染/命中同基准，
+     * 把鼠标落点换算到虚拟坐标后，只有落在导入面板上传区圆角框内才触发导入。
+     */
+    private void handlePendingFileDrop(int mouseX, int mouseY) {
+        if (pendingDropPaths == null) {
+            return;
+        }
+        List<Path> paths = pendingDropPaths;
+        pendingDropPaths = null;
+        if (blueprintImportPanel == null || !blueprintImportPanel.isOpen()
+                || Minecraft.getInstance().getWindow() == null) {
+            return;
+        }
+        // 优先用实时光标（拖放落点），失败回退 gui scaled → RTS 虚拟坐标换算
+        double[] live = BlueprintImportPanel.liveCursorVirtual(this);
+        if (live != null) {
+            if (blueprintImportPanel.isInsideDropZone(live[0], live[1])) {
+                blueprintImportPanel.onFilesDropped(paths);
+            }
+            return;
+        }
+        double currentScale = Minecraft.getInstance().getWindow().getScreenWidth()
+                / (double) Math.max(1, this.width);
+        double renderScale = scaleManager.getRtsGuiScale() / currentScale;
+        double vx = mouseX / renderScale;
+        double vy = mouseY / renderScale;
+        if (blueprintImportPanel.isInsideDropZone(vx, vy)) {
+            blueprintImportPanel.onFilesDropped(paths);
+        }
+    }
+
+    /**
+     * 弹出系统文件选择对话框（支持多选），返回用户选择的蓝图文件路径列表；取消返回空列表。
+     * <p>优先使用 LWJGL 内置 TinyFD 原生文件对话框（不经 AWT，不受 {@code java.awt.headless}
+     * 限制，支持 Windows/macOS/Linux 桌面图形后端，多选结果以 {@code '|'} 分隔），
+     * 失败时回退 AWT FileDialog（单选）。</p>
+     */
+    public static List<Path> chooseBlueprintFiles() {
         Minecraft mc = Minecraft.getInstance();
         // 优先使用 LWJGL 内置 TinyFD 原生文件对话框：不经 AWT，不受 java.awt.headless 限制，
         // 支持 Windows/macOS/Linux 桌面图形后端（与客户端本身同平台）。
@@ -343,12 +388,20 @@ public class BuilderScreen extends Screen implements UiPanelHost {
                 filters.flip();
                 selected = org.lwjgl.util.tinyfd.TinyFileDialogs.tinyfd_openFileDialog(
                         Component.translatable("screen.rtsbuilding.blueprint.import.title").getString(),
-                        null, filters, "Blueprint files", false);
+                        null, filters, "Blueprint files", true);
             }
             if (selected == null || selected.isBlank()) {
-                return null;
+                return List.of();
             }
-            return java.nio.file.Path.of(selected);
+            // tinyfd 多选结果用 '|' 分隔
+            List<Path> paths = new ArrayList<>();
+            for (String part : selected.split("\\|")) {
+                String s = part == null ? "" : part.trim();
+                if (!s.isEmpty()) {
+                    paths.add(java.nio.file.Path.of(s));
+                }
+            }
+            return paths;
         }
 
         // AWT 兜底：仅当 TinyFD 探测不到图形后端时使用。
@@ -359,7 +412,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
                         Component.translatable("message.rtsbuilding.blueprint.import.failed",
                                 "headless environment"), true);
             }
-            return null;
+            return List.of();
         }
 
         final Path[] result = {null};
@@ -367,7 +420,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         try {
             java.awt.EventQueue.invokeAndWait(() -> {
                 try {
-                    // 使用 AWT 原生文件对话框：支持 Windows/Linux 桌面环境
+                    // 使用 AWT 原生文件对话框：支持 Windows/Linux 桌面环境（单选）
                     java.awt.Frame dummy = new java.awt.Frame();
                     java.awt.FileDialog dialog = new java.awt.FileDialog(dummy,
                             Component.translatable("screen.rtsbuilding.blueprint.import.title").getString(),
@@ -403,9 +456,9 @@ public class BuilderScreen extends Screen implements UiPanelHost {
                                         ? failure[0].getClass().getSimpleName()
                                         : failure[0].getMessage()), true);
             }
-            return null;
+            return List.of();
         }
-        return result[0];
+        return result[0] == null ? List.of() : List.of(result[0]);
     }
 
     public int getRightSidebarWidth() {
@@ -702,6 +755,11 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // 仅在 RTS 虚拟坐标层处理缓存的拖放文件（此时坐标系与面板渲染/命中一致，
+        // 避免在外层 gui scaled 层换算导致落点命中失败）
+        if (isVirtualCoordinateLayer()) {
+            handlePendingFileDrop(mouseX, mouseY);
+        }
         
         if (!scaleManager.isInRenderPass() && renderWithFixedRtsGuiScale(guiGraphics, mouseX, mouseY, partialTick)) {
             

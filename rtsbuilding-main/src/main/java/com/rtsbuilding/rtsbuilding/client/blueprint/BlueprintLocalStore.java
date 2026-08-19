@@ -124,10 +124,29 @@ public final class BlueprintLocalStore {
      */
     public static Path importFile(Path source, RegistryAccess registryAccess)
             throws IOException, BlueprintParseException {
+        return importFile(source, registryAccess, null);
+    }
+
+    /**
+     * 导入外部蓝图文件，可回调导入阶段供 UI 展示进度。
+     *
+     * @param source         外部蓝图文件路径
+     * @param registryAccess 注册表访问（用于解析方块状态）
+     * @param stage          阶段回调（读取/解析/写出），可为 null
+     * @return 转换并保存后的本地蓝图文件路径
+     * @throws IOException              读取/写入失败
+     * @throws BlueprintParseException  蓝图格式解析失败
+     * @throws IllegalArgumentException 导入方块数超过上限
+     */
+    public static Path importFile(Path source, RegistryAccess registryAccess,
+                                  java.util.function.Consumer<ImportStage> stage)
+            throws IOException, BlueprintParseException {
         if (source == null) {
             throw new IOException("蓝图文件路径为空");
         }
+        if (stage != null) stage.accept(ImportStage.READING);
         byte[] data = Files.readAllBytes(source);
+        if (stage != null) stage.accept(ImportStage.PARSING);
         RtsBlueprint blueprint = BlueprintReaders.parse(data, source.getFileName().toString(), registryAccess);
         if (blueprint.blockCount() > BlueprintWriters.maxCaptureBlocks()) {
             throw new IllegalArgumentException(
@@ -141,8 +160,19 @@ public final class BlueprintLocalStore {
             clean = "blueprint_" + System.currentTimeMillis();
         }
         Path out = uniquePath(blueprintDir().resolve(clean + ".nbt"));
+        if (stage != null) stage.accept(ImportStage.WRITING);
         BlueprintWriters.writeVanillaStructure(blueprint, out);
         return out;
+    }
+
+    /** 导入阶段（供进度条等 UI 反馈）。 */
+    public enum ImportStage {
+        /** 读取源文件字节。 */
+        READING,
+        /** 解析为统一的 RtsBlueprint 对象。 */
+        PARSING,
+        /** 写出为本模组蓝图文件。 */
+        WRITING
     }
 
     /** 去掉文件名扩展名。 */

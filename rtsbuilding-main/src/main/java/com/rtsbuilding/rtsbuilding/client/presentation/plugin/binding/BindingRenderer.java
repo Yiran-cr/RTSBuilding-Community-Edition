@@ -125,7 +125,7 @@ public final class BindingRenderer {
                         btnBar, fontColor, mc, mouseX, mouseY, clipY, visibleH);
             }
         } else {
-            String hint = "No linked";
+            String hint = Component.translatable("screen.rtsbuilding.binding.no_linked").getString();
             int textColor = (ThemeManager.getTextColor() & 0xFFFFFF) | 0x60000000;
             int lineH = Minecraft.getInstance().font.lineHeight;
             TextRenderer.drawCentered(g, Minecraft.getInstance().font, hint,

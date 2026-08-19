@@ -2,6 +2,7 @@ package com.rtsbuilding.uifw.component;
 
 import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
+import com.rtsbuilding.uifw.animate.Easing;
 import com.rtsbuilding.uifw.render.SdfRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.render.UiPalette;
@@ -13,7 +14,8 @@ import net.minecraft.network.chat.Component;
 /**
  * 文字删除按钮：SDF 圆角背景（悬停渐变）+ 本地化文字（中文「删除」/英文「Del」）。
  * <p>支持确认态：{@code confirm} 为 true 时背景切换为警示红、文字切换为确认文本
- * （「删除?」/「Del?」），提示需要再次点击才执行删除（防误删）。</p>
+ * （「删除?」/「Del?」），提示需要再次点击才执行删除（防误删）；由调用方在进入确认态时
+ * 调用 {@link #triggerFlash()} 播放一次闪烁提醒动画。</p>
  * <p>按钮宽度按当前语言文字的渲染宽度自适应（普通态与确认态取较宽者，保证
  * 二次确认切换时宽度不跳动、行布局稳定），高度固定 {@link #SIZE}。</p>
  */
@@ -31,6 +33,8 @@ public final class DeleteButton {
     private static final String CONFIRM_KEY = "button.uifw.delete_confirm";
 
     private final AnimFloat hoverState = AnimFloat.hover();
+    /** 进入二次确认态时的闪烁提醒动画（0→1，800ms，明-更亮-明脉冲）。 */
+    private final AnimFloat flashAnim = AnimFloat.of(0f, 800L, Easing.EASE_OUT_QUAD);
 
     /**
      * 按钮宽度（px）：普通态与确认态文字渲染宽度的较大者 + 左右内边距，
@@ -41,6 +45,12 @@ public final class DeleteButton {
         int textW = Math.max(font.width(Component.translatable(LABEL_KEY).getString()),
                 font.width(Component.translatable(CONFIRM_KEY).getString()));
         return textW + TEXT_PAD * 2;
+    }
+
+    /** 触发一次闪烁提醒（进入二次确认态时由调用方调用）。 */
+    public void triggerFlash() {
+        this.flashAnim.snapTo(0f);
+        this.flashAnim.target(1f);
     }
 
     /**
@@ -54,8 +64,15 @@ public final class DeleteButton {
         float t = this.hoverState.track(hovering);
 
         int w = width();
+
+        // 确认态闪烁：明-更亮-明脉冲（背景向 1.5 倍亮色过渡一次后恢复），播放结束后回到常亮
         int base = confirm ? UiPalette.get("list_delete") : UiPalette.get("list_btn");
         int bg = ColorAnimation.lerpRGB(base, UiPalette.get("list_btn_hover"), t);
+        float flash = this.flashAnim.get();
+        if (confirm && flash < 1f) {
+            float pulse = (float) Math.sin(flash * Math.PI);
+            bg = ColorAnimation.lerpRGB(bg, ColorAnimation.scale(base, 1.5f), pulse);
+        }
         SdfRenderer.drawRoundedRect(g, x, y, w, SIZE, RADIUS, bg);
 
         Font font = Minecraft.getInstance().font;

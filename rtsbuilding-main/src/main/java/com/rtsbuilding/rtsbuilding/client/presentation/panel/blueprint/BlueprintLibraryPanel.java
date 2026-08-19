@@ -534,11 +534,12 @@ public final class BlueprintLibraryPanel extends UiPanel {
                 if (onDelete) {
                     // 重命名编辑态下不响应删除
                     if (renamingFile == null) {
-                        // 二次点击确认删除
+                        // 二次点击确认删除：首次点击进入确认态并闪烁提醒
                         if (pendingDelete == file) {
                             deleteFile(file);
                         } else {
                             pendingDelete = file;
+                            deleteButton.triggerFlash();
                         }
                     }
                     return;

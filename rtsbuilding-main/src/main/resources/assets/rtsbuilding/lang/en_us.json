@@ -93,6 +93,7 @@
   "ui.rtsbuilding.binding.extract_only": "Extract Only",
   "ui.rtsbuilding.binding.show_location": "Show Location",
   "ui.rtsbuilding.binding.hide_location": "Hide Location",
+  "screen.rtsbuilding.binding.no_linked": "No linked containers",
   "ui.rtsbuilding.shape.build": "Build",
   "ui.rtsbuilding.shape.break": "Break",
   "ui.rtsbuilding.shape.right_button": "RMB",
@@ -175,6 +176,8 @@
 
   "tooltip.rtsbuilding.rightdown.search_placeholder": "Search items...",
 
+  "screen.rtsbuilding.rightdown.no_storage": "No storage",
+
   "tooltip.rtsbuilding.rightdown.no_search_results": "No matching items",
 
   "screen.rtsbuilding.workflow.none": "No active workflows",
@@ -242,10 +245,20 @@
   "message.rtsbuilding.blueprint.import.success": "§7[Blueprint] §aImported blueprint: %s",
   "message.rtsbuilding.blueprint.import.failed": "§7[Blueprint] §cImport failed: %s",
   "screen.rtsbuilding.blueprint.import_panel.title": "Import Blueprint",
-  "screen.rtsbuilding.blueprint.import_panel.click": "Click to choose a blueprint file",
+  "screen.rtsbuilding.blueprint.import_panel.hint": "Drop a file, or click the button below",
+  "screen.rtsbuilding.blueprint.import_panel.drop_invalid": "The dropped file is not a supported blueprint format",
+  "screen.rtsbuilding.blueprint.import_panel.stage.preparing": "Preparing import…",
+  "screen.rtsbuilding.blueprint.import_panel.stage.reading": "Reading file…",
+  "screen.rtsbuilding.blueprint.import_panel.stage.parsing": "Parsing blueprint…",
+  "screen.rtsbuilding.blueprint.import_panel.stage.writing": "Writing blueprint…",
   "screen.rtsbuilding.blueprint.import_panel.supported": "Supports Sponge / Litematica / Building Gadgets / Vanilla structures",
   "screen.rtsbuilding.blueprint.import_panel.success": "Imported: %s",
+  "screen.rtsbuilding.blueprint.import_panel.success_multi": "Imported %d files",
+  "screen.rtsbuilding.blueprint.import_panel.partial": "Imported %d, failed %d",
   "screen.rtsbuilding.blueprint.import_panel.failed": "Import failed: %s",
+  "screen.rtsbuilding.blueprint.import_panel.stage.count": " (%d/%d)",
+  "button.rtsbuilding.blueprint.choose_file": "Choose File",
+  "button.rtsbuilding.blueprint.open_library": "Open Blueprint Library",
   "message.rtsbuilding.blueprint.delete_failed": "§7[Blueprint] §cFailed to delete blueprint file",
   "button.rtsbuilding.blueprint.open_file": "Open File",
   "message.rtsbuilding.blueprint.open_file_failed": "§7[Blueprint] §cFailed to open file location",
