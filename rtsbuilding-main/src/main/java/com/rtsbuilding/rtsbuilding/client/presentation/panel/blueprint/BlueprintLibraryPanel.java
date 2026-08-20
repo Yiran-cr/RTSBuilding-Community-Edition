@@ -1,8 +1,11 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint;
 
 import com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore;
+import com.rtsbuilding.rtsbuilding.client.infrastructure.module.building.BuildingModule;
+import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintReaders;
+import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.animate.Easing;
@@ -127,6 +130,12 @@ public final class BlueprintLibraryPanel extends UiPanel {
     private int renameCursorPos;
     /** 重命名光标闪烁时间戳。 */
     private long renameCursorBlink;
+
+    /** 是否处于蓝图模式（顶栏模式切换器 BLUEPRINT）：仅该模式下显示并允许使用「使用蓝图」按钮。 */
+    private boolean isBlueprintMode() {
+        BuildingModule bm = RtsClientKernel.get().module(BuildingModule.class);
+        return bm != null && bm.getMode() == BuilderMode.BLUEPRINT;
+    }
 
     @Override
     public void init(com.rtsbuilding.uifw.window.api.UiPanelHost screen) {
@@ -374,13 +383,16 @@ public final class BlueprintLibraryPanel extends UiPanel {
                 }
                 g.fill(cx, y, cx + listW, y + ROW_H, rowBg);
 
-                // 行内排布：[内容区 fill, 使用, 预览, 打开文件, 删除] 右对齐
-                List<UiRect> rowRects = computeRowRects(cx, y, listW);
+                // 行内排布：[内容区 fill, (使用), 预览, 打开文件, 删除] 右对齐；「使用」仅蓝图模式下显示
+                boolean showUse = isBlueprintMode();
+                List<UiRect> rowRects = computeRowRects(cx, y, listW, showUse);
                 UiRect contentRect = rowRects.get(0);
-                UiRect useRect = rowRects.get(1);
-                UiRect previewRect = rowRects.get(2);
-                UiRect openRect = rowRects.get(3);
-                UiRect delRect = rowRects.get(4);
+                int btnIdx = 1;
+                UiRect useRect = null;
+                if (showUse) useRect = rowRects.get(btnIdx++);
+                UiRect previewRect = rowRects.get(btnIdx++);
+                UiRect openRect = rowRects.get(btnIdx++);
+                UiRect delRect = rowRects.get(btnIdx);
 
                 if (file.equals(renamingFile)) {
                     // 重命名编辑态：绘制输入框 + 缓冲文本 + 光标（焦点高亮平滑淡入）
@@ -406,10 +418,12 @@ public final class BlueprintLibraryPanel extends UiPanel {
                     TextRenderer.draw(g, name, contentRect.x() + 6, y + (ROW_H - Minecraft.getInstance().font.lineHeight) / 2 + 1, textColor);
                 }
 
-                // 使用 / 预览 / 打开文件按钮（悬停行时显示）
-                boolean useHover = !suppressed && hitButton(mouseX, mouseY, useRect);
-                if (hovering || useHover) {
-                    renderTextButton(g, mouseX, mouseY, useRect, "button.rtsbuilding.blueprint.use", useBtnHovers, file);
+                // 使用 / 预览 / 打开文件按钮（悬停行时显示；「使用」仅蓝图模式下显示）
+                if (useRect != null) {
+                    boolean useHover = !suppressed && hitButton(mouseX, mouseY, useRect);
+                    if (hovering || useHover) {
+                        renderTextButton(g, mouseX, mouseY, useRect, "button.rtsbuilding.blueprint.use", useBtnHovers, file);
+                    }
                 }
                 boolean previewHover = !suppressed && hitButton(mouseX, mouseY, previewRect);
                 if (hovering || previewHover) {
@@ -438,17 +452,21 @@ public final class BlueprintLibraryPanel extends UiPanel {
     }
 
     /**
-     * 行内排布：[内容区 fill, 使用, 预览, 打开文件, 删除] 右对齐。
-     * 渲染与点击命中共用同一布局，保证两者坐标一致。
+     * 行内排布：[内容区 fill, (使用), 预览, 打开文件, 删除] 右对齐。
+     * 渲染与点击命中共用同一布局，保证两者坐标一致；
+     * {@code showUse} 为 false（非蓝图模式）时省略「使用」按钮，其宽度并入内容区。
      */
-    private static List<UiRect> computeRowRects(int cx, int y, int listW) {
+    private static List<UiRect> computeRowRects(int cx, int y, int listW, boolean showUse) {
+        List<UiBox> children = new ArrayList<>(5);
+        children.add(UiBox.fill(1f));
+        if (showUse) {
+            children.add(UiBox.fixed(useButtonWidth(), DeleteButton.SIZE));
+        }
+        children.add(UiBox.fixed(previewButtonWidth(), DeleteButton.SIZE));
+        children.add(UiBox.fixed(openLocationWidth(), DeleteButton.SIZE));
+        children.add(UiBox.fixed(DeleteButton.width(), DeleteButton.SIZE));
         return FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.START,
-                FlexLayout.Align.CENTER, 3, cx, y, listW, ROW_H,
-                List.of(UiBox.fill(1f),
-                        UiBox.fixed(useButtonWidth(), DeleteButton.SIZE),
-                        UiBox.fixed(previewButtonWidth(), DeleteButton.SIZE),
-                        UiBox.fixed(openLocationWidth(), DeleteButton.SIZE),
-                        UiBox.fixed(DeleteButton.width(), DeleteButton.SIZE)));
+                FlexLayout.Align.CENTER, 3, cx, y, listW, ROW_H, children);
     }
 
     /** 「使用」按钮宽度（px）：按当前语言按钮文字渲染宽度自适应（含左右内边距）。 */
@@ -609,16 +627,21 @@ public final class BlueprintLibraryPanel extends UiPanel {
             }
             if (y >= listY + listH) break;
             if (mouseY >= y && mouseY < y + ROW_H) {
-                List<UiRect> rowRects = computeRowRects(cx, y, listW);
-                // 使用按钮：进入蓝图放置模式（重命名编辑态下不响应）
-                if (hitButton(mouseX, mouseY, rowRects.get(1))) {
-                    if (renamingFile == null) {
-                        useBlueprint(file);
+                boolean showUse = isBlueprintMode();
+                List<UiRect> rowRects = computeRowRects(cx, y, listW, showUse);
+                int btnIdx = 1;
+                // 使用按钮：仅蓝图模式下响应，进入蓝图放置模式（重命名编辑态下不响应）
+                if (showUse) {
+                    if (hitButton(mouseX, mouseY, rowRects.get(btnIdx))) {
+                        if (renamingFile == null) {
+                            useBlueprint(file);
+                        }
+                        return;
                     }
-                    return;
+                    btnIdx++;
                 }
                 // 预览按钮：打开结构预览面板
-                if (hitButton(mouseX, mouseY, rowRects.get(2))) {
+                if (hitButton(mouseX, mouseY, rowRects.get(btnIdx))) {
                     if (renamingFile == null) {
                         selectedFile = file;
                         if (screen instanceof BuilderScreen builder) {
@@ -627,14 +650,16 @@ public final class BlueprintLibraryPanel extends UiPanel {
                     }
                     return;
                 }
+                btnIdx++;
                 // 打开文件位置按钮
-                if (hitButton(mouseX, mouseY, rowRects.get(3))) {
+                if (hitButton(mouseX, mouseY, rowRects.get(btnIdx))) {
                     if (renamingFile == null) {
                         openFileLocation(file);
                     }
                     return;
                 }
-                UiRect delRect = rowRects.get(4);
+                btnIdx++;
+                UiRect delRect = rowRects.get(btnIdx);
                 boolean onDelete = deleteButton.hit(mouseX, mouseY, delRect.x(), delRect.y());
                 if (onDelete) {
                     // 重命名编辑态下不响应删除

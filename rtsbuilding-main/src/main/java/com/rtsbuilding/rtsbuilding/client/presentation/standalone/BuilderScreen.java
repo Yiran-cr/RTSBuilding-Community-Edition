@@ -75,10 +75,20 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     // ── 蓝图放置模式（蓝图库面板「使用」按钮进入） ──────────────────
     /** 当前正在放置的蓝图（服务端将以准星目标为锚点逐格建造）。 */
     private com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint activeBlueprintPlacement;
-    /** 放置模式是否激活（激活后左键点击世界确认放置，Esc 取消）。 */
+    /** 放置模式是否激活（激活后左键定点、再次左键确认放置，Esc 取消）。 */
     private boolean blueprintPlacementActive;
-    /** 放置 Y 轴旋转步数（0-3，每步 90°；暂固定 0，可后续加 R 键）。 */
+    /** 是否已定点（第一次左键）：定点后锚点固定，不再跟随准星。 */
+    private boolean blueprintPlacementPinned;
+    /** 定点时的锚点基底（不含方向键偏移，供定点后继续用方向键微调）。 */
+    private net.minecraft.core.BlockPos pinnedAnchorBase;
+    /** 蓝图放置偏移量各轴钳位范围（右面板轴输入框支持 ±64 格）。 */
+    private static final int MAX_BLUEPRINT_OFFSET = 64;
+    /** 放置模式覆盖开关：开启后允许替换目标位置已有方块（发送服务端参与放置判定）。 */
+    private boolean blueprintOverwrite;
+    /** 放置 Y 轴旋转步数（0-3，每步 90°；R 键循环，服务端按此旋转方块与坐标）。 */
     private int placementYSteps;
+    /** 放置模式偏移量：小键盘方向键沿相机朝向在水平面平移描述（0,0,0 表示无偏移）。 */
+    private net.minecraft.core.BlockPos placementOffset = net.minecraft.core.BlockPos.ZERO;
     /** 当前准星瞄准的锚点方块（渲染时更新，供幽灵预览 pass 与确认使用）。 */
     private net.minecraft.core.BlockPos placementAnchor;
 
@@ -344,27 +354,109 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         return this.placementAnchor;
     }
 
-    /** 进入蓝图放置模式：加载蓝图，等待玩家在世界中点击确认放置。 */
+    /** 当前 Y 轴旋转步数（0-3，供幽灵预览 pass 与服务端保持一致）。 */
+    public int getPlacementYSteps() {
+        return this.placementYSteps;
+    }
+
+    /** 进入蓝图放置模式：加载蓝图，等待玩家左键定点后再次左键确认放置。 */
     public void startBlueprintPlacement(com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint blueprint) {
         if (blueprint == null) return;
         this.activeBlueprintPlacement = blueprint;
         this.blueprintPlacementActive = true;
+        this.blueprintPlacementPinned = false;
+        this.pinnedAnchorBase = null;
         this.placementYSteps = 0;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
         this.placementAnchor = null;
+        this.blueprintOverwrite = false;
     }
 
     /** 取消蓝图放置模式（Esc / 再次点击「使用」）。 */
     public void cancelBlueprintPlacement() {
         this.blueprintPlacementActive = false;
+        this.blueprintPlacementPinned = false;
+        this.pinnedAnchorBase = null;
         this.activeBlueprintPlacement = null;
         this.placementAnchor = null;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
+    }
+
+    /** 是否已定点（第一次左键后为 true，锚点锁定不再跟随准星）。 */
+    public boolean isBlueprintPlacementPinned() {
+        return this.blueprintPlacementPinned;
+    }
+
+    /** 定点（第一次左键）：把当前瞄准的锚点锁定为放置位置；准星未命中时返回 false。 */
+    public boolean pinBlueprintPlacement() {
+        if (!blueprintPlacementActive || this.placementAnchor == null) return false;
+        // 把当前瞄准锚点作为定点基底，方向键偏移清零后继续可调
+        this.pinnedAnchorBase = this.placementAnchor;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
+        this.blueprintPlacementPinned = true;
+        var player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.displayClientMessage(
+                    net.minecraft.network.chat.Component.translatable("message.rtsbuilding.blueprint.pin_hint"), true);
+        }
+        return true;
+    }
+
+    /** 解除定点（Esc 回退一级）：恢复跟随准星的自由瞄准状态。 */
+    public void unpinBlueprintPlacement() {
+        this.blueprintPlacementPinned = false;
+        this.pinnedAnchorBase = null;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
+    }
+
+    /** 旋转蓝图放置（R 键）：Y 轴每按一次顺时针旋转 90°（0~3 循环）。 */
+    public void rotateBlueprintPlacement() {
+        if (!blueprintPlacementActive) return;
+        this.placementYSteps = (this.placementYSteps + 1) & 3;
+    }
+
+    /** 偏移蓝图放置（小键盘方向键）：按相机朝向在水平面将锚点平移一格。 */
+    public void offsetBlueprintPlacement(int dx, int dz) {
+        if (!blueprintPlacementActive) return;
+        this.placementOffset = this.placementOffset.offset(dx, 0, dz);
+    }
+
+    /** 调整蓝图放置高度（滚轮）：锚点 Y 偏移 ±1，定点与非定点状态均生效。 */
+    public void adjustBlueprintPlacementHeight(int dir) {
+        if (!blueprintPlacementActive) return;
+        this.placementOffset = this.placementOffset.offset(0, dir, 0);
+    }
+
+    /** 当前蓝图放置偏移量（右面板调节器滑块写入的绝对值，含滚轮/方向键累计）。 */
+    public net.minecraft.core.BlockPos getBlueprintPlacementOffset() {
+        return this.placementOffset;
+    }
+
+    /** 直接设置蓝图放置偏移量（X/Y/Z 各轴绝对值，收拢到 ±MAX_BLUEPRINT_OFFSET，供右面板调节器使用）。 */
+    public void setBlueprintPlacementOffset(int x, int y, int z) {
+        if (!blueprintPlacementActive) return;
+        int c = MAX_BLUEPRINT_OFFSET;
+        this.placementOffset = new net.minecraft.core.BlockPos(
+                net.minecraft.util.Mth.clamp(x, -c, c),
+                net.minecraft.util.Mth.clamp(y, -c, c),
+                net.minecraft.util.Mth.clamp(z, -c, c));
+    }
+
+    /** 蓝图放置是否允许覆盖目标位置已有方块（右面板调节器开关）。 */
+    public boolean isBlueprintOverwriteEnabled() {
+        return this.blueprintOverwrite;
+    }
+
+    /** 设置蓝图放置覆盖开关。 */
+    public void setBlueprintOverwriteEnabled(boolean enabled) {
+        this.blueprintOverwrite = enabled;
     }
 
     /** 确认放置：把蓝图 + 锚点发给服务端启动 BLUEPRINT_BUILD 工作流，并退出放置模式。 */
     public void confirmBlueprintPlacement(net.minecraft.core.BlockPos anchor) {
         if (anchor == null || !this.blueprintPlacementActive || this.activeBlueprintPlacement == null) return;
         com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway
-                .sendPlaceBlueprint(this.activeBlueprintPlacement, anchor, this.placementYSteps);
+                .sendPlaceBlueprint(this.activeBlueprintPlacement, anchor, this.placementYSteps, this.blueprintOverwrite);
         cancelBlueprintPlacement();
     }
 
@@ -920,18 +1012,27 @@ public class BuilderScreen extends Screen implements UiPanelHost {
             bs.updateHoverFromScreen(Minecraft.getInstance(), this, RtsKeyMappings.isPlaceOffsetDown());
         }
 
-        // 蓝图放置模式：实时更新准星瞄准的锚点（供幽灵预览 pass 渲染与点击确认使用）
+        // 蓝图放置模式：实时更新准星瞄准的锚点（供幽灵预览 pass 渲染与左键定点/确认使用）
         if (isBlueprintPlacementActive() && !isAnyDragActive()) {
-            var ray = com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster
-                    .computeCursorRay(Minecraft.getInstance(), this);
-            this.placementAnchor = null;
-            if (ray != null) {
-                var hit = ray.raycastBlock(Minecraft.getInstance());
-                if (hit != null) {
-                    // 按住 Ctrl：往命中面外侧偏移一格（与建造放置偏移 boxSelector 一致）
-                    this.placementAnchor = RtsKeyMappings.isPlaceOffsetDown()
-                            ? hit.getBlockPos().relative(hit.getDirection())
-                            : hit.getBlockPos();
+            if (isBlueprintPlacementPinned()) {
+                // 已定点：锚点固定 = 定点基底 + 方向键偏移，不再跟随准星（可供左键确认前微调视角）
+                this.placementAnchor = this.pinnedAnchorBase == null
+                        ? null
+                        : this.pinnedAnchorBase.offset(this.placementOffset);
+            } else {
+                var ray = com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster
+                        .computeCursorRay(Minecraft.getInstance(), this);
+                this.placementAnchor = null;
+                if (ray != null) {
+                    var hit = ray.raycastBlock(Minecraft.getInstance());
+                    if (hit != null) {
+                        // 按住 Ctrl：往命中面外侧偏移一格（与建造放置偏移 boxSelector 一致）；
+                        // 再叠加小键盘方向键产生的 placementOffset，保证偏移不随帧重置
+                        net.minecraft.core.BlockPos base = RtsKeyMappings.isPlaceOffsetDown()
+                                ? hit.getBlockPos().relative(hit.getDirection())
+                                : hit.getBlockPos();
+                        this.placementAnchor = base.offset(this.placementOffset);
+                    }
                 }
             }
         }

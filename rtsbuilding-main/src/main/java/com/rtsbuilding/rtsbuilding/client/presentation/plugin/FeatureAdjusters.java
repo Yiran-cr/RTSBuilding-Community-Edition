@@ -1,5 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin;
 
+import com.rtsbuilding.rtsbuilding.client.culling.RtsRayCylinderCullingState;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.uifw.window.overlay.OverlayContext;
 import com.rtsbuilding.uifw.component.NumericInputBox;
@@ -73,13 +74,21 @@ public final class FeatureAdjusters {
 
     private final ScaleSliderComponent funnelSlider = new ScaleSliderComponent();
     private final ScaleSliderComponent ultimineSlider = new ScaleSliderComponent();
+    /** 射线圆柱剔除距离滑块（右面板下嵌层，剔除开启时显示）。 */
+    private final ScaleSliderComponent cullingDistanceSlider = new ScaleSliderComponent();
+    /** 射线圆柱剔除半径滑块（右面板下嵌层，剔除开启时显示）。 */
+    private final ScaleSliderComponent cullingRadiusSlider = new ScaleSliderComponent();
     /** 漏斗半径值输入框（字段持例，编辑状态跨帧保留）。 */
     private final NumericInputBox funnelInput = createFunnelInput();
     /** 连锁数量值输入框（字段持例，编辑状态跨帧保留）。 */
     private final NumericInputBox ultimineInput = createUltimineInput();
+    /** 剔除距离输入框（字段持例，编辑状态跨帧保留）。 */
+    private final NumericInputBox cullingDistanceInput = createCullingDistanceInput();
+    /** 剔除半径输入框（字段持例，编辑状态跨帧保留）。 */
+    private final NumericInputBox cullingRadiusInput = createCullingRadiusInput();
 
     /** 当前可见的调节器行（渲染时重建，供鼠标/键盘事件复用命中位置）。 */
-    private final List<Row> rows = new ArrayList<>(2);
+    private final List<Row> rows = new ArrayList<>(4);
 
     /** 三个形状模式段的悬停动画。 */
     private final AnimFloat[] fillBtnHover = {
@@ -97,6 +106,23 @@ public final class FeatureAdjusters {
 
     /** 方块替换开关按钮的命中矩形（渲染时更新；未显示时为 0 宽）。 */
     private final int[] replaceBtnRect = new int[4];
+
+    /** 蓝图放置覆盖开关（右面板蓝图调节器，独立于建造形状的替换开关）。 */
+    private final ToggleSwitch blueprintOverwriteToggle = new ToggleSwitch();
+
+    /** 蓝图放置覆盖开关的命中矩形（渲染时更新；未显示时为 0 宽）。 */
+    private final int[] blueprintOverwriteRect = new int[4];
+
+    /** 蓝图 X/Y/Z 三轴偏移输入框（字段持例，编辑状态跨帧保留）。 */
+    private final NumericInputBox[] blueprintAxisInputs = {
+            createBlueprintAxisInput(0), createBlueprintAxisInput(1), createBlueprintAxisInput(2)
+    };
+    /** 三轴输入框的非编辑态显示文本（读取屏幕当前偏移）。 */
+    private final List<Supplier<String>> blueprintAxisTexts = new ArrayList<>(3);
+    /** 三轴输入框的渲染位置（渲染时更新；未显示时宽为 0）。 */
+    private final int[][] blueprintAxisRects = new int[3][4];
+    /** 蓝图放置调节器的命中区域（渲染时更新）；用作轴输入框/覆盖开关的后备。 */
+    private boolean blueprintBoxVisible;
 
     public FeatureAdjusters(OverlayContext context) {
         this.context = context;
@@ -117,6 +143,8 @@ public final class FeatureAdjusters {
         boolean showFunnel = screen != null && screen.isItemPickupActive();
         boolean showUltimine = screen != null && screen.isUltimineActive();
         boolean showFillMode = screen != null && screen.isShapeAdjusterActive();
+        // 蓝图放置模式激活时显示「蓝图放置」调节器（覆盖开关 + XYZ 三轴偏移）
+        boolean showBlueprint = screen != null && screen.isBlueprintPlacementActive();
 
         int cx = context.getX() + PAD;
         int cw = context.getWidth() - PAD * 2;
@@ -137,14 +165,23 @@ public final class FeatureAdjusters {
         if (screen != null && screen.getActiveBuildShape() != null) {
             fillRowH += ROW_GAP + SEG_H;
         }
+        // 蓝图调节框行高：标题行 + 覆盖开关行 + 三轴输入框行
+        int blueprintRowH = BOX_PAD_V * 2 + lineHeight + ROW_GAP + SEG_H + ROW_GAP + TRACK_H;
 
         rows.clear();
         resetFillBtnRects();
+        resetBlueprintRects();
 
         // 形状模式（非单方块形状激活时显示）
         if (showFillMode) {
             renderFillRowBox(g, cx, cy, cw, fillRowH, mx, my, textColor, lineHeight);
             cy += fillRowH + ROW_GAP;
+        }
+
+        // 蓝图放置调节器（蓝图放置模式激活时显示）
+        if (showBlueprint) {
+            renderBlueprintRowBox(g, cx, cy, cw, blueprintRowH, mx, my, textColor, lineHeight);
+            cy += blueprintRowH + ROW_GAP;
         }
 
         if (showFunnel) {
@@ -173,6 +210,37 @@ public final class FeatureAdjusters {
             cy += rowH + ROW_GAP;
         }
 
+        // 射线圆柱剔除开启时显示调节器：一个复合框内并排距离 + 圆柱半径两个滑块
+        //（纯客户端视觉参数）
+        boolean showCulling = screen != null && screen.isCameraActive()
+                && RtsRayCylinderCullingState.isEnabled();
+        if (showCulling) {
+            Row distanceRow = new Row(cullingDistanceSlider,
+                    RtsRayCylinderCullingState.MIN_DISTANCE,
+                    RtsRayCylinderCullingState.MAX_DISTANCE,
+                    1.0,
+                    RtsRayCylinderCullingState::setDistance,
+                    cullingDistanceInput,
+                    () -> String.valueOf((int) RtsRayCylinderCullingState.getDistance()));
+            Row radiusRow = new Row(cullingRadiusSlider,
+                    RtsRayCylinderCullingState.MIN_RADIUS,
+                    RtsRayCylinderCullingState.MAX_RADIUS,
+                    1.0,
+                    RtsRayCylinderCullingState::setRadius,
+                    cullingRadiusInput,
+                    () -> String.valueOf((int) RtsRayCylinderCullingState.getRadius()));
+            int cullLineH = Math.max(lineHeight, TRACK_H);
+            int cullingRowH = BOX_PAD_V * 2 + lineHeight + ROW_GAP + cullLineH + ROW_GAP + cullLineH;
+            renderCullingRowBox(g, cx, cy, cw, cullingRowH, distanceRow, radiusRow,
+                    t("ui.rtsbuilding.adjuster.culling"),
+                    t("ui.rtsbuilding.adjuster.culling_distance"),
+                    t("ui.rtsbuilding.adjuster.culling_radius"),
+                    mx, my, textColor, lineHeight);
+            rows.add(distanceRow);
+            rows.add(radiusRow);
+            cy += cullingRowH + ROW_GAP;
+        }
+
         // 无任何调节器（形状调节器 + 漏斗 + 连锁均无）时：半透明占位提示
         //（与 GridRenderer 搜索框 placeholder 风格一致，居中显示在内容区）
         if (!showFillMode && rows.isEmpty()) {
@@ -185,6 +253,56 @@ public final class FeatureAdjusters {
                     cy + Math.max(0, (availH - mc.font.lineHeight) / 2),
                     placeholderColor);
         }
+    }
+
+    /**
+     * 渲染“方块剔除”复合调节框：单个背景框内自上而下为
+     * <ol>
+     *   <li><b>标题行</b>：左对齐“方块剔除”。</li>
+     *   <li><b>距离行</b>：小标签「剔除距离」+ 滑块 + 数值输入框同排。</li>
+     *   <li><b>半径行</b>：小标签「圆柱半径」+ 滑块 + 数值输入框同排。</li>
+     * </ol>
+     * 距离/半径滑块各用一个 {@link Row} 承载命中矩形与回调，交互逻辑复用
+     * {@link #mouseClicked} 的 rows 遍历。
+     */
+    private void renderCullingRowBox(GuiGraphics g, int boxX, int boxY, int boxW, int boxH,
+                                     Row distRow, Row radiusRow, String title,
+                                     String distLabel, String radiusLabel,
+                                     int mx, int my, int textColor, int lineHeight) {
+        Minecraft mc = Minecraft.getInstance();
+        // 背景框（dark.png 的 p6 色填充 + 边框）
+        SdfRenderer.drawBorderedRoundedRect(g, boxX, boxY, boxW, boxH, BOX_RADIUS,
+                UiPalette.border(), UiPalette.p6(), 1);
+        // 标题行（左对齐）
+        TextRenderer.draw(g, title, boxX + BOX_PAD_H, boxY + BOX_PAD_V, textColor);
+        int lineH = Math.max(lineHeight, TRACK_H);
+        int contentY = boxY + BOX_PAD_V + lineHeight + ROW_GAP;
+        renderCullingRowLine(g, distLabel, distRow, boxX, boxW, contentY,
+                RtsRayCylinderCullingState.getDistance(), mx, my, textColor, lineHeight);
+        renderCullingRowLine(g, radiusLabel, radiusRow, boxX, boxW, contentY + lineH + ROW_GAP,
+                RtsRayCylinderCullingState.getRadius(), mx, my, textColor, lineHeight);
+    }
+
+    /** 剔除复合框内的一行内容：小标签（左）+ 滑块（中）+ 数值输入框（右），垂直居中。 */
+    private void renderCullingRowLine(GuiGraphics g, String label, Row row,
+                                      int boxX, int boxW, int y, double value,
+                                      int mx, int my, int textColor, int lineHeight) {
+        Minecraft mc = Minecraft.getInstance();
+        int lineH = Math.max(lineHeight, TRACK_H);
+        // 数值输入框（右侧，行内垂直居中）
+        row.inputW = INPUT_W;
+        row.inputX = boxX + boxW - BOX_PAD_H - INPUT_W;
+        row.inputY = y + (lineH - NumericInputBox.INPUT_H) / 2;
+        row.inputBox.render(g, mx, my, row.inputX, row.inputY, row.inputW, row.displayText.get());
+        // 小标签（左）+ 滑块轨道（标签与输入框之间）
+        int labelW = mc.font.width(label);
+        row.trackX = boxX + BOX_PAD_H + labelW + 6;
+        row.trackW = Math.max(1, row.inputX - row.trackX - 8);
+        row.trackY = y + (lineH - TRACK_H) / 2;
+        TextRenderer.draw(g, label, boxX + BOX_PAD_H, y + (lineH - lineHeight) / 2,
+                (textColor & 0xFFFFFF) | 0x60000000);
+        row.slider.render(g, mx, my, row.trackX, row.trackY, row.trackW,
+                row.min, row.max, value);
     }
 
     /** 漏斗半径输入框：提交解析 double 并收敛到合法范围。 */
@@ -206,6 +324,34 @@ public final class FeatureAdjusters {
         box.setOnCommit(text -> {
             try {
                 FeatureAdjusterState.setUltimineLimit(Integer.parseInt(text));
+            } catch (NumberFormatException ignored) {
+                // 无效输入忽略，保持原值
+            }
+        });
+        return box;
+    }
+
+    /** 剔除距离输入框：提交解析 double 并收敛到合法范围。 */
+    private static NumericInputBox createCullingDistanceInput() {
+        NumericInputBox box = new NumericInputBox();
+        box.setOnCommit(text -> {
+            try {
+                RtsRayCylinderCullingState
+                        .setDistance(Double.parseDouble(text));
+            } catch (NumberFormatException ignored) {
+                // 无效输入忽略，保持原值
+            }
+        });
+        return box;
+    }
+
+    /** 剔除半径输入框：提交解析 double 并收敛到合法范围。 */
+    private static NumericInputBox createCullingRadiusInput() {
+        NumericInputBox box = new NumericInputBox();
+        box.setOnCommit(text -> {
+            try {
+                RtsRayCylinderCullingState
+                        .setRadius(Double.parseDouble(text));
             } catch (NumberFormatException ignored) {
                 // 无效输入忽略，保持原值
             }
@@ -359,10 +505,167 @@ public final class FeatureAdjusters {
         replaceBtnRect[3] = 0;
     }
 
+    /** 重置蓝图调节器命中矩形（未显示时点击无效）。 */
+    private void resetBlueprintRects() {
+        blueprintOverwriteRect[2] = 0;
+        blueprintOverwriteRect[3] = 0;
+        for (int[] rect : blueprintAxisRects) {
+            rect[2] = 0;
+            rect[3] = 0;
+        }
+        blueprintBoxVisible = false;
+    }
+
+    /**
+     * 渲染蓝图放置调节框：
+     * <ol>
+     *   <li><b>标题行</b>：左对齐"蓝图放置"。</li>
+     *   <li><b>覆盖开关行</b>：左对齐「覆盖」标签 + {@link ToggleSwitch}
+     *       （开启后允许替换目标位置已有方块，发送服务端参与放置判定）。</li>
+     *   <li><b>三轴偏移行</b>：X / Y / Z 三个 {@link NumericInputBox} 并排，
+     *       提交后经 {@link BuilderScreen#setBlueprintPlacementOffset} 写回当前偏移（±64 格钳位）。</li>
+     * </ol>
+     * 命中矩形记录到 {@link #blueprintOverwriteRect} / {@link #blueprintAxisRects} 供点击复用。
+     */
+    private void renderBlueprintRowBox(GuiGraphics g, int boxX, int boxY, int boxW, int boxH,
+                                       int mx, int my, int textColor, int lineHeight) {
+        Minecraft mc = Minecraft.getInstance();
+        BuilderScreen screen = mc.screen instanceof BuilderScreen bs ? bs : null;
+        if (screen == null) return;
+        // 背景框
+        SdfRenderer.drawBorderedRoundedRect(g, boxX, boxY, boxW, boxH, BOX_RADIUS,
+                UiPalette.border(), UiPalette.p6(), 1);
+
+        // 行1：标题（左对齐）
+        int titleY = boxY + BOX_PAD_V;
+        TextRenderer.draw(g, t("ui.rtsbuilding.adjuster.blueprint"), boxX + BOX_PAD_H, titleY, textColor);
+        int nextY = titleY + lineHeight;
+
+        // 行2：覆盖开关（左对齐标签 + ToggleSwitch）
+        int overwriteRowY = nextY + ROW_GAP;
+        boolean overwriteOn = screen.isBlueprintOverwriteEnabled();
+        String overwriteLabel = t("ui.rtsbuilding.adjuster.blueprint_overwrite");
+        TextRenderer.draw(g, overwriteLabel,
+                boxX + BOX_PAD_H,
+                overwriteRowY + (SEG_H - mc.font.lineHeight) / 2,
+                (textColor & 0xFFFFFF) | 0x60000000);
+        int overwriteW = blueprintOverwriteToggle.getWidth();
+        int overwriteH = blueprintOverwriteToggle.getHeight();
+        int overwriteX = boxX + BOX_PAD_H + mc.font.width(overwriteLabel) + 6;
+        int overwriteY = overwriteRowY + (SEG_H - overwriteH) / 2;
+        blueprintOverwriteToggle.render(g, overwriteX, overwriteY, overwriteOn);
+        blueprintOverwriteRect[0] = overwriteX;
+        blueprintOverwriteRect[1] = overwriteY;
+        blueprintOverwriteRect[2] = overwriteW;
+        blueprintOverwriteRect[3] = overwriteH;
+
+        // 行3：三轴偏移输入框（X / Y / Z 并排，底部对齐轨道行）
+        int axisRowY = overwriteRowY + SEG_H + ROW_GAP;
+        String[] axisLabels = {
+                t("ui.rtsbuilding.adjuster.blueprint_axis_x"),
+                t("ui.rtsbuilding.adjuster.blueprint_axis_y"),
+                t("ui.rtsbuilding.adjuster.blueprint_axis_z")
+        };
+        int axisGap = 8;
+        int axisInputW = 40;
+        int axisY = axisRowY + (TRACK_H - NumericInputBox.INPUT_H) / 2;
+        int axX = boxX + BOX_PAD_H;
+        blueprintAxisTexts.clear();
+        for (int i = 0; i < 3; i++) {
+            TextRenderer.draw(g, axisLabels[i], axX, axisY + (NumericInputBox.INPUT_H - mc.font.lineHeight) / 2,
+                    (textColor & 0xFFFFFF) | 0x60000000);
+            int inputX = axX + mc.font.width(axisLabels[i]) + 2;
+            blueprintAxisTexts.add(axisTextSupplier(screen, i));
+            blueprintAxisInputs[i].render(g, mx, my, inputX, axisY, axisInputW, blueprintAxisTexts.get(i).get());
+            blueprintAxisRects[i][0] = inputX;
+            blueprintAxisRects[i][1] = axisY;
+            blueprintAxisRects[i][2] = axisInputW;
+            blueprintAxisRects[i][3] = NumericInputBox.INPUT_H;
+            axX = inputX + axisInputW + axisGap;
+        }
+        blueprintBoxVisible = true;
+    }
+
+    /** 蓝图某轴偏移的非编辑态显示文本（每帧读取屏幕当前偏移）。 */
+    private static Supplier<String> axisTextSupplier(BuilderScreen screen, int axis) {
+        switch (axis) {
+            case 0:
+                return () -> String.valueOf(screen.getBlueprintPlacementOffset().getX());
+            case 1:
+                return () -> String.valueOf(screen.getBlueprintPlacementOffset().getY());
+            default:
+                return () -> String.valueOf(screen.getBlueprintPlacementOffset().getZ());
+        }
+    }
+
+    /** 蓝图轴坐标输入框：提交解析 int，覆盖当前偏移对应轴后写回屏幕。 */
+    private static NumericInputBox createBlueprintAxisInput(int axis) {
+        NumericInputBox box = new NumericInputBox();
+        box.setOnCommit(text -> {
+            BuilderScreen activeScreen = Minecraft.getInstance().screen instanceof BuilderScreen bs ? bs : null;
+            if (activeScreen == null) return;
+            try {
+                int value = Integer.parseInt(text);
+                net.minecraft.core.BlockPos off = activeScreen.getBlueprintPlacementOffset();
+                int c = net.minecraft.util.Mth.clamp(value, -64, 64);
+                switch (axis) {
+                    case 0:
+                        activeScreen.setBlueprintPlacementOffset(c, off.getY(), off.getZ());
+                        break;
+                    case 1:
+                        activeScreen.setBlueprintPlacementOffset(off.getX(), c, off.getZ());
+                        break;
+                    default:
+                        activeScreen.setBlueprintPlacementOffset(off.getX(), off.getY(), c);
+                        break;
+                }
+            } catch (NumberFormatException ignored) {
+                // 无效输入忽略，保持原值
+            }
+        });
+        return box;
+    }
+
     // ==================== 交互 ====================
+
+    /** 提交所有常规调节器行（漏斗/连锁）正在编辑的输入框。 */
+    private void commitEditingRows() {
+        for (Row row : rows) {
+            row.inputBox.applyIfEditing();
+        }
+    }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return false;
+        // 蓝图调节器：先尝试三轴输入框（命中则进入编辑态，提交其他正在编辑的输入框）
+        for (int i = 0; i < 3; i++) {
+            int[] r = blueprintAxisRects[i];
+            NumericInputBox box = blueprintAxisInputs[i];
+            if (r[2] > 0 && box.handleClick(mouseX, mouseY, r[0], r[1], r[2],
+                    blueprintAxisTexts.get(i).get())) {
+                for (int j = 0; j < 3; j++) {
+                    if (j != i) {
+                        blueprintAxisInputs[j].applyIfEditing();
+                    }
+                }
+                commitEditingRows();
+                return true;
+            }
+        }
+        // 未命中蓝图输入框：提交所有编辑中的输入框（点击输入框外 = 确认）
+        for (int i = 0; i < 3; i++) {
+            blueprintAxisInputs[i].applyIfEditing();
+        }
+        // 蓝图覆盖开关
+        if (blueprintOverwriteRect[2] > 0
+                && mouseX >= blueprintOverwriteRect[0] && mouseX < blueprintOverwriteRect[0] + blueprintOverwriteRect[2]
+                && mouseY >= blueprintOverwriteRect[1] && mouseY < blueprintOverwriteRect[1] + blueprintOverwriteRect[3]) {
+            BuilderScreen activeScreen = Minecraft.getInstance().screen instanceof BuilderScreen bs ? bs : null;
+            if (activeScreen != null) {
+                activeScreen.setBlueprintOverwriteEnabled(!activeScreen.isBlueprintOverwriteEnabled());
+            }
+            return true;
+        }
         // 先尝试值输入框：命中则进入编辑态（提交其他正在编辑的输入框）
         for (Row row : rows) {
             if (row.inputBox.handleClick(mouseX, mouseY, row.inputX, row.inputY, row.inputW,
@@ -447,6 +750,12 @@ public final class FeatureAdjusters {
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 蓝图轴输入框优先（编辑态跨帧保留）
+        for (NumericInputBox box : blueprintAxisInputs) {
+            if (box.handleKeyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
         for (Row row : rows) {
             if (row.inputBox.handleKeyPressed(keyCode, scanCode, modifiers)) {
                 return true;
@@ -456,6 +765,12 @@ public final class FeatureAdjusters {
     }
 
     public boolean charTyped(char codePoint, int modifiers) {
+        // 蓝图轴输入框优先
+        for (NumericInputBox box : blueprintAxisInputs) {
+            if (box.handleCharTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
         for (Row row : rows) {
             if (row.inputBox.handleCharTyped(codePoint, modifiers)) {
                 return true;

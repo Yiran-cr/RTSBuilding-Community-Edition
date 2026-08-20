@@ -130,6 +130,8 @@ public final class RenderPipeline {
         registerPass(new BoundaryPass());
         registerPass(new InteractionTargetPass());
         registerPass(new FunnelRangePass());
+        // 射线圆柱剔除范围预览（开启时更新快照并绘制圆柱线框）
+        registerPass(new CylinderCullingPreviewPass());
         registerPass(new LinkedStoragePass());
         var lsp = (LinkedStoragePass) passes.get(passes.size() - 1);
         this.linkedStoragePass = lsp;

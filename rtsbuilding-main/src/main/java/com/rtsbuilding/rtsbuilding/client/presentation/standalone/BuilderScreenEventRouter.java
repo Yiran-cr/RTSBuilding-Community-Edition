@@ -1,5 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.standalone;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.building.BuildingModule;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
@@ -93,13 +94,23 @@ public final class BuilderScreenEventRouter {
         pr.registerContentPanelMouseClick(d);
 
         d.onMouseClick(event -> {
-            // 蓝图放置模式：左键点击世界（非 UI）确认放置到准星锚点
+            // 蓝图放置模式：左键两段式交互 —— 第一次按下定点键把当前瞄准锚点定点，
+            // 第二次按下确认建造（Esc 先解除定点再取消模式）；默认左键，可经设置面板改绑；
+            // 改绑为键盘键时鼠标不触发（改由按键分支处理），其余鼠标键消费掉防误触。
             if (screen.isBlueprintPlacementActive()
-                    && event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT
                     && !screen.isMouseOverUI(event.x(), event.y())) {
-                var anchor = screen.getPlacementAnchor();
-                if (anchor != null) {
-                    screen.confirmBlueprintPlacement(anchor);
+                if (isBlueprintPlaceButton(event.button())) {
+                    if (screen.isBlueprintPlacementPinned()) {
+                        var anchor = screen.getPlacementAnchor();
+                        if (anchor != null) {
+                            screen.confirmBlueprintPlacement(anchor);
+                            return CONSUMED;
+                        }
+                    } else {
+                        screen.pinBlueprintPlacement();
+                        return CONSUMED;
+                    }
+                } else {
                     return CONSUMED;
                 }
             }
@@ -192,6 +203,15 @@ public final class BuilderScreenEventRouter {
 
         d.onMouseScroll(event -> {
             if (fw.mouseScrolled(event.x(), event.y(), event.scrollX(), event.scrollY())) return CONSUMED;
+            // 蓝图放置模式：Ctrl+滚轮调整锚点高度（Y 偏移 ±1，定点后同样生效），消费掉避免落入相机远近缩放；
+            // 裸滚轮不消费，恢复为相机远近缩放
+            if (screen.isBlueprintPlacementActive()
+                    && isCtrlDown()
+                    && !screen.isMouseOverUI(event.x(), event.y())) {
+                int dir = event.scrollY() > 0.0D ? 1 : -1;
+                screen.adjustBlueprintPlacementHeight(dir);
+                return CONSUMED;
+            }
             var lineBrush = kernel.renderPipeline().lineBrush;
             boolean shift = isShiftDown();
             boolean alt = isAltDown();
@@ -244,10 +264,44 @@ public final class BuilderScreenEventRouter {
             BindModeMouseHandler bmh, EntityInteractionHandler eih,
             BuilderScreen screen) {
         d.onKeyPress(event -> {
-            // 蓝图放置模式：Esc 取消（优先于浮窗关闭 / 退出 RTS）
+            // 蓝图放置模式：Esc 逐级取消 —— 已定点先解除定点（恢复自由瞄准），再按才退出放置模式
             if (event.keyCode() == GLFW.GLFW_KEY_ESCAPE && screen.isBlueprintPlacementActive()) {
-                screen.cancelBlueprintPlacement();
+                if (screen.isBlueprintPlacementPinned()) {
+                    screen.unpinBlueprintPlacement();
+                } else {
+                    screen.cancelBlueprintPlacement();
+                }
                 return CONSUMED;
+            }
+            // 蓝图放置模式：定点键改为键盘绑定（默认鼠标左键）时，按键触发定点/确认
+            if (screen.isBlueprintPlacementActive()
+                    && keyMatches(RtsKeyMappings.BLUEPRINT_PLACE_KEY, event)) {
+                if (screen.isBlueprintPlacementPinned()) {
+                    var anchor = screen.getPlacementAnchor();
+                    if (anchor != null) {
+                        screen.confirmBlueprintPlacement(anchor);
+                        return CONSUMED;
+                    }
+                } else {
+                    screen.pinBlueprintPlacement();
+                    return CONSUMED;
+                }
+            }
+            // 蓝图放置模式：旋转键（默认 R，无修饰键，避免与 Ctrl+R 方向旋转模式冲突）
+            if (screen.isBlueprintPlacementActive()
+                    && keyMatches(RtsKeyMappings.BLUEPRINT_ROTATE_KEY, event)) {
+                screen.rotateBlueprintPlacement();
+                return CONSUMED;
+            }
+            // 蓝图放置模式：四向偏移键（默认小键盘方向键，按相机朝向在水平面平移）
+            if (screen.isBlueprintPlacementActive()) {
+                CameraModule cam = kernel.module(CameraModule.class);
+                float yaw = cam != null ? cam.getState().getYaw() : 0f;
+                int[] dir = blueprintPlacementOffsetDir(event, yaw);
+                if (dir != null) {
+                    screen.offsetBlueprintPlacement(dir[0], dir[1]);
+                    return CONSUMED;
+                }
             }
             if (fw.keyPressed(event.keyCode(), event.scanCode(), event.modifiers())) return CONSUMED;
             if (event.keyCode() == GLFW.GLFW_KEY_ESCAPE && eih.isInteractionPanelOpen()) {
@@ -282,6 +336,53 @@ public final class BuilderScreenEventRouter {
             if (superScreen.keyPressed(event.keyCode(), event.scanCode(), event.modifiers())) return CONSUMED;
             return PASS;
         }, EventDispatcher.P_FALLBACK);
+    }
+
+    /**
+     * 蓝图放置偏移方向：四向偏移键 → 相机朝向水平面上的屏幕方向偏移（一格）。
+     * 屏幕「上」= 相机前向的水平分量，屏幕「右」= 前向水平分量顺时针旋转 90°；
+     * 四舍五入到整格（45° 倍方向时得到对角），兼容自由相机任意朝向。
+     *
+     * @param event 按键事件（四向偏移键按自定义绑定匹配）
+     * @param yaw   相机偏航角（度，CameraState.getYaw()）
+     * @return {dx, dz} 水平偏移向量；非偏移键返回 null
+     */
+    private static int[] blueprintPlacementOffsetDir(KeyPressEvent event, float yaw) {
+        double rad = Math.toRadians(yaw);
+        int[] fwd = { (int) Math.round(-Math.sin(rad)), (int) Math.round(Math.cos(rad)) };
+        int[] right = { (int) Math.round(-Math.cos(rad)), (int) Math.round(-Math.sin(rad)) };
+        if (keyMatches(RtsKeyMappings.BLUEPRINT_MOVE_UP_KEY, event)) {
+            return new int[] { fwd[0], fwd[1] };
+        }
+        if (keyMatches(RtsKeyMappings.BLUEPRINT_MOVE_DOWN_KEY, event)) {
+            return new int[] { -fwd[0], -fwd[1] };
+        }
+        if (keyMatches(RtsKeyMappings.BLUEPRINT_MOVE_LEFT_KEY, event)) {
+            return new int[] { -right[0], -right[1] };
+        }
+        if (keyMatches(RtsKeyMappings.BLUEPRINT_MOVE_RIGHT_KEY, event)) {
+            return new int[] { right[0], right[1] };
+        }
+        return null;
+    }
+
+    /**
+     * 蓝图放置：定点/确认键是否匹配当前鼠标按钮。
+     * <p>绑定为鼠标键时按按钮匹配并校验修饰键；绑定为键盘键时返回 false
+     * （定点/确认改由按键事件分支处理，避免鼠标误触）。</p>
+     */
+    private static boolean isBlueprintPlaceButton(int mouseButton) {
+        KeyMapping mapping = RtsKeyMappings.BLUEPRINT_PLACE_KEY;
+        InputConstants.Key bound = mapping.getKey();
+        if (bound.getType() != InputConstants.Type.MOUSE || bound.getValue() != mouseButton) {
+            return false;
+        }
+        return switch (mapping.getKeyModifier()) {
+            case SHIFT -> isShiftDown() && !isCtrlDown() && !isAltDown();
+            case CONTROL -> isCtrlDown() && !isAltDown() && !isShiftDown();
+            case ALT -> isAltDown() && !isCtrlDown() && !isShiftDown();
+            case NONE -> !isCtrlDown() && !isAltDown() && !isShiftDown();
+        };
     }
 
     private void registerCharHandlers(EventDispatcher d, PanelRegistry pr,
@@ -336,6 +437,10 @@ public final class BuilderScreenEventRouter {
         }
         if (keyMatches(RtsKeyMappings.TOGGLE_ITEM_PICKUP_MODE_KEY, event)) {
             lb.toggleItemPickupMode();
+            return CONSUMED;
+        }
+        if (keyMatches(RtsKeyMappings.TOGGLE_RAY_CULLING_KEY, event)) {
+            com.rtsbuilding.rtsbuilding.client.culling.RtsRayCylinderCullingState.toggle();
             return CONSUMED;
         }
         if (keyMatches(RtsKeyMappings.CYCLE_FILL_MODE_KEY, event)) {

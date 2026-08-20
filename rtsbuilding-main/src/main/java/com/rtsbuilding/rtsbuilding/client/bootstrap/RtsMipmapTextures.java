@@ -9,6 +9,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_butto
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.group_button.UltimineButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_button.CameraModeGroup;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_button.RayCullingButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_button.UtilityButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.popup.LogoMenuPopup;
 import com.rtsbuilding.uifw.render.MipmapTexture;
@@ -72,7 +73,8 @@ public final class RtsMipmapTextures {
                         LogoMenuPopup.SETTING_TEXTURE,
                         CameraModeGroup.FREE_MODE,
                         CameraModeGroup.SURROUND_MODE,
-                        UtilityButtonGroup.CHUNK_DISPLAY
+                        UtilityButtonGroup.CHUNK_DISPLAY,
+                        RayCullingButtonGroup.RAY_CULLING
                 },
                 new ResourceLocation[] {
                         BlueprintImportPanel.UPDATE_TEXTURE

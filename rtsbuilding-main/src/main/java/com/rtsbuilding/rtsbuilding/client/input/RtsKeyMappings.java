@@ -181,6 +181,86 @@ public final class RtsKeyMappings {
     );
 
     /**
+     * 蓝图放置模式：定点锚点 / 确认放置（左键两段式，两段共用同一键位）。默认鼠标左键。
+     * 绑定为键盘键时由按键事件触发，不响应鼠标点击。
+     */
+    public static final KeyMapping BLUEPRINT_PLACE_KEY = new KeyMapping(
+            "key.rtsbuilding.blueprint_place",
+            KeyConflictContext.GUI,
+            InputConstants.Type.MOUSE,
+            GLFW.GLFW_MOUSE_BUTTON_LEFT,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 射线圆柱剔除：切换沿准星射线方向的圆柱体区域本地视觉隐藏。默认 Y 键。
+     */
+    public static final KeyMapping TOGGLE_RAY_CULLING_KEY = new KeyMapping(
+            "key.rtsbuilding.toggle_ray_culling",
+            KeyConflictContext.GUI,
+            KeyModifier.NONE,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_Y,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 蓝图放置模式：Y 轴旋转放置（每按一次顺时针旋转 90°）。默认 R 键
+     * （无修饰键，避免与 Ctrl+R 方向旋转模式冲突）。
+     */
+    public static final KeyMapping BLUEPRINT_ROTATE_KEY = new KeyMapping(
+            "key.rtsbuilding.blueprint_rotate",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_R,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 蓝图放置模式：水平偏移 —— 屏幕方向「上/前」（按相机朝向）。默认小键盘 8。
+     */
+    public static final KeyMapping BLUEPRINT_MOVE_UP_KEY = new KeyMapping(
+            "key.rtsbuilding.blueprint_move_up",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_KP_8,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 蓝图放置模式：水平偏移 —— 屏幕方向「下/后」（按相机朝向）。默认小键盘 2。
+     */
+    public static final KeyMapping BLUEPRINT_MOVE_DOWN_KEY = new KeyMapping(
+            "key.rtsbuilding.blueprint_move_down",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_KP_2,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 蓝图放置模式：水平偏移 —— 屏幕方向「左」（按相机朝向）。默认小键盘 4。
+     */
+    public static final KeyMapping BLUEPRINT_MOVE_LEFT_KEY = new KeyMapping(
+            "key.rtsbuilding.blueprint_move_left",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_KP_4,
+            CATEGORY_FUNCTION
+    );
+
+    /**
+     * 蓝图放置模式：水平偏移 —— 屏幕方向「右」（按相机朝向）。默认小键盘 6。
+     */
+    public static final KeyMapping BLUEPRINT_MOVE_RIGHT_KEY = new KeyMapping(
+            "key.rtsbuilding.blueprint_move_right",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_KP_6,
+            CATEGORY_FUNCTION
+    );
+
+    /**
      * 检查 {@link #LINE_FLAT_KEY} 绑定的按键当前是否按下。
      * <p>直接读取绑定键的 GLFW 状态（键盘或鼠标），不依赖每 tick 的
      * {@code KeyMappingState} 更新（后者在自定义 Screen 中不可靠），

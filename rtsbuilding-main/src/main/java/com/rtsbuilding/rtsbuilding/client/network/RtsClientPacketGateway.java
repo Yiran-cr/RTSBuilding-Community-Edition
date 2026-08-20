@@ -33,17 +33,18 @@ public final class RtsClientPacketGateway {
     }
 
     /**
-     * 蓝图列表「使用」请求：把蓝图方块序列化为 NBT + 锚点 + Y 轴旋转步数发给服务端，
+     * 蓝图列表「使用」请求：把蓝图方块序列化为 NBT + 锚点 + Y 轴旋转步数 + 覆盖开关发给服务端，
      * 服务端启动 BLUEPRINT_BUILD 工作流逐格建造。
      */
     public static void sendPlaceBlueprint(com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint blueprint,
-                                          BlockPos anchor, int ySteps) {
+                                          BlockPos anchor, int ySteps, boolean allowOverwrite) {
         if (blueprint == null || anchor == null) return;
         var t = tag();
         t.put("blueprint", com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters
                 .toVanillaStructureTag(blueprint));
         t.putLong("anchor", anchor.asLong());
         t.putByte("ySteps", (byte) ((ySteps % 4 + 4) % 4));
+        t.putByte("overwrite", (byte) (allowOverwrite ? 1 : 0));
         t.putString("name", blueprint.name() == null ? "" : blueprint.name());
         t.putString("sourceName", blueprint.sourceName() == null ? "" : blueprint.sourceName());
         PacketDistributor.sendToServer(act(ActionType.PLACE_BLUEPRINT, t));

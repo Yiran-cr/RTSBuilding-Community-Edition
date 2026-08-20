@@ -47,6 +47,9 @@ public class BlueprintContext extends PipelineContext {
             new TypedKey<>("xRotationSteps", Integer.class);
     public static final TypedKey<Integer> ARG_Z_ROTATION_STEPS =
             new TypedKey<>("zRotationSteps", Integer.class);
+    /** 是否允许覆盖目标位置已有方块（false = 按替换规则跳过冲突格）。 */
+    public static final TypedKey<Boolean> ARG_ALLOW_OVERWRITE =
+            new TypedKey<>("allowOverwrite", Boolean.class);
 
     // ──────────────────────────────────────────────────────────────
     //  共享数据键（进度追踪）
@@ -139,6 +142,12 @@ public class BlueprintContext extends PipelineContext {
     public int getZRotationSteps() {
         Integer val = getArg(ARG_Z_ROTATION_STEPS);
         return val != null ? val : 0;
+    }
+
+    /** 返回是否允许覆盖目标位置已有方块（默认 false：按替换规则跳过冲突格）。 */
+    public boolean getAllowOverwrite() {
+        Boolean val = getArg(ARG_ALLOW_OVERWRITE);
+        return val != null && val;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -284,6 +293,12 @@ public class BlueprintContext extends PipelineContext {
         /** Z 轴旋转步数。 */
         public Builder zRotationSteps(int steps) {
             args.put(ARG_Z_ROTATION_STEPS.name(), steps);
+            return this;
+        }
+
+        /** 是否允许覆盖目标位置已有方块（false = 按替换规则跳过冲突格）。 */
+        public Builder allowOverwrite(boolean allow) {
+            args.put(ARG_ALLOW_OVERWRITE.name(), allow);
             return this;
         }
 

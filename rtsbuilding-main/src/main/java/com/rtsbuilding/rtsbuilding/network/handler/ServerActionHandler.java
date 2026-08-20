@@ -259,6 +259,7 @@ public final class ServerActionHandler {
         if (blueprint == null || blueprint.blocks().isEmpty()) return;
         if (blueprint.blockCount() > Config.maxBlueprintBlocks()) return;
 
+        boolean allowOverwrite = t.getByte("overwrite") != 0;
         com.rtsbuilding.rtsbuilding.server.pipeline.context.BlueprintContext ctx =
                 com.rtsbuilding.rtsbuilding.server.pipeline.context.BlueprintContext.builder(p)
                         .blueprint(blueprint)
@@ -266,6 +267,7 @@ public final class ServerActionHandler {
                         .yRotationSteps(ySteps)
                         .xRotationSteps(0)
                         .zRotationSteps(0)
+                        .allowOverwrite(allowOverwrite)
                         .totalBlocks(blueprint.blockCount())
                         .build();
         var session = RtsServer.get().session().getOrCreate(p);

@@ -6,6 +6,7 @@ import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraMod
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
 import com.rtsbuilding.uifw.window.api.UiPanelApi;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_button.CameraModeGroup;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_button.RayCullingButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.group_button.UtilityButtonGroup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.popup.DebugMenuPopup;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.popup.FileMenuPopup;
@@ -39,6 +40,9 @@ public final class TopBarPanel implements UiPanelApi {
 
     private CameraModeGroup cameraModeGroup;
     private UtilityButtonGroup utilityGroup;
+
+    /** 射线圆柱剔除独立按钮组（与辅助显示按钮组分开，单独一钮）。 */
+    private RayCullingButtonGroup rayCullingGroup;
 
     
     private FluidOcclusionIndicator fluidIndicator;
@@ -111,6 +115,7 @@ public final class TopBarPanel implements UiPanelApi {
         this.cameraModeGroup = new CameraModeGroup(cameraModule);
         this.debugPopup = createDebugPopup();
         this.utilityGroup = new UtilityButtonGroup(debugPopup);
+        this.rayCullingGroup = new RayCullingButtonGroup();
         this.fluidIndicator = new FluidOcclusionIndicator();
         
         this.modeSwitcher = new ModeSwitcher();
@@ -220,6 +225,9 @@ public final class TopBarPanel implements UiPanelApi {
         cameraModeGroup.render(g, mouseX, mouseY, groupLayout.modeGroup());
         utilityGroup.render(g, mouseX, mouseY, groupLayout.utilityGroup());
 
+        // 射线圆柱剔除独立按钮组（单独渲染，不并入辅助显示组）
+        rayCullingGroup.render(g, mouseX, mouseY, groupLayout.rayCullingGroup());
+
         
         var fluidGroup = TopBarLayoutHelper.GroupLayout.fluidAfterMode(
                 modeSwitcher.getX(), modeSwitcher.getY(), modeSwitcher.getWidth(), modeSwitcher.getHeight());
@@ -228,6 +236,7 @@ public final class TopBarPanel implements UiPanelApi {
         
         cameraModeGroup.tick();
         utilityGroup.tick();
+        rayCullingGroup.tick();
         
         boolean hovering = layout.logoRect().contains(mouseX, mouseY);
         boolean shouldHighlight = hovering || logoPressed;
@@ -287,6 +296,7 @@ public final class TopBarPanel implements UiPanelApi {
         var groupLayout = TopBarLayoutHelper.GroupLayout.create(screen.getUiWidth(), ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).getRightSidebarWidth());
         cameraModeGroup.renderTooltipOverlay(g, groupLayout.modeGroup(), screen.getUiWidth(), screen.getUiHeight());
         utilityGroup.renderTooltipOverlay(g, groupLayout.utilityGroup(), screen.getUiWidth(), screen.getUiHeight());
+        rayCullingGroup.renderTooltipOverlay(g, groupLayout.rayCullingGroup(), screen.getUiWidth(), screen.getUiHeight());
         fluidIndicator.renderTooltipOverlay(g,
                 TopBarLayoutHelper.GroupLayout.fluidAfterMode(
                         modeSwitcher.getX(), modeSwitcher.getY(), modeSwitcher.getWidth(), modeSwitcher.getHeight()),
@@ -395,6 +405,7 @@ public final class TopBarPanel implements UiPanelApi {
         var groupLayout = TopBarLayoutHelper.GroupLayout.create(screen.getUiWidth(), ((com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen) screen).getRightSidebarWidth());
         if (cameraModeGroup.mouseClicked(mx, my, groupLayout.modeGroup())) return true;
         if (utilityGroup.mouseClicked(mx, my, groupLayout.utilityGroup())) return true;
+        if (rayCullingGroup.mouseClicked(mx, my, groupLayout.rayCullingGroup())) return true;
 
         return false;
     }

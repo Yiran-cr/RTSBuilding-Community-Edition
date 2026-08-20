@@ -48,6 +48,7 @@ public final class BlueprintPersistence {
     private static final String KEY_Y_STEPS = "ySteps";
     private static final String KEY_X_STEPS = "xSteps";
     private static final String KEY_Z_STEPS = "zSteps";
+    private static final String KEY_ALLOW_OVERWRITE = "allowOverwrite";
 
     private static final String KEY_REMAINING = "remaining";
     private static final String KEY_PLACED_COUNT = "placedCount";
@@ -96,6 +97,7 @@ public final class BlueprintPersistence {
         data.putInt(KEY_Y_STEPS, bctx.getYRotationSteps());
         data.putInt(KEY_X_STEPS, bctx.getXRotationSteps());
         data.putInt(KEY_Z_STEPS, bctx.getZRotationSteps());
+        data.putBoolean(KEY_ALLOW_OVERWRITE, bctx.getAllowOverwrite());
 
         // 剩余队列
         LinkedList<Integer> remaining = bctx.getRemainingQueue();
@@ -164,6 +166,7 @@ public final class BlueprintPersistence {
         int ySteps = data.getInt(KEY_Y_STEPS);
         int xSteps = data.getInt(KEY_X_STEPS);
         int zSteps = data.getInt(KEY_Z_STEPS);
+        boolean allowOverwrite = data.getBoolean(KEY_ALLOW_OVERWRITE);
 
         // ── 重算放置计划 ─────────────────────────────────────────
         List<PlacementPlan> plans = BlockPlacementPlanner.compute(level, blueprint, anchor, centerOffset, ySteps, xSteps, zSteps);
@@ -194,6 +197,7 @@ public final class BlueprintPersistence {
                 .yRotationSteps(ySteps)
                 .xRotationSteps(xSteps)
                 .zRotationSteps(zSteps)
+                .allowOverwrite(allowOverwrite)
                 .totalBlocks(blueprint.blockCount())
                 .build();
 
