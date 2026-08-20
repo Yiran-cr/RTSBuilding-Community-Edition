@@ -148,6 +148,9 @@ public final class RenderPipeline {
         // 工作流恢复预览：剩余位置绿线框 / 冲突位置橙线框
         registerPass(new ResumePreviewPass());
 
+        // 蓝图放置模式幽灵预览：半透明线框示意蓝图方块目标位置
+        registerPass(new BlueprintPlacementPreviewPass());
+
         var lbrp = new LineBrushRenderPass(lineBrush);
         this.lineBrushRenderPass = lbrp;
         registerPass(lbrp);
@@ -178,6 +181,11 @@ public final class RenderPipeline {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return;
 
+        // XYZ 轴调节器 / 蓝图预览的「光标隐藏锁定」拖拽期间：鼠标坐标与视觉不一致，
+        // 世界内线框 pass / 悬浮判定全部跳过；仅保留 BoundaryPass（建造范围屏障，
+        // 不依赖鼠标坐标，持续标识范围）
+        boolean dragActive = mc.screen instanceof BuilderScreen bs && bs.isAnyDragActive();
+
         this.frameMillis = System.currentTimeMillis();
 
         
@@ -188,6 +196,8 @@ public final class RenderPipeline {
                 linesBuf.builder, fill.builder, brackets.builder, noDepth.builder, barrier.builder,
                 cursorRay, blockSource, blockOpaqueSource);
         for (RenderPass pass : passes) {
+            // 拖拽旋转期间跳过所有世界内 pass，仅保留边界屏障 pass
+            if (dragActive && !(pass instanceof BoundaryPass)) continue;
             if (!pass.shouldRender(mc)) continue;
             pass.render(mc, alloc, poseStack, partialTick, frameIndex);
         }

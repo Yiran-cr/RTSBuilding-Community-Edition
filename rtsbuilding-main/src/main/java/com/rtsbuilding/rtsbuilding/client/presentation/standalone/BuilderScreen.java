@@ -18,6 +18,7 @@ import com.rtsbuilding.uifw.window.window.FloatingWindowLayer;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintImportPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintLibraryPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintPreviewPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintSavePanel;
 import com.rtsbuilding.uifw.component.color.ColorPickerPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.DownSidebarLayoutHelper;
@@ -32,6 +33,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.client.render.ViewCaptureService;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
 import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.window.api.UiPanelHost;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -66,6 +68,19 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     /** 蓝图导入面板：顶栏「文件」→「导入」打开（网页式上传区选择文件转换导入）。 */
     private final BlueprintImportPanel blueprintImportPanel;
+
+    /** 蓝图结构预览面板：蓝图库面板单击选中文件时打开（3D 结构缩略图）。 */
+    private final BlueprintPreviewPanel blueprintPreviewPanel;
+
+    // ── 蓝图放置模式（蓝图库面板「使用」按钮进入） ──────────────────
+    /** 当前正在放置的蓝图（服务端将以准星目标为锚点逐格建造）。 */
+    private com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint activeBlueprintPlacement;
+    /** 放置模式是否激活（激活后左键点击世界确认放置，Esc 取消）。 */
+    private boolean blueprintPlacementActive;
+    /** 放置 Y 轴旋转步数（0-3，每步 90°；暂固定 0，可后续加 R 键）。 */
+    private int placementYSteps;
+    /** 当前准星瞄准的锚点方块（渲染时更新，供幽灵预览 pass 与确认使用）。 */
+    private net.minecraft.core.BlockPos placementAnchor;
 
     /** 待处理的拖放文件路径（drop 回调缓存，渲染阶段判定落点后消费）。 */
     private List<Path> pendingDropPaths;
@@ -111,6 +126,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         this.blueprintSavePanel = new BlueprintSavePanel();
         this.blueprintLibraryPanel = new BlueprintLibraryPanel();
         this.blueprintImportPanel = new BlueprintImportPanel();
+        this.blueprintPreviewPanel = new BlueprintPreviewPanel();
         long t1 = System.nanoTime();
         panelRegistry.register(topBarPanel, RenderLayer.CONTENT_PANELS);
         panelRegistry.register(leftSidebarPanel, RenderLayer.CONTENT_PANELS);
@@ -204,6 +220,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         addFloatingWindowIfAbsent(this.blueprintLibraryPanel);
         this.blueprintImportPanel.init(this);
         addFloatingWindowIfAbsent(this.blueprintImportPanel);
+        this.blueprintPreviewPanel.init(this);
+        addFloatingWindowIfAbsent(this.blueprintPreviewPanel);
         long t2 = System.nanoTime();
         panelRegistry.initAll(this);
         long t3 = System.nanoTime();
@@ -250,6 +268,9 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         this.topBarPanel.onRtsExited();
         super.onClose();
         this.cursorStyleManager.restoreDefault();
+        // 释放蓝图预览场景的 GPU 资源（FBO/VBO）并恢复可能隐藏的预览拖拽光标，避免跨会话积累
+        this.blueprintPreviewPanel.releaseGpuResources();
+        this.blueprintPreviewPanel.releaseDragCursor();
         CameraModule cam = kernel.module(CameraModule.class);
         if (cam != null) {
             cam.disableCamera();
@@ -299,6 +320,52 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     /** 蓝图导入面板（顶栏「文件」→「导入」）。 */
     public BlueprintImportPanel getBlueprintImportPanel() {
         return this.blueprintImportPanel;
+    }
+
+    /** 蓝图结构预览面板（蓝图库面板单击选中文件时打开）。 */
+    public BlueprintPreviewPanel getBlueprintPreviewPanel() {
+        return this.blueprintPreviewPanel;
+    }
+
+    // ── 蓝图放置模式 ────────────────────────────────────────────────
+
+    /** 是否处于蓝图放置模式（等待玩家在世界中点击确认锚点）。 */
+    public boolean isBlueprintPlacementActive() {
+        return this.blueprintPlacementActive;
+    }
+
+    /** 当前正在放置的蓝图（放置模式未激活时返回 null）。 */
+    public com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint getActiveBlueprintPlacement() {
+        return this.activeBlueprintPlacement;
+    }
+
+    /** 当前准星瞄准的锚点方块（放置模式未激活或未命中时为 null）。 */
+    public net.minecraft.core.BlockPos getPlacementAnchor() {
+        return this.placementAnchor;
+    }
+
+    /** 进入蓝图放置模式：加载蓝图，等待玩家在世界中点击确认放置。 */
+    public void startBlueprintPlacement(com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint blueprint) {
+        if (blueprint == null) return;
+        this.activeBlueprintPlacement = blueprint;
+        this.blueprintPlacementActive = true;
+        this.placementYSteps = 0;
+        this.placementAnchor = null;
+    }
+
+    /** 取消蓝图放置模式（Esc / 再次点击「使用」）。 */
+    public void cancelBlueprintPlacement() {
+        this.blueprintPlacementActive = false;
+        this.activeBlueprintPlacement = null;
+        this.placementAnchor = null;
+    }
+
+    /** 确认放置：把蓝图 + 锚点发给服务端启动 BLUEPRINT_BUILD 工作流，并退出放置模式。 */
+    public void confirmBlueprintPlacement(net.minecraft.core.BlockPos anchor) {
+        if (anchor == null || !this.blueprintPlacementActive || this.activeBlueprintPlacement == null) return;
+        com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway
+                .sendPlaceBlueprint(this.activeBlueprintPlacement, anchor, this.placementYSteps);
+        cancelBlueprintPlacement();
     }
 
     /**
@@ -530,6 +597,22 @@ public class BuilderScreen extends Screen implements UiPanelHost {
      */
     public boolean isAxisGizmoDragging() {
         return downSidebarPanel != null && downSidebarPanel.isAxisGizmoDragging();
+    }
+
+    /**
+     * 查询蓝图预览面板是否正在拖拽旋转。
+     */
+    public boolean isBlueprintPreviewDragging() {
+        return blueprintPreviewPanel != null && blueprintPreviewPanel.isPreviewDragging();
+    }
+
+    /**
+     * 查询是否有任何「光标已隐藏/锁定的拖拽旋转」进行中（XYZ 轴调节器或蓝图预览）。
+     * <p>此期间光标 DISABLED 锁定，鼠标坐标与视觉不一致，世界内线框 pass 渲染与
+     * 悬浮判定应全部跳过，避免 pass/悬浮高亮渲染在错误位置造成视觉错乱。</p>
+     */
+    public boolean isAnyDragActive() {
+        return isAxisGizmoDragging() || isBlueprintPreviewDragging();
     }
 
     /**
@@ -828,12 +911,29 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
         
         if (leftSidebarPanel != null && !leftSidebarPanel.isClickButtonSelected()
+                && !isAnyDragActive()
                 && mouseX >= getLeftSidebarWidth() && mouseX < this.width - rightW
                 && mouseY >= ScreenBackgroundPanel.BACKGROUND_TOP_Y
                 && mouseY < this.height - downH
                 && !isMouseOverUI(mouseX, mouseY)) {
             var bs = kernel.renderPipeline().boxSelector;
             bs.updateHoverFromScreen(Minecraft.getInstance(), this, RtsKeyMappings.isPlaceOffsetDown());
+        }
+
+        // 蓝图放置模式：实时更新准星瞄准的锚点（供幽灵预览 pass 渲染与点击确认使用）
+        if (isBlueprintPlacementActive() && !isAnyDragActive()) {
+            var ray = com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster
+                    .computeCursorRay(Minecraft.getInstance(), this);
+            this.placementAnchor = null;
+            if (ray != null) {
+                var hit = ray.raycastBlock(Minecraft.getInstance());
+                if (hit != null) {
+                    // 按住 Ctrl：往命中面外侧偏移一格（与建造放置偏移 boxSelector 一致）
+                    this.placementAnchor = RtsKeyMappings.isPlaceOffsetDown()
+                            ? hit.getBlockPos().relative(hit.getDirection())
+                            : hit.getBlockPos();
+                }
+            }
         }
 
         cursorStyleManager.update(mouseX, mouseY);
@@ -849,9 +949,38 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         }
 
         renderLineBrushHint(guiGraphics);
+        renderOverlayMessages(guiGraphics, mouseX, mouseY, partialTick);
 
         if (Minecraft.getInstance().gui.getDebugOverlay().showDebugScreen()) {
             Minecraft.getInstance().gui.getDebugOverlay().render(guiGraphics);
+        }
+    }
+
+    /**
+     * 在 RTS 下面板之上渲染悬浮文字（actionbar 消息）。
+     * <p>RTS 是覆盖式 Screen，原版 HUD（含 actionbar）在 Screen 打开时不渲染，
+     * 这里补渲染，且位置动态跟随下面板顶部（支持任意窗口尺寸 / RTS GUI 缩放 / 下面板拖拽高度）。</p>
+     */
+    private void renderOverlayMessages(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.gui == null || mc.level == null) return;
+        // 下面板顶部（虚拟坐标，随 RTS 缩放 / 下面板拖拽高度动态变化）
+        int downBarTopY = this.height - getDownSidebarHeight();
+        int downBarW = this.width - getRightSidebarWidth();
+
+        // ── actionbar 悬浮消息（displayClientMessage(comp, true)），以下面板 x 轴中心为基准 ──
+        if (mc.gui instanceof com.rtsbuilding.rtsbuilding.client.hud.IRtsOverlayAccess ov) {
+            Component overlay = ov.rtsbuilding$getOverlayMessage();
+            if (overlay != null && ov.rtsbuilding$getOverlayMessageTime() > 0) {
+                String text = overlay.getString();
+                if (!text.isEmpty()) {
+                    int textW = mc.font.width(text);
+                    int x = Math.max(8, downBarW / 2 - textW / 2);
+                    int y = downBarTopY - 34;
+                    g.fill(x - 8, y, x + textW + 8, y + 14, UiPalette.get("overlay_bg"));
+                    g.drawString(mc.font, text, x, y + 2, UiPalette.get("tooltip_text"));
+                }
+            }
         }
     }
 

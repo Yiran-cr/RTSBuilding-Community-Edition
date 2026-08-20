@@ -87,7 +87,13 @@ public enum ActionType {
      * 服务端按玩家保存半径供球心吸取任务使用。
      * 仅在枚举末尾追加（id 编码协议，禁止插入到已有值之前）。
      */
-    SET_FUNNEL_RADIUS(41);
+    SET_FUNNEL_RADIUS(41),
+    /**
+     * 客户端从蓝图列表「使用」按钮发起蓝图放置：传蓝图方块 NBT 数据 + 锚点 + Y 轴旋转步数，
+     * 服务端解析后启动 BLUEPRINT_BUILD 工作流逐格建造。
+     * 仅在枚举末尾追加（id 编码协议，禁止插入到已有值之前）。
+     */
+    PLACE_BLUEPRINT(42);
 
     private final int id;
 
@@ -150,6 +156,7 @@ public enum ActionType {
             case 39 -> SET_FUNNEL;
             case 40 -> REMOVE_RECENT_ENTRY;
             case 41 -> SET_FUNNEL_RADIUS;
+            case 42 -> PLACE_BLUEPRINT;
             default -> null;
         };
     }

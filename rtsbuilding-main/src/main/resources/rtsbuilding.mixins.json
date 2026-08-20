@@ -11,6 +11,7 @@
     "MinecraftSetScreenMixin",
     "MinecraftTickMixin",
     "MouseInputMixin",
+    "RtsGuiOverlayMixin",
     "ScreenRenderBgMixin"
   ],
   "mixins": [

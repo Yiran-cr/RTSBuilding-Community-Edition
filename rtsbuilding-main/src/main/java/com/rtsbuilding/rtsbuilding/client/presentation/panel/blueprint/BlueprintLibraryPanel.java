@@ -1,6 +1,8 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint;
 
 import com.rtsbuilding.rtsbuilding.client.blueprint.BlueprintLocalStore;
+import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
+import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintReaders;
 import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.animate.Easing;
@@ -8,9 +10,9 @@ import com.rtsbuilding.uifw.component.DeleteButton;
 import com.rtsbuilding.uifw.layout.FlexLayout;
 import com.rtsbuilding.uifw.layout.UiBox;
 import com.rtsbuilding.uifw.layout.UiRect;
+import com.rtsbuilding.uifw.state.HoverSuppression;
 import com.rtsbuilding.uifw.window.component.ScrollBar;
 import com.rtsbuilding.uifw.window.window.UiPanel;
-import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreenConstants.TOP_H;
 import com.rtsbuilding.uifw.render.UiPalette;
 import com.rtsbuilding.uifw.render.SdfRenderer;
@@ -21,6 +23,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.Util;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -33,6 +36,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.Locale;
 import java.util.Map;
 
@@ -73,6 +77,14 @@ public final class BlueprintLibraryPanel extends UiPanel {
     /** 正在删除的文件（待确认状态），为空表示无待确认项。 */
     private Path pendingDelete;
 
+    /** 当前选中的蓝图文件（单击选中，联动打开结构预览面板）。 */
+    private Path selectedFile;
+    /** 上次点击的文件与其时间戳（用于双击进入重命名）。 */
+    private Path lastClickedFile;
+    private long lastClickedMs;
+    /** 单击与双击的判定间隔（毫秒）。 */
+    private static final long DOUBLE_CLICK_MS = 500;
+
     /** 底部提示消息（删除失败等）。 */
     private Component statusMessage;
 
@@ -91,6 +103,10 @@ public final class BlueprintLibraryPanel extends UiPanel {
     private final Map<Path, AnimFloat> rowHoverAnims = new HashMap<>();
     /** 行内「打开文件」按钮悬停动画（按文件关联）。 */
     private final Map<Path, AnimFloat> openFileBtnHovers = new HashMap<>();
+    /** 行内「使用」按钮悬停动画（按文件关联）。 */
+    private final Map<Path, AnimFloat> useBtnHovers = new HashMap<>();
+    /** 行内「预览」按钮悬停动画（按文件关联）。 */
+    private final Map<Path, AnimFloat> previewBtnHovers = new HashMap<>();
 
     // ── 搜索框状态（与物品网格 GridInputHandler 同款） ──────────────
     /** 搜索框是否聚焦。 */
@@ -130,11 +146,15 @@ public final class BlueprintLibraryPanel extends UiPanel {
         this.allFiles.clear();
         this.allFiles.addAll(BlueprintLocalStore.listBlueprints());
         this.pendingDelete = null;
+        this.selectedFile = null;
+        this.lastClickedFile = null;
         this.scrollBar.setScroll(0);
         this.statusMessage = null;
         // 文件集合变化后旧的行 hover 动画缓存不再命中，整体清理避免无界增长
         this.rowHoverAnims.clear();
         this.openFileBtnHovers.clear();
+        this.useBtnHovers.clear();
+        this.previewBtnHovers.clear();
         applySearch();
     }
 
@@ -160,6 +180,9 @@ public final class BlueprintLibraryPanel extends UiPanel {
             this.allFiles.remove(file);
             this.files.remove(file);
             this.pendingDelete = null;
+            if (this.selectedFile != null && this.selectedFile.equals(file)) {
+                this.selectedFile = null;
+            }
             if (this.files.isEmpty()) {
                 this.scrollBar.setScroll(0);
             }
@@ -333,22 +356,31 @@ public final class BlueprintLibraryPanel extends UiPanel {
             }
             if (y >= listY + listH) break;
             if (y >= listY) {
-                boolean hovering = mouseX >= cx && mouseX < cx + listW
+                // 上层面板（浮窗/常驻面板）覆盖时抑制本面板的全部悬停判断，
+                // 否则行高亮与行内按钮会穿透显示在上层面板之下
+                boolean suppressed = HoverSuppression.floatingWindow().isSuppressed();
+                boolean hovering = !suppressed && mouseX >= cx && mouseX < cx + listW
                         && mouseY >= y && mouseY < y + ROW_H;
 
-                // 条目常驻背景：奇偶行交替 + 悬停高亮（按文件独立平滑过渡）
+                // 条目常驻背景：奇偶行交替 + 悬停高亮（按文件独立平滑过渡），选中行用强调色
                 AnimFloat rowHover = rowHoverAnims.computeIfAbsent(file, k -> AnimFloat.hover());
-                int rowBg = ColorAnimation.lerpRGB(
-                        (index % 2 == 0) ? UiPalette.get("list_row_even") : UiPalette.get("list_row_odd"),
-                        UiPalette.get("list_row_hover"),
-                        rowHover.track(hovering));
+                float hoverT = rowHover.track(hovering);
+                int base = (index % 2 == 0) ? UiPalette.get("list_row_even") : UiPalette.get("list_row_odd");
+                int rowBg;
+                if (file.equals(selectedFile)) {
+                    rowBg = ColorAnimation.lerpRGB(base, UiPalette.accent(), 0.45f);
+                } else {
+                    rowBg = ColorAnimation.lerpRGB(base, UiPalette.get("list_row_hover"), hoverT);
+                }
                 g.fill(cx, y, cx + listW, y + ROW_H, rowBg);
 
-                // 行内排布：[内容区 fill, 打开文件按钮 fixed, 删除按钮 fixed] 右对齐
+                // 行内排布：[内容区 fill, 使用, 预览, 打开文件, 删除] 右对齐
                 List<UiRect> rowRects = computeRowRects(cx, y, listW);
                 UiRect contentRect = rowRects.get(0);
-                UiRect openRect = rowRects.get(1);
-                UiRect delRect = rowRects.get(2);
+                UiRect useRect = rowRects.get(1);
+                UiRect previewRect = rowRects.get(2);
+                UiRect openRect = rowRects.get(3);
+                UiRect delRect = rowRects.get(4);
 
                 if (file.equals(renamingFile)) {
                     // 重命名编辑态：绘制输入框 + 缓冲文本 + 光标（焦点高亮平滑淡入）
@@ -374,16 +406,24 @@ public final class BlueprintLibraryPanel extends UiPanel {
                     TextRenderer.draw(g, name, contentRect.x() + 6, y + (ROW_H - Minecraft.getInstance().font.lineHeight) / 2 + 1, textColor);
                 }
 
-                // 打开文件位置按钮（悬停行时显示）
-                boolean openHover = hitOpenLocation(mouseX, mouseY, openRect);
+                // 使用 / 预览 / 打开文件按钮（悬停行时显示）
+                boolean useHover = !suppressed && hitButton(mouseX, mouseY, useRect);
+                if (hovering || useHover) {
+                    renderTextButton(g, mouseX, mouseY, useRect, "button.rtsbuilding.blueprint.use", useBtnHovers, file);
+                }
+                boolean previewHover = !suppressed && hitButton(mouseX, mouseY, previewRect);
+                if (hovering || previewHover) {
+                    renderTextButton(g, mouseX, mouseY, previewRect, "button.rtsbuilding.blueprint.preview", previewBtnHovers, file);
+                }
+                boolean openHover = !suppressed && hitButton(mouseX, mouseY, openRect);
                 if (hovering || openHover) {
-                    renderOpenLocationButton(g, mouseX, mouseY, openRect, file);
+                    renderTextButton(g, mouseX, mouseY, openRect, "button.rtsbuilding.blueprint.open_file", openFileBtnHovers, file);
                 }
 
                 // 删除按钮（悬停行时显示，需二次点击确认）
                 int delX = delRect.x();
                 int delY = delRect.y();
-                boolean delHover = deleteButton.hit(mouseX, mouseY, delX, delY);
+                boolean delHover = !suppressed && deleteButton.hit(mouseX, mouseY, delX, delY);
                 if (hovering || delHover) {
                     deleteButton.render(g, mouseX, mouseY, delX, delY, pendingDelete == file);
                 }
@@ -398,15 +438,29 @@ public final class BlueprintLibraryPanel extends UiPanel {
     }
 
     /**
-     * 行内排布：[内容区 fill, 打开文件按钮 fixed, 删除按钮 fixed] 右对齐。
+     * 行内排布：[内容区 fill, 使用, 预览, 打开文件, 删除] 右对齐。
      * 渲染与点击命中共用同一布局，保证两者坐标一致。
      */
     private static List<UiRect> computeRowRects(int cx, int y, int listW) {
         return FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.START,
                 FlexLayout.Align.CENTER, 3, cx, y, listW, ROW_H,
                 List.of(UiBox.fill(1f),
+                        UiBox.fixed(useButtonWidth(), DeleteButton.SIZE),
+                        UiBox.fixed(previewButtonWidth(), DeleteButton.SIZE),
                         UiBox.fixed(openLocationWidth(), DeleteButton.SIZE),
                         UiBox.fixed(DeleteButton.width(), DeleteButton.SIZE)));
+    }
+
+    /** 「使用」按钮宽度（px）：按当前语言按钮文字渲染宽度自适应（含左右内边距）。 */
+    private static int useButtonWidth() {
+        return Minecraft.getInstance().font.width(
+                Component.translatable("button.rtsbuilding.blueprint.use").getString()) + 12;
+    }
+
+    /** 「预览」按钮宽度（px）：按当前语言按钮文字渲染宽度自适应（含左右内边距）。 */
+    private static int previewButtonWidth() {
+        return Minecraft.getInstance().font.width(
+                Component.translatable("button.rtsbuilding.blueprint.preview").getString()) + 12;
     }
 
     /** 打开文件按钮宽度（px）：按当前语言按钮文字的渲染宽度自适应（含左右内边距）。 */
@@ -415,21 +469,22 @@ public final class BlueprintLibraryPanel extends UiPanel {
         return font.width(Component.translatable("button.rtsbuilding.blueprint.open_file").getString()) + 12;
     }
 
-    /** 打开文件位置按钮：本地化文字 + 悬停渐变（与删除按钮同风格）。 */
-    private void renderOpenLocationButton(GuiGraphics g, int mouseX, int mouseY, UiRect rect, Path file) {
-        boolean hovering = hitOpenLocation(mouseX, mouseY, rect);
-        float t = openFileBtnHovers.computeIfAbsent(file, k -> AnimFloat.hover()).track(hovering);
+    /** 通用行内文字按钮：本地化文字 + 悬停渐变（与删除按钮同风格）。 */
+    private void renderTextButton(GuiGraphics g, int mouseX, int mouseY, UiRect rect,
+                                  String textKey, Map<Path, AnimFloat> hoverAnims, Path file) {
+        boolean hovering = hitButton(mouseX, mouseY, rect);
+        float t = hoverAnims.computeIfAbsent(file, k -> AnimFloat.hover()).track(hovering);
         int bg = ColorAnimation.lerpRGB(UiPalette.get("list_btn"), UiPalette.get("list_btn_hover"), t);
         SdfRenderer.drawRoundedRect(g, rect.x(), rect.y(), rect.w(), rect.h(), 3, bg);
         Font font = Minecraft.getInstance().font;
-        String text = Component.translatable("button.rtsbuilding.blueprint.open_file").getString();
+        String text = Component.translatable(textKey).getString();
         TextRenderer.drawCentered(g, font, text,
                 rect.x() + rect.w() / 2, rect.y() + (rect.h() - font.lineHeight) / 2 + 1,
                 UiPalette.get("tooltip_text"));
     }
 
     /** 命中检测（与渲染坐标一致）。 */
-    private static boolean hitOpenLocation(double mx, double my, UiRect rect) {
+    private static boolean hitButton(double mx, double my, UiRect rect) {
         return mx >= rect.x() && mx < rect.x() + rect.w()
                 && my >= rect.y() && my < rect.y() + rect.h();
     }
@@ -461,6 +516,40 @@ public final class BlueprintLibraryPanel extends UiPanel {
             LOG.warn("打开蓝图文件位置失败: {}", file, e);
         }
         this.statusMessage = Component.translatable("message.rtsbuilding.blueprint.open_file_failed");
+    }
+
+    /**
+     * 使用该蓝图：后台线程解析蓝图文件 → 主线程进入放置模式（BuilderScreen 激活放置状态，
+     * 准星瞄准目标后左键确认，经服务端 BLUEPRINT_BUILD 工作流逐格建造）。
+     */
+    private void useBlueprint(Path file) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.level == null || file == null) return;
+        this.selectedFile = file;
+        RegistryAccess registryAccess = mc.level.registryAccess();
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                byte[] data = Files.readAllBytes(file);
+                return BlueprintReaders.parse(data, file.getFileName().toString(), registryAccess);
+            } catch (Exception e) {
+                LOG.warn("解析蓝图失败: {}", file, e);
+                return null;
+            }
+        }).thenAcceptAsync(blueprint -> {
+            if (blueprint == null) {
+                this.statusMessage = Component.translatable(
+                        "screen.rtsbuilding.blueprint.import_panel.failed",
+                        Component.translatable("screen.rtsbuilding.blueprints.status.parse_failed").getString());
+                return;
+            }
+            if (screen instanceof BuilderScreen builder) {
+                builder.startBlueprintPlacement(blueprint);
+                if (mc.player != null) {
+                    mc.player.displayClientMessage(
+                            Component.translatable("message.rtsbuilding.blueprint.use_hint"), true);
+                }
+            }
+        }, mc::execute);
     }
 
     @Override
@@ -521,15 +610,31 @@ public final class BlueprintLibraryPanel extends UiPanel {
             if (y >= listY + listH) break;
             if (mouseY >= y && mouseY < y + ROW_H) {
                 List<UiRect> rowRects = computeRowRects(cx, y, listW);
-                // 打开文件位置按钮：重命名编辑态下不响应
-                boolean onOpen = hitOpenLocation(mouseX, mouseY, rowRects.get(1));
-                if (onOpen) {
+                // 使用按钮：进入蓝图放置模式（重命名编辑态下不响应）
+                if (hitButton(mouseX, mouseY, rowRects.get(1))) {
+                    if (renamingFile == null) {
+                        useBlueprint(file);
+                    }
+                    return;
+                }
+                // 预览按钮：打开结构预览面板
+                if (hitButton(mouseX, mouseY, rowRects.get(2))) {
+                    if (renamingFile == null) {
+                        selectedFile = file;
+                        if (screen instanceof BuilderScreen builder) {
+                            builder.getBlueprintPreviewPanel().show(file);
+                        }
+                    }
+                    return;
+                }
+                // 打开文件位置按钮
+                if (hitButton(mouseX, mouseY, rowRects.get(3))) {
                     if (renamingFile == null) {
                         openFileLocation(file);
                     }
                     return;
                 }
-                UiRect delRect = rowRects.get(2);
+                UiRect delRect = rowRects.get(4);
                 boolean onDelete = deleteButton.hit(mouseX, mouseY, delRect.x(), delRect.y());
                 if (onDelete) {
                     // 重命名编辑态下不响应删除
@@ -544,15 +649,22 @@ public final class BlueprintLibraryPanel extends UiPanel {
                     }
                     return;
                 }
-                // 点击条目名字区域：进入重命名（点击重命名中的行则保持编辑态）
+                // 点击条目名字区域：双击进入重命名；单击仅选中高亮（打开预览只走「预览」按钮）
                 if (renamingFile == null || !renamingFile.equals(file)) {
                     if (renamingFile != null) {
                         commitRename();
                     }
-                    startRename(file);
-                    pendingDelete = null;
+                    long now = System.currentTimeMillis();
+                    if (file.equals(lastClickedFile) && now - lastClickedMs < DOUBLE_CLICK_MS) {
+                        startRename(file);
+                        pendingDelete = null;
+                    } else {
+                        lastClickedFile = file;
+                        lastClickedMs = now;
+                        selectedFile = file;
+                    }
+                    return;
                 }
-                return;
             }
             y += ROW_H;
         }
@@ -723,6 +835,8 @@ public final class BlueprintLibraryPanel extends UiPanel {
     protected void onClose() {
         this.searchFocused = false;
         this.pendingDelete = null;
+        this.selectedFile = null;
+        this.lastClickedFile = null;
         this.renamingFile = null;
         this.renameBuffer.setLength(0);
         this.renameCursorPos = 0;
@@ -735,6 +849,8 @@ public final class BlueprintLibraryPanel extends UiPanel {
         this.prevRenaming = false;
         this.rowHoverAnims.clear();
         this.openFileBtnHovers.clear();
+        this.useBtnHovers.clear();
+        this.previewBtnHovers.clear();
         super.onClose();
     }
 }

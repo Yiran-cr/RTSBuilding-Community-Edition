@@ -263,6 +263,17 @@
   "button.rtsbuilding.blueprint.open_file": "Open File",
   "message.rtsbuilding.blueprint.open_file_failed": "§7[Blueprint] §cFailed to open file location",
 
+  "screen.rtsbuilding.blueprint.preview.title": "Blueprint Preview",
+  "screen.rtsbuilding.blueprint.preview.title_with_name": "Blueprint Preview: %s",
+  "screen.rtsbuilding.blueprint.preview.loading": "Loading preview…",
+  "screen.rtsbuilding.blueprint.preview.failed": "Preview failed: %s",
+  "screen.rtsbuilding.blueprint.preview.empty": "Blueprint has no renderable blocks",
+  "screen.rtsbuilding.blueprint.preview.hint": "Drag to rotate · Scroll to zoom",
+  "screen.rtsbuilding.blueprint.preview.info": "Size: %d × %d × %d · Blocks: %d",
+  "button.rtsbuilding.blueprint.preview": "Preview",
+  "button.rtsbuilding.blueprint.use": "Use",
+  "message.rtsbuilding.blueprint.use_hint": "§7[Blueprint] §aPlacement mode: aim with the cursor and left-click to place, Esc to cancel",
+
   "message.rtsbuilding.workflow.resumed": "§7[Workflow] §a▶ Resumed",
   "message.rtsbuilding.workflow.paused": "§7[Workflow] §e⏸ Paused",
   "message.rtsbuilding.workflow.waiting_items": "Waiting for items...",

@@ -92,6 +92,20 @@ public final class BuilderScreenEventRouter {
 
         pr.registerContentPanelMouseClick(d);
 
+        d.onMouseClick(event -> {
+            // 蓝图放置模式：左键点击世界（非 UI）确认放置到准星锚点
+            if (screen.isBlueprintPlacementActive()
+                    && event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT
+                    && !screen.isMouseOverUI(event.x(), event.y())) {
+                var anchor = screen.getPlacementAnchor();
+                if (anchor != null) {
+                    screen.confirmBlueprintPlacement(anchor);
+                    return CONSUMED;
+                }
+            }
+            return PASS;
+        }, EventDispatcher.P_BIND_LOGIC);
+
         d.onMouseClick(event ->
                 bmh.handleMouseClick(event, screen, lb),
                 EventDispatcher.P_BIND_LOGIC);
@@ -230,6 +244,11 @@ public final class BuilderScreenEventRouter {
             BindModeMouseHandler bmh, EntityInteractionHandler eih,
             BuilderScreen screen) {
         d.onKeyPress(event -> {
+            // 蓝图放置模式：Esc 取消（优先于浮窗关闭 / 退出 RTS）
+            if (event.keyCode() == GLFW.GLFW_KEY_ESCAPE && screen.isBlueprintPlacementActive()) {
+                screen.cancelBlueprintPlacement();
+                return CONSUMED;
+            }
             if (fw.keyPressed(event.keyCode(), event.scanCode(), event.modifiers())) return CONSUMED;
             if (event.keyCode() == GLFW.GLFW_KEY_ESCAPE && eih.isInteractionPanelOpen()) {
                 eih.closeInteractionPanel();

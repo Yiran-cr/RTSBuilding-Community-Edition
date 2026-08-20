@@ -263,6 +263,17 @@
   "button.rtsbuilding.blueprint.open_file": "打开文件",
   "message.rtsbuilding.blueprint.open_file_failed": "§7[蓝图] §c打开文件位置失败",
 
+  "screen.rtsbuilding.blueprint.preview.title": "蓝图预览",
+  "screen.rtsbuilding.blueprint.preview.title_with_name": "蓝图预览：%s",
+  "screen.rtsbuilding.blueprint.preview.loading": "正在加载预览…",
+  "screen.rtsbuilding.blueprint.preview.failed": "预览失败：%s",
+  "screen.rtsbuilding.blueprint.preview.empty": "蓝图没有可渲染的方块",
+  "screen.rtsbuilding.blueprint.preview.hint": "拖拽旋转 · 滚轮缩放",
+  "screen.rtsbuilding.blueprint.preview.info": "尺寸：%d × %d × %d · 方块：%d",
+  "button.rtsbuilding.blueprint.preview": "预览",
+  "button.rtsbuilding.blueprint.use": "使用",
+  "message.rtsbuilding.blueprint.use_hint": "§7[蓝图] §a已进入蓝图放置模式：移动准星瞄准目标，左键确认放置，Esc 取消",
+
   "message.rtsbuilding.workflow.resumed": "§7[工作流] §a▶ 已恢复",
   "message.rtsbuilding.workflow.paused": "§7[工作流] §e⏸ 已暂停",
   "message.rtsbuilding.workflow.waiting_items": "等待物品...",

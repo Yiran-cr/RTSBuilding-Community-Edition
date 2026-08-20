@@ -33,6 +33,12 @@ public final class AxisGizmoState {
     /** 进入拖拽时系统光标的物理像素 Y（用于释放时恢复位置） */
     private double dragStartCursorY;
 
+    /** 拖拽旋转增量计算的上次光标位置（物理像素），钳制回中心后重置为中心 */
+    private double lastDragCursorX;
+
+    /** 拖拽旋转增量计算的上次光标位置（物理像素） */
+    private double lastDragCursorY;
+
     /** 六个轴段（正/负各三）的悬停动画 */
     private final AnimFloat[] hoverAnims = {
             AnimFloat.hover(), AnimFloat.hover(), AnimFloat.hover(),
@@ -72,6 +78,11 @@ public final class AxisGizmoState {
     public void setDragStartCursorX(double v) { this.dragStartCursorX = v; }
     public double getDragStartCursorY() { return dragStartCursorY; }
     public void setDragStartCursorY(double v) { this.dragStartCursorY = v; }
+
+    public double getLastDragCursorX() { return lastDragCursorX; }
+    public void setLastDragCursorX(double v) { this.lastDragCursorX = v; }
+    public double getLastDragCursorY() { return lastDragCursorY; }
+    public void setLastDragCursorY(double v) { this.lastDragCursorY = v; }
 
     public AnimFloat[] getHoverAnims() { return hoverAnims; }
 }

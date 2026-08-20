@@ -67,7 +67,7 @@ public final class LineBrushRenderPass implements RenderPass {
         if (mc.level == null || mc.getCameraEntity() == null) return;
         if (!(mc.screen instanceof com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen screen)) return;
         // XYZ 轴调节器拖拽期间跳过：光标隐藏后悬停点固定，视角旋转会让线框预览跳动
-        if (screen.isAxisGizmoDragging()) return;
+        if (screen.isAnyDragActive()) return;
         Vec3 cameraPos = mc.getCameraEntity().getEyePosition(partialTick);
 
         // 当前「形状 × 阶段」应渲染的方块列表（圆/球在选点阶段即渲染完整形状，
