@@ -105,11 +105,51 @@ public final class DebugMenuPopup extends BasePopup {
 
     public boolean isDebugOverlayEnabled() { return debugOverlayEnabled; }
 
+    /** 区块边界子开关（供 UI 状态持久化读取）。 */
+    public boolean isChunkBorderVisible() { return chunkBorderVisible; }
+
+    /** 碰撞箱子开关（供 UI 状态持久化读取）。 */
+    public boolean isCollisionBoxVisible() { return collisionBoxVisible; }
+
+    /**
+     * 直接设置区块边界子开关（供 UI 状态持久化恢复使用）。
+     * 与列表项 action 保持同一套同步逻辑（字段 + 渲染态 + 调试渲染器）。
+     */
+    public void setChunkBorderVisible(boolean visible) {
+        if (chunkBorderVisible == visible) return;
+        chunkBorderVisible = visible;
+        states[0] = visible;
+        if (debugOverlayEnabled) {
+            syncChunkBorder(visible);
+        }
+    }
+
+    /**
+     * 直接设置碰撞箱子开关（供 UI 状态持久化恢复使用）。
+     * 与列表项 action 保持同一套同步逻辑（字段 + 渲染态 + 调试渲染器）。
+     */
+    public void setCollisionBoxVisible(boolean visible) {
+        if (collisionBoxVisible == visible) return;
+        collisionBoxVisible = visible;
+        states[1] = visible;
+        if (debugOverlayEnabled) {
+            syncCollisionBox(visible);
+        }
+    }
+
     
 
     
     public void toggleDebugOverlay() {
-        debugOverlayEnabled = !debugOverlayEnabled;
+        setDebugOverlayEnabled(!debugOverlayEnabled);
+    }
+
+    /**
+     * 直接设置调试浮层开关（供 UI 状态持久化恢复使用，逻辑与 {@link #toggleDebugOverlay()} 一致）。
+     */
+    public void setDebugOverlayEnabled(boolean enabled) {
+        if (debugOverlayEnabled == enabled) return;
+        debugOverlayEnabled = enabled;
         if (debugOverlayEnabled) {
             enableAllDebugFeatures();
         } else {

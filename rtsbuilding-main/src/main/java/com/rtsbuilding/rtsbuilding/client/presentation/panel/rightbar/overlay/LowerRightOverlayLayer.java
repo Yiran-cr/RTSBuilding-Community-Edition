@@ -53,4 +53,9 @@ public final class LowerRightOverlayLayer extends DownOverlayLayer {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         return adjusters.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
+
+    /** 鼠标是否悬浮于「方块剔除」调节框内（供圆柱预览 pass 判定）。 */
+    public boolean isMouseOverCullingAdjuster() {
+        return adjusters.isMouseOverCullingAdjuster();
+    }
 }

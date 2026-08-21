@@ -8,6 +8,7 @@
     "ClientLevelMixin",
     "ClientPacketListenerMixin",
     "EmbeddiumWorldSliceMixin",
+    "EntityRenderDispatcherMixin",
     "FlywheelBlockEntityStorageMixin",
     "KeyboardInputMixin",
     "LocalPlayerMixin",

@@ -310,6 +310,16 @@ public abstract class AbstractButtonGroup {
         return index >= 0 && index < selected.length && selected[index];
     }
 
+    /**
+     * 直接设置指定按钮的选中态（供 UI 状态持久化恢复等场景使用）。
+     * 仅写入选中位，不触发互斥/联动业务逻辑——需要互斥的组由调用方组合设置。
+     */
+    public final void setSelected(int index, boolean value) {
+        if (index >= 0 && index < selected.length) {
+            selected[index] = value;
+        }
+    }
+
     
 
     public void tick() {

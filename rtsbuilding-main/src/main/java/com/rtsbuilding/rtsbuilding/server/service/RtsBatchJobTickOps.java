@@ -73,13 +73,16 @@ public final class RtsBatchJobTickOps {
     /**
      * Pattern 2: Process jobs completed within this tick — history recording + progress update + workflow completion + page refresh.
      *
-     * @param <J>             Job type
-     * @param completedJobs  List of jobs completed in this tick
-     * @param beforeTick     Progress snapshot of each job before the tick
-     * @param entryIdFn      Gets workflowEntryId from job
-     * @param countFn        Gets processed count from job (placedPositions.size / destroyedPositions.size)
-     * @param failedFn       Gets skipped/failed count from job
-     * @param historyRecorder Method to record history (recordPlacement / recordBreak)
+     * @param <J>                    Job type
+     * @param completedJobs          List of jobs completed in this tick
+     * @param beforeTick             Progress snapshot of each job before the tick
+     * @param entryIdFn              Gets workflowEntryId from job
+     * @param countFn                Gets processed count from job (placedPositions.size / destroyedPositions.size)
+     * @param failedFn               Gets skipped/failed count from job
+     * @param historyRecorder        Method to record history (recordPlacement / recordBreak)
+     * @param reportCompletedDelta   true=由本方法增量上报 completed（破坏，动作计数在 tick 内更新）；
+     *                               false=completed 已由放置事件（落位/放置成功时 updateProgress(1)）逐块上报，
+     *                               此处只补报 failed 并 complete（放置，避免重复计数）
      */
     public static <J> void processCompletedJobs(
             ServerPlayer player, RtsStorageSession session,
@@ -87,7 +90,8 @@ public final class RtsBatchJobTickOps {
             ToIntFunction<J> entryIdFn, ToIntFunction<J> countFn,
             ToIntFunction<J> failedFn,
             BiConsumer<ServerPlayer, J> historyRecorder,
-            @javax.annotation.Nullable BiConsumer<ServerPlayer, J> onCompleted) {
+            @javax.annotation.Nullable BiConsumer<ServerPlayer, J> onCompleted,
+            boolean reportCompletedDelta) {
         if (completedJobs.isEmpty()) return;
 
         var engine = RtsWorkflowEngine.getInstance();
@@ -102,9 +106,16 @@ public final class RtsBatchJobTickOps {
             // Merge three engine.from() calls into one, avoiding repeated playerRefs + slots + entryId lookups
             int failed = failedFn.applyAsInt(job);
             engine.from(player, eid).ifPresent(token -> {
-                // Update workflow progress (completed + failed in one notify)
-                if (delta > 0 || failed > 0) {
-                    token.updateProgress(delta, failed, null);
+                if (reportCompletedDelta) {
+                    // Update workflow progress (completed + failed in one notify)
+                    if (delta > 0 || failed > 0) {
+                        token.updateProgress(delta, failed, null);
+                    }
+                } else {
+                    // completed 已由放置事件逐块上报，此处仅补报失败
+                    if (failed > 0) {
+                        token.addFailedBlocks(failed);
+                    }
                 }
                 // Complete workflow entry
                 token.complete();
@@ -121,18 +132,24 @@ public final class RtsBatchJobTickOps {
 
     /**
      * Pattern 3: Update mid-progress for jobs in the active queue.
+     *
+     * @param reportDelta true=增量上报进度（破坏，动作计数在 tick 内更新）；
+     *                    false=不报进度（放置的 completed 已由放置事件逐块上报），仅刷新存储页面
      */
     public static <J> void updateMidProgress(
             ServerPlayer player, RtsStorageSession session,
             Iterable<J> activeJobs, Map<Integer, Integer> beforeTick,
-            ToIntFunction<J> entryIdFn, ToIntFunction<J> countFn) {
+            ToIntFunction<J> entryIdFn, ToIntFunction<J> countFn,
+            boolean reportDelta) {
         var engine = RtsWorkflowEngine.getInstance();
         for (J j : activeJobs) {
             int eid = entryIdFn.applyAsInt(j);
             int before = beforeTick.getOrDefault(eid, 0);
             int delta = countFn.applyAsInt(j) - before;
             if (delta > 0) {
-                engine.from(player, eid).ifPresent(token -> token.updateProgress(delta, null));
+                if (reportDelta) {
+                    engine.from(player, eid).ifPresent(token -> token.updateProgress(delta, null));
+                }
                 RtsServer.get().serviceOp().markDirty(player, session);
             }
         }

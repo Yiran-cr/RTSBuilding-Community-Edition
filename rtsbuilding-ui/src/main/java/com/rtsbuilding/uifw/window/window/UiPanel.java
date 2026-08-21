@@ -121,7 +121,10 @@ public abstract class UiPanel implements UiPanelApi {
     public void setOpen(boolean open) {
         boolean wasOpen = this.open;
         if (open && !wasOpen) {
-            initializeDefaultBounds();
+            // 仅当面板从未初始化过 bounds 时才重置为默认位置/尺寸；
+            // 若已有 bounds（持久化恢复或用户拖拽调整过），打开时保留当前状态，
+            // 避免每次打开都回到默认居中位置导致持久化位置失效。
+            initializePosition();
             markBroughtToFront();
             if (this.screen != null) this.screen.getFloatingWindowLayer().markSortDirty();
         }

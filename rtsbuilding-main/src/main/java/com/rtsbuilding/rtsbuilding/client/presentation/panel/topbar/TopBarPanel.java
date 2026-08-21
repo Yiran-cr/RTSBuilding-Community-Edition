@@ -192,6 +192,42 @@ public final class TopBarPanel implements UiPanelApi {
         }
     }
 
+    /** 当前调试浮层是否开启（供顶栏按钮状态与 UI 状态持久化读取）。 */
+    public boolean isDebugOverlayEnabled() {
+        return this.debugPopup != null && this.debugPopup.isDebugOverlayEnabled();
+    }
+
+    /** 直接设置调试浮层开关（供 UI 状态持久化恢复使用）。 */
+    public void setDebugOverlayEnabled(boolean enabled) {
+        if (this.debugPopup != null) {
+            this.debugPopup.setDebugOverlayEnabled(enabled);
+        }
+    }
+
+    /** 区块边界子开关（供 UI 状态持久化读取）。 */
+    public boolean isChunkBorderVisible() {
+        return this.debugPopup != null && this.debugPopup.isChunkBorderVisible();
+    }
+
+    /** 碰撞箱子开关（供 UI 状态持久化读取）。 */
+    public boolean isCollisionBoxVisible() {
+        return this.debugPopup != null && this.debugPopup.isCollisionBoxVisible();
+    }
+
+    /** 直接设置区块边界子开关（供 UI 状态持久化恢复使用）。 */
+    public void setChunkBorderVisible(boolean visible) {
+        if (this.debugPopup != null) {
+            this.debugPopup.setChunkBorderVisible(visible);
+        }
+    }
+
+    /** 直接设置碰撞箱子开关（供 UI 状态持久化恢复使用）。 */
+    public void setCollisionBoxVisible(boolean visible) {
+        if (this.debugPopup != null) {
+            this.debugPopup.setCollisionBoxVisible(visible);
+        }
+    }
+
     
     public void cycleMode() {
         if (modeSwitcher != null) {

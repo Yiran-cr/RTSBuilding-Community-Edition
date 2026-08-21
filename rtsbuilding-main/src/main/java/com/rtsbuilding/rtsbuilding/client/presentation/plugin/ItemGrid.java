@@ -50,6 +50,11 @@ public class ItemGrid {
         return state.currentSelectedItem;
     }
 
+    /** 存储网格状态（含过滤/排序偏好，供 UI 状态持久化读取）。 */
+    public GridState getState() {
+        return state;
+    }
+
     /**
      * 无条件清空当前选材（UI 选取态 + 建造启用）。退出 RTS 模式时调用。
      */

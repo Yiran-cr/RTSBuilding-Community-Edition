@@ -51,7 +51,13 @@ public final class LeftSidebarPanel implements UiPanelApi {
 
     
     public void setCurrentWidth(int width) {
-        this.currentWidth = Math.max(30, Math.min(width, this.screen != null ? this.screen.getUiWidth() / 4 : 2000));
+        int limit = 2000;
+        if (this.screen instanceof com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen bs) {
+            limit = Math.max(30, bs.getRtsVirtualWidth() / 4);
+        } else if (this.screen != null) {
+            limit = Math.max(30, this.screen.getUiWidth() / 4);
+        }
+        this.currentWidth = Math.max(30, Math.min(width, limit));
     }
 
     
@@ -111,6 +117,53 @@ public final class LeftSidebarPanel implements UiPanelApi {
     
     public boolean isItemPickupActive() {
         return actionGroup.isSelected(2);
+    }
+
+    /** 方向旋转（建筑朝向旋转）动作按钮是否选中（供 UI 状态持久化读取）。 */
+    public boolean isDirectionRotateActive() {
+        return actionGroup.isSelected(1);
+    }
+
+    /** 建造侧当前选中的形状索引（供 UI 状态持久化读取，见 {@link ShapeButtonGroup} 常量）。 */
+    public int getBuildShapeIndex() {
+        return shapeGroup.getConstructionSelectedShape();
+    }
+
+    /** 破坏侧当前选中的形状索引（供 UI 状态持久化读取，见 {@link ShapeButtonGroup} 常量）。 */
+    public int getBreakShapeIndex() {
+        return shapeGroup.getDestructionSelectedShape();
+    }
+
+    /**
+     * 一次性恢复左栏各按钮组的选中态（供 UI 状态持久化恢复使用）。
+     * 纯客户端偏好写入；物品拾取开启时同步服务端漏斗开关。
+     *
+     * @param clickSelected 点击（true）/框选（false）选择模式
+     * @param buildSelected 建造（true）/破坏（false）侧
+     * @param buildShape    建造侧形状索引
+     * @param breakShape    破坏侧形状索引
+     * @param bind          绑定动作按钮选中
+     * @param rotate        方向旋转动作按钮选中
+     * @param pickup        物品拾取动作按钮选中
+     */
+    public void applyPersistedState(boolean clickSelected, boolean buildSelected,
+                                    int buildShape, int breakShape,
+                                    boolean bind, boolean rotate, boolean pickup) {
+        selectGroup.setSelected(0, clickSelected);
+        selectGroup.setSelected(1, !clickSelected);
+        if (buildSelected) {
+            buildDestroyGroup.selectConstruction();
+        } else {
+            buildDestroyGroup.selectDestruction();
+        }
+        shapeGroup.setModeShape(ShapeButtonGroup.MODE_CONSTRUCTION, buildShape);
+        shapeGroup.setModeShape(ShapeButtonGroup.MODE_DESTRUCTION, breakShape);
+        actionGroup.setSelected(0, bind);
+        actionGroup.setSelected(1, rotate);
+        actionGroup.setSelected(2, pickup);
+        if (pickup) {
+            syncItemPickupState();
+        }
     }
 
     

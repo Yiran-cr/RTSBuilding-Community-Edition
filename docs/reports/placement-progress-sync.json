@@ -1,0 +1,105 @@
+{
+  "id": "placement-progress-sync",
+  "title": "放置工作流进度链路（延迟落位 vs 进度上报时机）",
+  "subtitle": "NeoForge 1.21.1 · 放置进度条与实际放置进度对不上、破坏正常——快速建造延迟落位（动画结束才 setBlock），进度改为事件驱动与落位同步",
+  "tags": {
+    "module": "rtsbuilding-main",
+    "status": "已走查并修复",
+    "counts": "问题 3 · 修复 3 · 保留 0",
+    "result": "BUILD SUCCESSFUL"
+  },
+  "classes": [
+    { "name": "RtsPlacementBatch", "path": "server/service/placement/", "desc": "批处理放置作业：<code>tickPlaceBatchJobs</code> 按 <code>RtsPlacementQuickBuild.PlaceOutcome</code> 处理，进度<b>事件驱动</b>——落位/放置成功时 <code>updateProgress(1)</code>，job 完成需等待全部延迟落位（<code>pendingPlacements</code> 归零）。" },
+    { "name": "RtsPlacementQuickBuild", "path": "server/service/placement/", "desc": "快速建造/形状放置：<code>placeStateBatchEntry</code> 提取物品后走 <code>RtsBlockAnimationCommitter.schedulePlace</code> 延迟落位；新增 <code>PlaceOutcome</code> 枚举与 <code>onCommitFinished</code> 落位完成回调。" },
+    { "name": "RtsBlockAnimationCommitter", "path": "server/service/placement/", "desc": "延迟落位调度器：<code>schedulePlace</code> 后方块要等动画周期（<code>PLACE_ANIMATION_TICKS=12</code>）结束后才真正 <code>setBlock</code>；<code>tick()</code> 在 server phase 执行，随后 <code>flushDirty</code> 发包。" },
+    { "name": "RtsPlacementExecutor", "path": "server/service/placement/", "desc": "交互式单放置：<code>placeSelectedInternal</code>/<code>placeReplaceAt</code> 返回 <code>PlaceOutcome</code>；交互式路径立即落位由 <code>detectPlacedPos</code> 即时检测。" },
+    { "name": "RtsDestructionBatch", "path": "server/service/destruction/", "desc": "批处理破坏作业：破坏为<b>立即</b> setBlock 移除，动作计数在 tick 内更新，进度差值上报精确——正常行为的基准。" },
+    { "name": "RtsBatchJobTickOps", "path": "server/service/", "desc": "共享作业 tick 工具：<code>processCompletedJobs</code>/<code>updateMidProgress</code> 新增 reportDelta 参数——破坏保持差值上报，放置由事件上报（避免重复计数）。" },
+    { "name": "RtsProgressRefresher", "path": "server/service/", "desc": "进度刷新服务。已移除 <code>refreshPlacementProgress</code> 世界扫描覆盖；仅保留 <code>refreshBlueprintProgress</code>（蓝图方块被挖掉重新入队，20 tick 节流）。" },
+    { "name": "RtsWorkflowToken", "path": "server/workflow/core/", "desc": "<code>updateProgress(delta, failed)</code> 增量上报，每次调用触发脏标记，由 <code>flushDirty</code> 每 tick 合并发包。" },
+    { "name": "WorkflowRenderer / WorkflowModule", "path": "client/", "desc": "UI 侧仅渲染服务端下发的 <code>completed/total</code> 与进度条，<b>不是 UI 问题</b>。" }
+  ],
+  "sections": [
+    {
+      "title": "2.1 破坏进度链路（正确基准）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "破坏动作 → C2S → <code>RtsDestructionBatch.tickDestroyJobs</code>（player phase）" },
+        { "side": "srv", "text": "破坏成功 → <code>job.destroyedPositions.add(pos)</code>（立即 setBlock 移除，无延迟），动作计数在本 tick 内更新" },
+        { "side": "srv", "text": "<code>updateMidProgress</code>/<code>processCompletedJobs</code> 用 <code>destroyedPositions.size()</code> 差值增量上报" },
+        { "side": "cli", "text": "进度条 = 实际破坏动作数，单调递增，精确一致" }
+      ]
+    },
+    {
+      "title": "2.2 放置进度链路（快速建造根因）",
+      "type": "flow",
+      "nodes": [
+        { "side": "cli", "text": "形状建造/范围放置 → C2S → <code>RtsPlacementBatch.tickPlaceBatchJobs</code>（player phase）" },
+        { "side": "srv", "text": "快速建造：<code>placeStateBatchEntry</code> → <code>schedulePlace</code> 延迟落位，<b>立即返回</b>（方块 12 tick 后才 setBlock）" },
+        { "side": "srv", "text": "<b>修复前</b>：调度后立即读 <code>afterState</code> 判定放置成功 → 必然落空 → 全部误计为 skipped（failed），completed 恒 0" },
+        { "side": "srv", "text": "<b>修复后</b>：<code>PlaceOutcome</code> 以调度结果为准（PLACED/SKIPPED/STOP），不再调度后读世界状态" },
+        { "side": "cli", "text": "进度条 = 已调度放置的方块数（不再误计失败）" }
+      ]
+    },
+    {
+      "title": "2.3 进度上报时机（本轮核心修复）",
+      "type": "table",
+      "headers": ["路径", "落位时机", "修复前进度上报", "修复后进度上报"],
+      "rows": [
+        ["快速建造（形状建造）", "延迟：动画 12 tick 后 setBlock（server phase）", "调度瞬间 +1 → 进度领先动画约 12 tick", "<code>onCommitFinished(true)</code> 落位成功才 <code>updateProgress(1)</code>，与实际出现同步"],
+        ["交互式范围放置", "立即：useItemOn 内 setBlock", "tick 末差值上报（恰好正确）", "detectPlacedPos 成功即 <code>updateProgress(1)</code>（事件驱动，不重复）"],
+        ["单方块替换（placeReplaceAt）", "延迟：走快速建造", "调度瞬间 +1", "按调度即计（单方块场景，保留）"]
+      ]
+    },
+    {
+      "title": "2.4 事件驱动与差值上报的时序冲突",
+      "type": "note",
+      "note": "延迟落位发生在 <code>RtsBlockAnimationCommitter.tick()</code>（server phase），而 <code>placedBeforeTick</code> 与 <code>updateMidProgress</code> 在 player phase 读取 <code>placedPositions.size()</code>——差值永远捕捉不到落位增量（delta 恒为 0）。因此快速建造/交互式放置改为<b>事件驱动</b>上报：落位/放置成功即 <code>updateProgress(1)</code>，由 <code>flushDirty</code> 在落位同 tick 的 server phase 合并发包，进度条与方块出现逐块同步。"
+    },
+    {
+      "title": "2.5 job 完成等待延迟落位",
+      "type": "table",
+      "headers": ["机制", "说明"],
+      "rows": [
+        ["pendingPlacements 计数", "PLACED 时 <code>onPlacementScheduled()</code> +1；落位完成（成功或放弃）回调 <code>onPlacementCommitted()</code> -1"],
+        ["完成检测", "<code>!job.hasNext() && pendingPlacements == 0</code> 才移除 job；pending>0 时 break 等待下一 tick，避免进度/历史缺失"],
+        ["历史记录", "<code>recordPlacement</code> 使用 <code>placedPositions</code>——现在只含真正落位的方块，撤销更准确"]
+      ]
+    },
+    {
+      "title": "2.6 世界扫描覆盖缺陷（已移除）",
+      "type": "table",
+      "headers": ["缺陷", "场景", "后果"],
+      "rows": [
+        ["重复计数", "对每个 clickedPos 同时检查 <code>pos</code> 与 <code>pos.relative(face)</code>；沿 face 连续放置时相邻位置命中同一方块", "completedBlocks 虚高，文本「N/M」与实际方块数错位"],
+        ["误算已有方块", "范围内原本已存在的同种方块被计入「已放置」", "进度虚高（实际没放那么多）"],
+        ["chunk 未加载回退", "<code>hasChunkAt</code> false 不计入 → 扫描值偏小", "<code>setCompletedBlocks</code> 把进度拉回退，进度条跳动"]
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "title": "① 快速建造（形状建造）延迟落位导致成功判定落空，全部误计为失败",
+      "status": "fixed",
+      "why": "根因：<code>RtsPlacementQuickBuild.placeStateBatchEntry</code> 走 <code>RtsBlockAnimationCommitter.schedulePlace</code> 延迟落位（动画 12 tick 后才 setBlock），但 <code>tickPlaceBatchJobs</code> 在调度后立即读 <code>afterState</code> 判定放置成功——方块尚未落位仍是空气 → 判定 false → 全部计为 <code>skippedWhileProcessing</code>，进度 <code>completed</code> 恒为 0（文本「0/N」而方块正常生长）。修复：新增 <code>PlaceOutcome</code> 枚举，以调度结果（物品已扣）为准判定 PLACED/SKIPPED/STOP，不再调度后读世界状态。"
+    },
+    {
+      "title": "② 放置进度条领先动画约 12 tick（调度即计，方块后出现）",
+      "status": "fixed",
+      "why": "根因：快速建造调度动画瞬间进度 +1，但方块要等动画结束才真正 setBlock——进度条先到 100%，方块还在逐个生长。且延迟落位发生在 server phase、进度差值上报在 player phase，<code>placedBeforeTick</code> 差值永远捕捉不到落位增量。修复：进度改为<b>事件驱动</b>——快速建造在 <code>onCommitFinished(true)</code>（落位成功）时 <code>updateProgress(1)</code>，交互式放置在 detectPlacedPos 成功时 <code>updateProgress(1)</code>；<code>RtsBatchJobTickOps</code> 新增 reportDelta 参数，放置的 completed 不再由差值重复上报（破坏保持差值上报）。job 完成需等待 <code>pendingPlacements</code> 归零。进度条与方块实际出现逐块同步。"
+    },
+    {
+      "title": "③ 放置进度被世界扫描覆盖改写，进度条跳动/虚高/回退",
+      "status": "fixed",
+      "why": "根因：<code>RtsPlacementBatch.tickPlaceBatchJobs</code> 每 tick 末尾调用 <code>RtsProgressRefresher.refreshPlacementProgress</code>，用世界扫描结果 <code>setCompletedBlocks</code> 绝对覆盖动作进度；扫描存在重复计数、误算已有方块、chunk 未加载回退缺陷。修复：删除 <code>refreshPlacementProgress</code>，放置与破坏统一；<code>tickPlaceBatchJobs</code> 末尾仅保留 <code>refreshBlueprintProgress</code>（蓝图恢复检测）。"
+    }
+  ],
+  "boundaries": [
+    "<b>进度来源统一为事件驱动</b>：放置（落位/放置成功时 <code>updateProgress(1)</code>）与破坏（动作计数差值上报）各自精确，不做世界扫描绝对覆盖。",
+    "<b>延迟落位以落位回调为准</b>：快速建造方块动画结束才出现，进度在 <code>onCommitFinished(true)</code> 时上报，与方块出现同步；禁止调度瞬间或调度后立即读世界状态判定。",
+    "<b>job 完成等待落位</b>：<code>pendingPlacements</code> 归零前 job 不完成，保证进度/历史完整。",
+    "<b>单方块替换按调度即计</b>：单方块场景 total=1，延迟落位对进度影响可忽略，作为已知边界保留。",
+    "<b>蓝图进度例外</b>：蓝图有「已放置方块被挖掉重新入队」的恢复语义，<code>refreshBlueprintProgress</code>（20 tick 节流）保留；蓝图调度即计 + 世界扫描周期性校正，若用户反馈蓝图进度不平滑再另行处理。",
+    "<b>手动放置/撤销不影响 job 进度</b>：玩家手动放置同种方块或撤销放置不再改写进行中 job 的 completedBlocks（破坏行为本就如此）。"
+  ]
+}

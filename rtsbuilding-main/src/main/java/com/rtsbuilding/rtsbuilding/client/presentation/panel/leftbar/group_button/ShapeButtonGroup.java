@@ -174,6 +174,20 @@ public final class ShapeButtonGroup extends AbstractButtonGroup {
         syncSelectionToActiveMode();
     }
 
+    /**
+     * 直接设置指定模式（建造/破坏）的形状选择（供 UI 状态持久化恢复使用）。
+     * 仅写入该侧形状索引并同步当前激活模式的选中态；另一侧不受影响。
+     *
+     * @param mode  建造/破坏模式，见 {@link #MODE_CONSTRUCTION}/{@link #MODE_DESTRUCTION}
+     * @param shape 形状索引，见 {@link #SINGLE_BLOCK} 等常量
+     */
+    public void setModeShape(int mode, int shape) {
+        if (mode != MODE_CONSTRUCTION && mode != MODE_DESTRUCTION) return;
+        if (shape < SINGLE_BLOCK || shape >= BUTTON_COUNT) return;
+        modeShapes[mode] = shape;
+        syncSelectionToActiveMode();
+    }
+
     @Override
     protected void onButtonClick(int index) {
         super.onButtonClick(index);

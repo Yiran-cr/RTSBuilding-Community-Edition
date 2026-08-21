@@ -82,4 +82,9 @@ public final class RightDownOverlayLayer extends DownOverlayLayer {
     public ItemStack getHoveredSlotStack() {
         return itemGrid.getHoveredSlotStack();
     }
+
+    /** 存储网格状态（含过滤/排序偏好，供 UI 状态持久化读取）。 */
+    public com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.GridState getGridState() {
+        return itemGrid.getState();
+    }
 }

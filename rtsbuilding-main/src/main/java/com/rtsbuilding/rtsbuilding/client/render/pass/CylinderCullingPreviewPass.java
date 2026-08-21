@@ -14,9 +14,11 @@ import net.minecraft.world.phys.Vec3;
  * 直线圆柱剔除的范围预览 pass。
  *
  * <p>当剔除开启且 RTS 界面打开时，每帧以「摄像机朝向（屏幕中心视线）」的直线更新
- * 圆柱快照（含节流网格失效），并绘制圆柱线框：两端圆环 + 侧壁竖线 + 轴线。
- * 圆柱以相机位置为轴中点、沿视线方向<b>双向</b>延伸（前方与后方各一份剔除距离），
- * 轴与鼠标位置无关，始终沿摄像机视线方向；关闭或非 RTS 状态下不渲染、不更新。</p>
+ * 圆柱快照（含节流网格失效），保证剔除功能持续生效并跟随相机；但<b>仅当鼠标悬浮于
+ * 右栏下嵌层「方块剔除」调节器上时</b>才绘制圆柱线框：两端圆环 + 侧壁竖线 + 轴线。
+ * 鼠标移开后线框隐藏，剔除功能保持。圆柱以相机位置为轴中点、沿视线方向<b>双向</b>
+ * 延伸（前方与后方各一份剔除距离），轴与鼠标位置无关，始终沿摄像机视线方向；
+ * 关闭或非 RTS 状态下不渲染、不更新。</p>
  *
  * <p>渲染结构参考 {@link FunnelRangePass} 的 LINES 细线模式（POSITION_COLOR_NORMAL）。</p>
  */
@@ -58,8 +60,15 @@ public final class CylinderCullingPreviewPass implements RenderPass {
         var ray = CursorRaycaster.computeCameraCenterRay(mc);
         if (ray == null) return;
 
-        // 以当前射线更新圆柱快照（内部节流后失效网格并同步 Flywheel）
+        // 以当前射线更新圆柱快照（内部节流后失效网格并同步 Flywheel）：
+        // 剔除功能持续生效并跟随相机，无论是否绘制预览线框
         RtsRayCylinderCullingState.updateFromRay(ray.origin(), ray.direction());
+
+        // 仅当鼠标悬浮于「方块剔除」调节器时绘制圆柱预览线框；
+        // 鼠标移开后隐藏线框，但剔除功能保持（快照仍持续更新）。
+        if (!(mc.screen instanceof BuilderScreen screen) || !screen.isMouseOverCullingAdjuster()) {
+            return;
+        }
         Snapshot snapshot = RtsRayCylinderCullingState.snapshot();
         if (snapshot == null) {
             return;

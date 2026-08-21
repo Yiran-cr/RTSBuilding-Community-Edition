@@ -4,7 +4,10 @@ import com.rtsbuilding.uifw.render.UiPalette;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.rtsbuilding.rtsbuilding.client.application.service.ScreenCoordinator;
+import com.rtsbuilding.rtsbuilding.client.culling.RtsRayCylinderCullingState;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
+import com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState;
+import com.rtsbuilding.rtsbuilding.client.state.RtsUiStateStore;
 import com.rtsbuilding.rtsbuilding.client.util.TinyFileDialogSupport;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.input.layer.CameraInputLayer;
@@ -28,12 +31,18 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.*;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.SelectionHighlight;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.LeftSidebarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.rightbar.RightSidebarPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.ModeSwitcher;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayoutHelper;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.GridState;
 import com.rtsbuilding.rtsbuilding.client.render.ViewCaptureService;
+import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelectionPass;
+import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
+import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.render.GuiItemRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import com.rtsbuilding.uifw.window.api.UiPanelHost;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -97,6 +106,18 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     
     private final PanelRegistry panelRegistry = new PanelRegistry();
+
+    /**
+     * 界面状态是否已从持久化文件恢复（防止窗口 resize 重复触发 init() 时把
+     * 用户拖拽后的面板位置再次重置回保存值；每个 BuilderScreen 实例只恢复一次）。
+     */
+    private boolean uiStateApplied;
+
+    /** 界面状态定时落盘计数器（每 {@link #UI_STATE_SAVE_INTERVAL} tick 保存一次）。 */
+    private int uiStateSaveTick;
+
+    /** 界面状态「拖拽结束即落盘」节流（毫秒）：松开鼠标后至少间隔该时长才写盘一次。 */
+    private long lastUiStateSaveMs;
 
     private final ScreenCoordinator screenCoordinator;
 
@@ -247,12 +268,25 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         }
         long t4 = System.nanoTime();
 
+        ensureUiStateApplied();
+
         long perfCostMs = (t4 - t0) / 1_000_000L;
         if (perfCostMs >= 30L) {
             com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
                     "RTS-PERF: BuilderScreen.init background/color={} ms, gear={} ms, panelRegistry.initAll={} ms, eshp/interaction={} ms, total={} ms",
                     (t1 - t0) / 1_000_000L, (t2 - t1) / 1_000_000L, (t3 - t2) / 1_000_000L,
                     (t4 - t3) / 1_000_000L, perfCostMs);
+        }
+    }
+
+    /**
+     * 确保界面状态已从持久化文件恢复。
+     * 除 {@link #init()} 调用外，还在首次 {@link #render} 兜底调用一次——
+     * 即使 init() 中某步异常导致恢复未执行，渲染首帧也会恢复，保证进入 RTS 必然生效。
+     */
+    private void ensureUiStateApplied() {
+        if (!this.uiStateApplied) {
+            applySavedUiState();
         }
     }
 
@@ -270,6 +304,17 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     public void onClose() {
         com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.debug(
                 "RTS: BuilderScreen.onClose() called");
+        // 确保界面状态已恢复后再收集：避免「未完成恢复的实例」把默认尺寸写回持久化文件
+        ensureUiStateApplied();
+        // 退出 RTS 前收集界面状态并落盘，供下次进入恢复
+        collectUiState();
+        RtsUiStateStore.save();
+        com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
+                "RTS: UI 状态已保存 sidebar(left={}, right={}, down={}) panels={}",
+                RtsUiStateStore.getSidebar().leftWidth,
+                RtsUiStateStore.getSidebar().rightWidth,
+                RtsUiStateStore.getSidebar().downHeight,
+                RtsUiStateStore.componentCount());
         screenCoordinator.closeContainerScreen();
         // 退出 RTS 模式：清空建造选材（选材仅在拿起物品期间有效，退出即失效）
         downSidebarPanel.getRightLayer().cancelSelection();
@@ -297,6 +342,228 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     private void addFloatingWindowIfAbsent(UiPanel panel) {
         if (!this.floatingWindowLayer.frontToBackWindows().contains(panel)) {
             this.floatingWindowLayer.frontToBackWindows().add(panel);
+        }
+    }
+
+    // ── 界面状态持久化 ──────────────────────────────────────────────
+
+    /**
+     * 参与持久化的浮动面板登记（id 为持久化文件中的唯一标识）。
+     *
+     * @param persistOpen 是否持久化「开启状态」：对话框/预览类临时面板不恢复开启
+     *                    （如保存对话框、导入面板、结构预览——依赖框选区域/文件数据），
+     *                    常驻工具类面板恢复开启（如设置面板、蓝图库、调色盘）。
+     *                    位置与尺寸对所有面板都持久化。
+     */
+    private record PersistablePanel(String id, UiPanel panel, boolean persistOpen) {
+    }
+
+    private List<PersistablePanel> persistablePanels() {
+        return List.of(
+                new PersistablePanel("color_picker", this.colorPickerPanel, true),
+                new PersistablePanel("gear", this.gearMenuPanel, true),
+                new PersistablePanel("blueprint_save", this.blueprintSavePanel, false),
+                new PersistablePanel("blueprint_library", this.blueprintLibraryPanel, true),
+                new PersistablePanel("blueprint_import", this.blueprintImportPanel, false),
+                new PersistablePanel("blueprint_preview", this.blueprintPreviewPanel, false));
+    }
+
+    /**
+     * 从 {@link RtsUiStateStore} 恢复界面状态：面板位置/尺寸/开启、侧边栏宽高、各类开关。
+     * 每次 BuilderScreen 实例只执行一次（见 {@link #uiStateApplied}）。
+     * <p>各恢复段用 try-catch 隔离：单段异常只影响该段，不中断后续恢复，
+     * 确保侧边栏尺寸等关键状态尽可能恢复（避免默认尺寸被误写回文件）。</p>
+     */
+    private void applySavedUiState() {
+        if (this.uiStateApplied) {
+            return;
+        }
+        this.uiStateApplied = true;
+
+        // 面板：先按持久化开关状态决定是否开启（setOpen 会初始化默认 bounds），再覆盖为保存的位置尺寸
+        try {
+            for (PersistablePanel pp : persistablePanels()) {
+                RtsUiStateStore.PanelState state = RtsUiStateStore.getPanel(pp.id());
+                if (state == null) {
+                    continue;
+                }
+                if (pp.persistOpen() && state.open) {
+                    pp.panel().setOpen(true);
+                }
+                pp.panel().setBounds(state.x, state.y, state.w, state.h);
+            }
+        } catch (Exception ex) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.error("RTS: 恢复浮动面板状态失败", ex);
+        }
+
+        // 侧边栏：保存值大于 0 才应用（0 表示使用默认值）
+        try {
+            RtsUiStateStore.SidebarState sidebar = RtsUiStateStore.getSidebar();
+            if (sidebar != null) {
+                if (sidebar.leftWidth > 0) {
+                    this.leftSidebarPanel.setCurrentWidth(sidebar.leftWidth);
+                }
+                if (sidebar.rightWidth > 0) {
+                    this.rightSidebarPanel.setCurrentWidth(sidebar.rightWidth);
+                }
+                if (sidebar.downHeight > 0) {
+                    this.downSidebarPanel.setCurrentHeight(sidebar.downHeight);
+                }
+                if (sidebar.rightUpperHeight > 0) {
+                    this.rightSidebarPanel.setUpperOverlayHeight(sidebar.rightUpperHeight);
+                }
+                if (sidebar.downLeftWidth > 0) {
+                    this.downSidebarPanel.setLeftOverlayWidth(sidebar.downLeftWidth);
+                }
+            }
+        } catch (Exception ex) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.error("RTS: 恢复侧边栏尺寸失败", ex);
+        }
+
+        // 开关与数值设置（单段整体隔离，任一项异常不阻断其余）
+        try {
+            this.topBarPanel.setDebugOverlayEnabled(RtsUiStateStore.getToggle("debug_overlay", false));
+            this.topBarPanel.setChunkBorderVisible(RtsUiStateStore.getToggle("debug_chunk_border", true));
+            this.topBarPanel.setCollisionBoxVisible(RtsUiStateStore.getToggle("debug_collision_box", true));
+            RtsRayCylinderCullingState.setEnabled(RtsUiStateStore.getToggle("ray_culling", false));
+            ThemeManager.getInstance().setLightMode(RtsUiStateStore.getToggle("theme_light", false));
+
+            // 顶栏模式（INTERACTIVE/BUILD/BLUEPRINT，按枚举 ordinal 存取）
+            int modeIdx = (int) RtsUiStateStore.getNumber("mode_index", 0);
+            ModeSwitcher.Mode[] modes = ModeSwitcher.Mode.values();
+            if (modeIdx >= 0 && modeIdx < modes.length) {
+                this.topBarPanel.setMode(modes[modeIdx]);
+            }
+
+            // 渲染动画/深度开关与透明度
+            BoxSelectionPass.flowAnimationEnabled = RtsUiStateStore.getToggle("render_flow_anim", true);
+            CornerBracketRenderer.SmoothTarget.enabled = RtsUiStateStore.getToggle("render_smooth_anim", true);
+            AnimFloat.setEnabled(RtsUiStateStore.getToggle("render_ui_smooth", true));
+            BoxSelectionPass.depthTestEnabled = RtsUiStateStore.getToggle("render_depth_test", true);
+            CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA = (float) RtsUiStateStore.getNumber("render_alpha", 0.1D);
+
+            // 射线剔除距离/半径与功能调节器
+            RtsRayCylinderCullingState.setDistance(RtsUiStateStore.getNumber("culling_distance", 5.0D));
+            RtsRayCylinderCullingState.setRadius(RtsUiStateStore.getNumber("culling_radius", 3.0D));
+            FeatureAdjusterState.setFunnelRadius(RtsUiStateStore.getNumber("funnel_radius", 2.0D));
+            FeatureAdjusterState.setUltimineLimit((int) RtsUiStateStore.getNumber("ultimine_limit", 256));
+
+            // 存储过滤/排序开关（物品/流体/双向/仅提取 + 排序类型/方向）
+            GridState grid = this.downSidebarPanel.getGridState();
+            if (grid != null) {
+                grid.showItems = RtsUiStateStore.getToggle("grid_show_items", true);
+                grid.showFluids = RtsUiStateStore.getToggle("grid_show_fluids", true);
+                grid.showBidirectional = RtsUiStateStore.getToggle("grid_show_bidirectional", true);
+                grid.showExtractOnly = RtsUiStateStore.getToggle("grid_show_extract_only", true);
+                int sortIdx = (int) RtsUiStateStore.getNumber("grid_sort_type", 0);
+                com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.SortType[] sortTypes =
+                        com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.SortType.values();
+                if (sortIdx >= 0 && sortIdx < sortTypes.length) {
+                    grid.currentSortType = sortTypes[sortIdx];
+                }
+                grid.reverseSortOrder = RtsUiStateStore.getToggle("grid_reverse_sort", false);
+                grid.recentSortAscending = RtsUiStateStore.getToggle("grid_recent_sort_asc", true);
+                grid.slotEntriesDirty = true;
+            }
+
+            // 左栏按钮组选中态与形状
+            this.leftSidebarPanel.applyPersistedState(
+                    RtsUiStateStore.getToggle("leftbar_select_click", true),
+                    RtsUiStateStore.getToggle("leftbar_build_destroy", true),
+                    (int) RtsUiStateStore.getNumber("build_shape", 0),
+                    (int) RtsUiStateStore.getNumber("break_shape", 0),
+                    RtsUiStateStore.getToggle("leftbar_action_bind", false),
+                    RtsUiStateStore.getToggle("leftbar_action_rotate", false),
+                    RtsUiStateStore.getToggle("leftbar_action_pickup", false));
+
+            CameraModule cam = this.kernel.module(CameraModule.class);
+            if (cam != null) {
+                cam.getState().setInvertPanX(RtsUiStateStore.getToggle("invert_pan_x", false));
+                cam.getState().setInvertPanY(RtsUiStateStore.getToggle("invert_pan_y", false));
+                cam.setInputSensitivity((float) RtsUiStateStore.getNumber("camera_sensitivity", 1.0D));
+            }
+        } catch (Exception ex) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.error("RTS: 恢复 UI 开关/数值失败", ex);
+        }
+
+        com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
+                "RTS: UI 状态已恢复 sidebar(left={}, right={}, down={})，右栏实际宽度={}，下面板实际高度={}",
+                RtsUiStateStore.getSidebar().leftWidth,
+                RtsUiStateStore.getSidebar().rightWidth,
+                RtsUiStateStore.getSidebar().downHeight,
+                this.rightSidebarPanel.getCurrentWidth(),
+                this.downSidebarPanel.getCurrentHeight());
+    }
+
+    /**
+     * 把当前界面状态写入 {@link RtsUiStateStore}（实际落盘由调用方 {@link RtsUiStateStore#save()} 完成）。
+     * 仅收集已初始化过 bounds 的面板，避免从未打开过的面板以默认位置污染持久化数据。
+     */
+    private void collectUiState() {
+        for (PersistablePanel pp : persistablePanels()) {
+            UiPanel panel = pp.panel();
+            if (!panel.hasInitializedBounds()) {
+                continue;
+            }
+            RtsUiStateStore.setPanel(pp.id(), new RtsUiStateStore.PanelState(
+                    panel.getWindowX(), panel.getWindowY(),
+                    panel.getWindowWidth(), panel.getWindowHeight(),
+                    pp.persistOpen() && panel.isOpen()));
+        }
+
+        RtsUiStateStore.setSidebar(new RtsUiStateStore.SidebarState(
+                this.leftSidebarPanel.getCurrentWidth(),
+                this.rightSidebarPanel.getCurrentWidth(),
+                this.downSidebarPanel.getCurrentHeight(),
+                this.rightSidebarPanel.getUpperOverlayHeight(),
+                this.downSidebarPanel.getLeftOverlayWidth()));
+
+        RtsUiStateStore.setToggle("debug_overlay", this.topBarPanel.isDebugOverlayEnabled());
+        RtsUiStateStore.setToggle("debug_chunk_border", this.topBarPanel.isChunkBorderVisible());
+        RtsUiStateStore.setToggle("debug_collision_box", this.topBarPanel.isCollisionBoxVisible());
+        RtsUiStateStore.setToggle("ray_culling", RtsRayCylinderCullingState.isEnabled());
+        RtsUiStateStore.setToggle("theme_light", ThemeManager.getInstance().isLightMode());
+        RtsUiStateStore.setNumber("mode_index", this.topBarPanel.getCurrentMode().ordinal());
+
+        // 渲染动画/深度开关与透明度
+        RtsUiStateStore.setToggle("render_flow_anim", BoxSelectionPass.flowAnimationEnabled);
+        RtsUiStateStore.setToggle("render_smooth_anim", CornerBracketRenderer.SmoothTarget.enabled);
+        RtsUiStateStore.setToggle("render_ui_smooth", AnimFloat.isEnabled());
+        RtsUiStateStore.setToggle("render_depth_test", BoxSelectionPass.depthTestEnabled);
+        RtsUiStateStore.setNumber("render_alpha", CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA);
+
+        // 射线剔除距离/半径与功能调节器
+        RtsUiStateStore.setNumber("culling_distance", RtsRayCylinderCullingState.getDistance());
+        RtsUiStateStore.setNumber("culling_radius", RtsRayCylinderCullingState.getRadius());
+        RtsUiStateStore.setNumber("funnel_radius", FeatureAdjusterState.getFunnelRadius());
+        RtsUiStateStore.setNumber("ultimine_limit", FeatureAdjusterState.getUltimineLimit());
+
+        // 存储过滤/排序开关
+        GridState grid = this.downSidebarPanel.getGridState();
+        if (grid != null) {
+            RtsUiStateStore.setToggle("grid_show_items", grid.showItems);
+            RtsUiStateStore.setToggle("grid_show_fluids", grid.showFluids);
+            RtsUiStateStore.setToggle("grid_show_bidirectional", grid.showBidirectional);
+            RtsUiStateStore.setToggle("grid_show_extract_only", grid.showExtractOnly);
+            RtsUiStateStore.setNumber("grid_sort_type", grid.currentSortType.ordinal());
+            RtsUiStateStore.setToggle("grid_reverse_sort", grid.reverseSortOrder);
+            RtsUiStateStore.setToggle("grid_recent_sort_asc", grid.recentSortAscending);
+        }
+
+        // 左栏按钮组选中态与形状
+        RtsUiStateStore.setToggle("leftbar_select_click", this.leftSidebarPanel.isClickButtonSelected());
+        RtsUiStateStore.setToggle("leftbar_build_destroy", this.leftSidebarPanel.isConstructionSelected());
+        RtsUiStateStore.setNumber("build_shape", this.leftSidebarPanel.getBuildShapeIndex());
+        RtsUiStateStore.setNumber("break_shape", this.leftSidebarPanel.getBreakShapeIndex());
+        RtsUiStateStore.setToggle("leftbar_action_bind", this.leftSidebarPanel.isBindModeActive());
+        RtsUiStateStore.setToggle("leftbar_action_rotate", this.leftSidebarPanel.isDirectionRotateActive());
+        RtsUiStateStore.setToggle("leftbar_action_pickup", this.leftSidebarPanel.isItemPickupActive());
+
+        CameraModule cam = this.kernel.module(CameraModule.class);
+        if (cam != null) {
+            RtsUiStateStore.setToggle("invert_pan_x", cam.getState().isInvertPanX());
+            RtsUiStateStore.setToggle("invert_pan_y", cam.getState().isInvertPanY());
+            RtsUiStateStore.setNumber("camera_sensitivity", cam.getInputSensitivity());
         }
     }
 
@@ -624,6 +891,11 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         return this.rightSidebarPanel.getCurrentWidth();
     }
 
+    /** 鼠标是否悬浮于「方块剔除」调节框内（供圆柱预览 pass 判定）。 */
+    public boolean isMouseOverCullingAdjuster() {
+        return this.rightSidebarPanel.isMouseOverCullingAdjuster();
+    }
+
     
     public int getDownSidebarHeight() {
         return this.downSidebarPanel.getCurrentHeight();
@@ -914,6 +1186,9 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     
     
 
+    /** UI 状态定时落盘间隔（tick 数，200 tick ≈ 10 秒）。 */
+    private static final int UI_STATE_SAVE_INTERVAL = 200;
+
     @Override
     public void tick() {
         super.tick();
@@ -922,6 +1197,13 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         screenCoordinator.tickContainerScreen();
         // 物品拾取（漏斗）自动触发：点击模式跟随指针持续拾取，框选模式确认即拾取
         buildInteractionHandler.handleTick(this, leftSidebarPanel);
+        // 界面状态定时落盘兜底：面板拖拽/拉伸、侧边栏尺寸调整后，即使异常退出（不经过 onClose）
+        // 也能在 10 秒内持久化，避免丢失。
+        if (++uiStateSaveTick >= UI_STATE_SAVE_INTERVAL) {
+            uiStateSaveTick = 0;
+            collectUiState();
+            RtsUiStateStore.save();
+        }
     }
 
     
@@ -930,6 +1212,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // 恢复界面状态的兜底：init() 中若某步异常未恢复，渲染首帧也保证恢复
+        ensureUiStateApplied();
         // 仅在 RTS 虚拟坐标层处理缓存的拖放文件（此时坐标系与面板渲染/命中一致，
         // 避免在外层 gui scaled 层换算导致落点命中失败）
         if (isVirtualCoordinateLayer()) {
@@ -1125,8 +1409,28 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         Boolean scaled = scaleMouseEvent(mouseX, mouseY, (x, y) -> mouseReleased(x, y, button));
-        if (scaled != null) return scaled;
-        return eventDispatcher.dispatch(new MouseReleaseEvent(mouseX, mouseY, button));
+        if (scaled != null) {
+            return scaled;
+        }
+        boolean handled = eventDispatcher.dispatch(new MouseReleaseEvent(mouseX, mouseY, button));
+        // 面板拖拽/拉伸、侧边栏宽度/高度调整结束（松开鼠标）时立即落盘，
+        // 不依赖 onClose——关闭 RTS 前即使未触发正常退出流程也已持久化。
+        persistUiStateIfIdle();
+        return handled;
+    }
+
+    /**
+     * 节流地收集并落盘界面状态（至少间隔 {@link #lastUiStateSaveMs} 500ms）。
+     * 覆盖侧边栏拖拽、浮动面板拖拽/拉伸、分隔线调整等全部「松开鼠标」的结束时机。
+     */
+    private void persistUiStateIfIdle() {
+        long now = System.currentTimeMillis();
+        if (now - this.lastUiStateSaveMs < 500L) {
+            return;
+        }
+        this.lastUiStateSaveMs = now;
+        collectUiState();
+        RtsUiStateStore.save();
     }
 
     @Override
@@ -1135,7 +1439,10 @@ public class BuilderScreen extends Screen implements UiPanelHost {
                 (x, y, btn, dx, dy) -> mouseDragged(x, y, btn, dx, dy))) {
             return true;
         }
-        return eventDispatcher.dispatch(new MouseDragEvent(mouseX, mouseY, button, dragX, dragY));
+        boolean handled = eventDispatcher.dispatch(new MouseDragEvent(mouseX, mouseY, button, dragX, dragY));
+        // 拖拽/拉伸过程中节流落盘：即使拖拽未结束就关闭 RTS，也能持久化最新尺寸
+        persistUiStateIfIdle();
+        return handled;
     }
 
     @Override

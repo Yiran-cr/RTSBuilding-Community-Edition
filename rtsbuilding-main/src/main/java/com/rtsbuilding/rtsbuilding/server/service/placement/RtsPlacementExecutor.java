@@ -83,15 +83,17 @@ public final class RtsPlacementExecutor {
      * @param rayDirY 用于延伸射程的射线上下文
      * @param refreshStoragePage  {@code true} 触发储存页面刷新
      * @param sendRemoteHint      {@code true} 发送菜单打开提示数据包
-     * @return {@code true} 如果位置已处理且批次应继续，{@code false} 中止当前批处理作业
+     * @return {@link RtsPlacementQuickBuild.PlaceOutcome}：
+     *         CONTINUE=已处理需调用方检测放置位置 / PLACED=已调度放置（快速建造延迟落位）/
+     *         SKIPPED=跳过该位置 / STOP=中止当前批处理作业
      */
-    public static boolean placeSelectedInternal(ServerPlayer player, RtsStorageSession session, BlockPos clickedPos,
+    public static RtsPlacementQuickBuild.PlaceOutcome placeSelectedInternal(ServerPlayer player, RtsStorageSession session, BlockPos clickedPos,
                                                 Direction face, double hitX, double hitY, double hitZ, byte rotateSteps, boolean forcePlace,
                                                 boolean skipIfOccupied, String itemId, ItemStack itemPrototype, double rayOriginX, double rayOriginY,
                                                 double rayOriginZ, double rayDirX, double rayDirY, double rayDirZ,
                                                 boolean forceEmptyHand, boolean refreshStoragePage, boolean sendRemoteHint) {
         if (session == null || !RtsLinkedStorageResolver.canAccessWorldTarget(player, clickedPos) || face == null) {
-            return false;
+            return RtsPlacementQuickBuild.PlaceOutcome.STOP;
         }
         RtsLinkedStorageResolver.sanitizeSessionDimension(player, session);
         boolean useSelectedStorageItem = itemId != null && !itemId.isBlank();
@@ -110,11 +112,15 @@ public final class RtsPlacementExecutor {
         if (!useSelectedStorageItem) {
             if (forceEmptyHand) {
                 return placeWithForcedEmptyHand(player, session, level, clickedPos, hit, interactionPos, rayContext,
-                        forcePlace);
+                        forcePlace)
+                        ? RtsPlacementQuickBuild.PlaceOutcome.CONTINUE
+                        : RtsPlacementQuickBuild.PlaceOutcome.STOP;
             }
             // 1.1.3 的普通右键依赖主手路径；itemId 为空时必须继续模拟原版 useItemOn/useItem。
             return placeWithMainHand(player, session, level, clickedPos, face, hit, interactionPos, rayContext,
-                    skipIfOccupied, forcePlace, refreshStoragePage);
+                    skipIfOccupied, forcePlace, refreshStoragePage)
+                    ? RtsPlacementQuickBuild.PlaceOutcome.CONTINUE
+                    : RtsPlacementQuickBuild.PlaceOutcome.STOP;
         }
 
         // 单方块替换（forcePlace 且不跳过已占用）：改为快速建造式可靠放置——
@@ -127,7 +133,9 @@ public final class RtsPlacementExecutor {
         }
 
         return placeWithStorageItem(player, session, level, clickedPos, face, hit, interactionPos, rayContext,
-                rotateSteps, skipIfOccupied, forcePlace, itemId, itemPrototype, refreshStoragePage);
+                rotateSteps, skipIfOccupied, forcePlace, itemId, itemPrototype, refreshStoragePage)
+                ? RtsPlacementQuickBuild.PlaceOutcome.CONTINUE
+                : RtsPlacementQuickBuild.PlaceOutcome.STOP;
     }
 
     private static boolean placeWithForcedEmptyHand(ServerPlayer player, RtsStorageSession session, ServerLevel level,
@@ -417,26 +425,27 @@ public final class RtsPlacementExecutor {
 
     /**
      * 单方块替换的可靠放置：构建快速建造放置计划并走 {@link RtsPlacementQuickBuild#placeStateBatchEntry}
-     * （先提取物品确认可用 → 原生破坏 → 放置，掉落物存入 RTS 存储）。目标无法解析放置状态时返回
-     * {@code true} 跳过（不破坏）。
+     * （先提取物品确认可用 → 原生破坏 → 放置，掉落物存入 RTS 存储）。
+     * 目标无法解析放置状态时返回 {@link RtsPlacementQuickBuild.PlaceOutcome#SKIPPED}（不破坏）。
      */
-    private static boolean placeReplaceAt(ServerPlayer player, RtsStorageSession session, ServerLevel level,
+    private static RtsPlacementQuickBuild.PlaceOutcome placeReplaceAt(ServerPlayer player, RtsStorageSession session, ServerLevel level,
                                          BlockPos clickedPos, Direction face, byte rotateSteps,
                                          String itemId, ItemStack itemPrototype) {
         ResourceLocation id = ResourceLocation.tryParse(itemId);
-        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return true;
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return RtsPlacementQuickBuild.PlaceOutcome.SKIPPED;
         net.minecraft.world.item.Item item = BuiltInRegistries.ITEM.get(id);
-        if (!(item instanceof net.minecraft.world.item.BlockItem blockItem)) return true;
+        if (!(item instanceof net.minecraft.world.item.BlockItem blockItem)) return RtsPlacementQuickBuild.PlaceOutcome.SKIPPED;
         ItemStack template = RtsPlacementExtractor.sanitizePrototype(itemId, itemPrototype);
         if (template.isEmpty()) template = new ItemStack(item);
         template.setCount(1);
         BlockPlaceContext ctx = new BlockPlaceContext(level, player, net.minecraft.world.InteractionHand.MAIN_HAND,
                 template, new BlockHitResult(Vec3.atCenterOf(clickedPos), face, clickedPos, false));
         BlockState state = blockItem.getBlock().getStateForPlacement(ctx);
-        if (state == null) return true; // 无法放置，跳过（不破坏）
+        if (state == null) return RtsPlacementQuickBuild.PlaceOutcome.SKIPPED; // 无法放置，跳过（不破坏）
         BlockState rotated = RtsPlacementHelper.rotateState(state, rotateSteps);
         var plan = new RtsPlacementQuickBuild.StatePlacementPlan(item, template, rotated, itemId);
-        return RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, plan, true);
+        // 单方块替换：不关心延迟落位完成（调用方交互式路径按调度即计）
+        return RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, plan, true, null);
     }
 
 }

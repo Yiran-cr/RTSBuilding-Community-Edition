@@ -266,14 +266,16 @@ public final class RtsDestructionBatch {
                     }
                 },
                 (p, job) -> RtsbuildingMod.LOGGER.info("[RtsDestructionBatch] {} completed destroy job #{} ({} destroyed)",
-                        p.getGameProfile().getName(), job.workflowEntryId(), job.destroyedPositions.size()));
+                        p.getGameProfile().getName(), job.workflowEntryId(), job.destroyedPositions.size()),
+                true);
 
         // ── Update mid-progress ────────────────────────────────────────────
         RtsBatchJobTickOps.updateMidProgress(
                 player, session,
                 session.destruction.destroyJobs, destroyedBeforeTick,
                 DestructionJob::workflowEntryId,
-                j -> j.destroyedPositions.size());
+                j -> j.destroyedPositions.size(),
+                true);
 
         // ── Return tool when jobs are consumed / no more jobs ──────────────────────
         if (session.destruction.destroyJobs.isEmpty() && session.destruction.pendingDestroyJobs.isEmpty()) {

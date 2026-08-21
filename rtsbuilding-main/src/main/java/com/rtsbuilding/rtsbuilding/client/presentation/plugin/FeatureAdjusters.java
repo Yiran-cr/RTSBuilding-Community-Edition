@@ -124,6 +124,9 @@ public final class FeatureAdjusters {
     /** 蓝图放置调节器的命中区域（渲染时更新）；用作轴输入框/覆盖开关的后备。 */
     private boolean blueprintBoxVisible;
 
+    /** 方块剔除复合调节框的命中矩形（渲染时更新；剔除未开启/未显示时为 0 宽）。 */
+    private final int[] cullingBoxRect = new int[4];
+
     public FeatureAdjusters(OverlayContext context) {
         this.context = context;
     }
@@ -171,6 +174,7 @@ public final class FeatureAdjusters {
         rows.clear();
         resetFillBtnRects();
         resetBlueprintRects();
+        resetCullingRect();
 
         // 形状模式（非单方块形状激活时显示）
         if (showFillMode) {
@@ -236,6 +240,11 @@ public final class FeatureAdjusters {
                     t("ui.rtsbuilding.adjuster.culling_distance"),
                     t("ui.rtsbuilding.adjuster.culling_radius"),
                     mx, my, textColor, lineHeight);
+            // 记录剔除复合框命中矩形：供「鼠标悬浮于剔除调节器」判断（圆柱预览 pass 依赖）
+            cullingBoxRect[0] = cx;
+            cullingBoxRect[1] = cy;
+            cullingBoxRect[2] = cw;
+            cullingBoxRect[3] = cullingRowH;
             rows.add(distanceRow);
             rows.add(radiusRow);
             cy += cullingRowH + ROW_GAP;
@@ -514,6 +523,26 @@ public final class FeatureAdjusters {
             rect[3] = 0;
         }
         blueprintBoxVisible = false;
+    }
+
+    /** 重置方块剔除调节框命中矩形（剔除未开启/未显示时悬浮判定无效）。 */
+    private void resetCullingRect() {
+        cullingBoxRect[2] = 0;
+        cullingBoxRect[3] = 0;
+    }
+
+    /**
+     * 鼠标是否悬浮于「方块剔除」复合调节框内（右栏下嵌层）。
+     * 供 {@code CylinderCullingPreviewPass} 判断是否绘制圆柱预览线框。
+     */
+    public boolean isMouseOverCullingAdjuster() {
+        if (cullingBoxRect[2] <= 0 || cullingBoxRect[3] <= 0) {
+            return false;
+        }
+        int mx = context.getLastMouseX();
+        int my = context.getLastMouseY();
+        return mx >= cullingBoxRect[0] && mx < cullingBoxRect[0] + cullingBoxRect[2]
+                && my >= cullingBoxRect[1] && my < cullingBoxRect[1] + cullingBoxRect[3];
     }
 
     /**
