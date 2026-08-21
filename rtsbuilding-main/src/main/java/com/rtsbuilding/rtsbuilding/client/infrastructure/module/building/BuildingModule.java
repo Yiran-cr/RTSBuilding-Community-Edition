@@ -98,7 +98,10 @@ public final class BuildingModule implements FeatureModule {
     }
 
     public void rotateBlock(BlockPos pos) {
-        if (pos != null) RtsClientPacketGateway.sendRotateBlock(pos);
+        if (pos != null) {
+            RtsClientPacketGateway.sendRotateBlock(pos,
+                    com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState.getRotateDegrees(), false);
+        }
     }
 
     

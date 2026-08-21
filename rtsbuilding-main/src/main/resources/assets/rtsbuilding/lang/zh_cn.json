@@ -223,6 +223,12 @@
   "ui.rtsbuilding.adjuster.blueprint_axis_x": "X",
   "ui.rtsbuilding.adjuster.blueprint_axis_y": "Y",
   "ui.rtsbuilding.adjuster.blueprint_axis_z": "Z",
+  "ui.rtsbuilding.adjuster.rotate_angle": "旋转角度：",
+
+  "message.rtsbuilding.clipboard.copied": "已复制 %d 个方块",
+  "message.rtsbuilding.clipboard.empty": "框选范围内没有可复制的方块",
+  "message.rtsbuilding.clipboard.too_large": "复制区域过大（超过 20000 个方块）",
+  "message.rtsbuilding.clipboard.too_many_blocks": "剪贴板方块数超过上限 %d",
 
   "ui.rtsbuilding.mode.solid": "实心",
   "ui.rtsbuilding.mode.hollow": "空心",

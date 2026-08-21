@@ -1,5 +1,6 @@
 package com.rtsbuilding.rtsbuilding.server.service.placement;
 
+import com.rtsbuilding.rtsbuilding.common.blueprint.transform.BlueprintTransform;
 import com.rtsbuilding.rtsbuilding.server.RtsServer;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import net.minecraft.core.BlockPos;
@@ -21,7 +22,8 @@ import net.minecraft.world.level.block.state.BlockState;
  *   <li>{@link #sanitizeHitOffset(double, Direction, Direction.Axis)} — 清理点击偏移量，
  *       非有限值时回退到基于面的默认值（0.5 ± 0.5）</li>
  *   <li>{@link #rotateState(BlockState, byte)} — 将方块状态旋转指定次数的 90 度（仅用最低 2 位）</li>
- *   <li>{@link #rotatePlacedBlock(ServerLevel, BlockPos, byte)} — 对世界中已放置的方块施加增量旋转</li>
+ *   <li>{@link #rotatePlacedBlock(ServerLevel, BlockPos, byte)} — 对世界中已放置的方块施加增量旋转（Y 轴）</li>
+ *   <li>{@link #rotatePlacedBlock(ServerLevel, BlockPos, int, int, int)} — 对世界中方块施加 Y/X/Z 三轴旋转（方向旋转模式）</li>
  *   <li>{@link #detectPlacedPos(ServerLevel, BlockPos, BlockState, BlockPos, BlockState)} —
  *       通过比较点击位置和相邻位置的前后状态，检测方块实际放置的位置</li>
  *   <li>{@link #requestSessionPage(ServerPlayer, RtsStorageSession, boolean)} —
@@ -75,6 +77,32 @@ public final class RtsPlacementHelper {
         }
         BlockState state = level.getBlockState(pos);
         BlockState rotated = rotateState(state, rotateSteps);
+        if (rotated != state) {
+            level.setBlock(pos, rotated, 3);
+        }
+    }
+
+    /**
+     * 对已放置的方块按 Y/X/Z 三轴增量旋转（每步 90°，步数自动归一化到 0~3）。
+     * <p>使用 {@link BlueprintTransform#rotateState} 统一处理 Y 轴旋转（原版 Rotation）
+     * 与 X/Z 轴旋转（手动更新 Direction / Axis 属性），支持普通方块的水平旋转与上下翻转。</p>
+     *
+     * @param level  目标维度
+     * @param pos    目标位置
+     * @param ySteps Y 轴（竖直轴，水平旋转）旋转步数
+     * @param xSteps X 轴旋转步数（上下翻转，绕 X 轴）
+     * @param zSteps Z 轴旋转步数（上下翻转，绕 Z 轴）
+     */
+    public static void rotatePlacedBlock(ServerLevel level, BlockPos pos,
+                                         int ySteps, int xSteps, int zSteps) {
+        int y = BlueprintTransform.normalizeSteps(ySteps);
+        int x = BlueprintTransform.normalizeSteps(xSteps);
+        int z = BlueprintTransform.normalizeSteps(zSteps);
+        if ((y | x | z) == 0 || !level.hasChunkAt(pos)) {
+            return;
+        }
+        BlockState state = level.getBlockState(pos);
+        BlockState rotated = BlueprintTransform.rotateState(state, y, x, z);
         if (rotated != state) {
             level.setBlock(pos, rotated, 3);
         }

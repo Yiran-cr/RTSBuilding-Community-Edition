@@ -124,7 +124,22 @@ public final class ServerActionHandler {
                 Direction face = safeFace(t);
                 RtsServer.get().fluid().placeFluid(p, BlockPos.of(t.getLong("pos")), face, t.getDouble("hitX"), t.getDouble("hitY"), t.getDouble("hitZ"), t.getBoolean("forcePlace"), t.getString("fluidId"), t.getDouble("rayOriginX"), t.getDouble("rayOriginY"), t.getDouble("rayOriginZ"), t.getDouble("rayDirX"), t.getDouble("rayDirY"), t.getDouble("rayDirZ"));
             }
-            case ROTATE_BLOCK -> RtsServer.get().placement().rotateBlock(p, BlockPos.of(t.getLong("pos")));
+            case ROTATE_BLOCK -> {
+                // 方向旋转模式：旋转按钮仅在建造模式下显示，服务端同样限定建造模式
+                if (!isBuildMode(p)) return;
+                int angle = t.getInt("angle");
+                byte axis = t.getByte("axis");
+                RtsServer.get().placement().rotateBlock(p, BlockPos.of(t.getLong("pos")), angle, axis == 1);
+            }
+            case ROTATE_AREA -> {
+                if (!isBuildMode(p)) return;
+                int angle = t.getInt("angle");
+                byte axis = t.getByte("axis");
+                RtsServer.get().placement().rotateArea(p,
+                        new BlockPos(t.getInt("minX"), t.getInt("minY"), t.getInt("minZ")),
+                        new BlockPos(t.getInt("maxX"), t.getInt("maxY"), t.getInt("maxZ")),
+                        angle, axis == 1);
+            }
             case STORE_FLUID -> RtsServer.get().fluid().storeFluidFromContainer(p, t.getByte("sourceType"), t.getByte("toolSlot"), t.getString("itemId"));
             case SUBMIT_PENDING -> RtsServer.get().placement().submitPendingPlacement(p);
             case MINE_BLOCK -> {

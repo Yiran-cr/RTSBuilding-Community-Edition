@@ -16,6 +16,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.BindModeMou
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.BuildInteractionHandler;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.BuilderScreenMovementHandler;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.EntityInteractionHandler;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.RotateModeMouseHandler;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.LeftSidebarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
@@ -58,10 +59,11 @@ public final class BuilderScreenEventRouter {
                             BuilderScreenMovementHandler movementHandler,
                             BindModeMouseHandler bindModeHandler,
                             EntityInteractionHandler entityInteractionHandler,
-                            BuildInteractionHandler buildInteractionHandler) {
+                            BuildInteractionHandler buildInteractionHandler,
+                            RotateModeMouseHandler rotateModeHandler) {
         registerMouseClickHandlers(dispatcher, screen, kernel, floatingWindowLayer,
                 panelRegistry, leftSidebarPanel, movementHandler, bindModeHandler,
-                entityInteractionHandler, buildInteractionHandler, topBarPanel);
+                entityInteractionHandler, buildInteractionHandler, topBarPanel, rotateModeHandler);
         registerMouseReleaseHandlers(dispatcher, panelRegistry, floatingWindowLayer, kernel,
                 buildInteractionHandler, screen, topBarPanel, leftSidebarPanel);
         registerMouseDragHandlers(dispatcher, panelRegistry, floatingWindowLayer, kernel);
@@ -78,7 +80,8 @@ public final class BuilderScreenEventRouter {
             RtsClientKernel kernel, FloatingWindowLayer fw, PanelRegistry pr,
             LeftSidebarPanel lb, BuilderScreenMovementHandler mh,
             BindModeMouseHandler bmh, EntityInteractionHandler eih,
-            BuildInteractionHandler bih, TopBarPanel topBar) {
+            BuildInteractionHandler bih, TopBarPanel topBar,
+            RotateModeMouseHandler rotateHandler) {
         d.onMouseClick(event -> {
             screen.unfocusGridSearch();
             return PASS;
@@ -119,6 +122,12 @@ public final class BuilderScreenEventRouter {
 
         d.onMouseClick(event ->
                 bmh.handleMouseClick(event, screen, lb),
+                EventDispatcher.P_BIND_LOGIC);
+
+        // 方向旋转模式：右键旋转（点击模式单方块 / 框选模式整框），
+        // 注册在框选选择器（P_SELECTION）之前，旋转生效时优先于框选选点/重置
+        d.onMouseClick(event ->
+                rotateHandler.handleMouseClick(event, screen, lb),
                 EventDispatcher.P_BIND_LOGIC);
 
         d.onMouseClick(event -> {
@@ -450,6 +459,23 @@ public final class BuilderScreenEventRouter {
                 kernel.renderPipeline().lineBrush.cycleFillModeFor(shape);
             }
             return CONSUMED;
+        }
+        // 建造模式 + 框选模式：Ctrl+C 复制 / Ctrl+X 剪切 / Ctrl+V 粘贴框选范围方块。
+        // 严格校验修饰键（纯 Ctrl，不带 Alt/Shift），输入框编辑态已由前置面板/浮动窗口消费。
+        int mods = event.modifiers();
+        if ((mods & GLFW.GLFW_MOD_CONTROL) != 0 && (mods & (GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SHIFT)) == 0) {
+            if (event.keyCode() == GLFW.GLFW_KEY_C) {
+                if (screen.copySelectionToClipboard()) return CONSUMED;
+                return PASS;
+            }
+            if (event.keyCode() == GLFW.GLFW_KEY_X) {
+                if (screen.cutSelectionToClipboard()) return CONSUMED;
+                return PASS;
+            }
+            if (event.keyCode() == GLFW.GLFW_KEY_V) {
+                if (screen.pasteClipboard()) return CONSUMED;
+                return PASS;
+            }
         }
         if (keyMatches(RtsKeyMappings.CYCLE_MODE_KEY, event)) {
             topBar.cycleMode();

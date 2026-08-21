@@ -3,10 +3,14 @@ package com.rtsbuilding.rtsbuilding.client.presentation.standalone;
 import com.rtsbuilding.uifw.render.UiPalette;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.client.application.service.ScreenCoordinator;
 import com.rtsbuilding.rtsbuilding.client.culling.RtsRayCylinderCullingState;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
+import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelector;
+import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
 import com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState;
+import com.rtsbuilding.rtsbuilding.client.state.RtsClipboard;
 import com.rtsbuilding.rtsbuilding.client.state.RtsUiStateStore;
 import com.rtsbuilding.rtsbuilding.client.util.TinyFileDialogSupport;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
@@ -47,8 +51,12 @@ import com.rtsbuilding.uifw.window.api.UiPanelHost;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -139,6 +147,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     
     private final BuildInteractionHandler buildInteractionHandler;
     
+    private final com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.RotateModeMouseHandler rotateModeHandler;
+    
     private final EventDispatcher eventDispatcher = new EventDispatcher();
     
     private final BuilderScreenEventRouter eventRouter;
@@ -180,6 +190,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         this.entityInteractionHandler = new EntityInteractionHandler();
         CameraInputLayer cameraInputLayer = kernel.inputPipeline().findLayer(CameraInputLayer.class);
         this.buildInteractionHandler = new BuildInteractionHandler(kernel, cameraInputLayer);
+        this.rotateModeHandler = new com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.RotateModeMouseHandler(kernel);
         long t3 = System.nanoTime();
         this.cursorStyleManager = new CursorStyleManager((mx, my) -> {
             var fwCursor = floatingWindowLayer.resizeCursorAt(mx, my);
@@ -209,7 +220,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         eventRouter.registerAll(eventDispatcher, panelRegistry, this, kernel,
                 floatingWindowLayer, topBarPanel, leftSidebarPanel, gearMenuPanel,
                 movementHandler, bindModeHandler, entityInteractionHandler,
-                buildInteractionHandler);
+                buildInteractionHandler, rotateModeHandler);
         long t5 = System.nanoTime();
 
         com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
@@ -1071,6 +1082,127 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     
     public boolean isBindModeActive() {
         return leftSidebarPanel != null && leftSidebarPanel.isBindModeActive();
+    }
+
+    /** 左栏「方向旋转」按钮是否选中（建造模式下旋转功能可用）。 */
+    public boolean isDirectionRotateActive() {
+        return leftSidebarPanel != null && leftSidebarPanel.isDirectionRotateActive();
+    }
+
+    // ── 框选剪贴板（建造模式 + 框选模式：Ctrl+C 复制 / Ctrl+X 剪切 / Ctrl+V 粘贴） ──
+
+    /**
+     * Ctrl+C：把框选完成区域内的方块复制到 {@link RtsClipboard}。
+     * 仅建造模式 + 框选模式 + 框选完成 + 鼠标不在 UI 面板上时生效。
+     *
+     * @return {@code true} 表示已处理（消费按键）
+     */
+    public boolean copySelectionToClipboard() {
+        if (!isBuildMode() || isClickButtonSelected()) return false;
+        BlockPos[] box = completedSelectionBox();
+        if (box == null) return false;
+        if (isMouseOverUiPanelApi(mouseGuiX(), mouseGuiY())) return false;
+        Minecraft mc = Minecraft.getInstance();
+        Level level = mc.level;
+        if (level == null) return false;
+        com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint bp;
+        try {
+            // BoxSelector.max 为排他上界，capture 传入含 max 的闭区间角点
+            bp = com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters
+                    .capture(level, box[0], box[1].offset(-1, -1, -1), "clipboard", "clipboard", false);
+        } catch (IllegalArgumentException ex) {
+            playerMessage("message.rtsbuilding.clipboard.too_large");
+            return true;
+        }
+        if (bp.blocks().isEmpty()) {
+            playerMessage("message.rtsbuilding.clipboard.empty");
+            return true;
+        }
+        RtsClipboard.set(bp);
+        playerMessage("message.rtsbuilding.clipboard.copied", bp.blockCount());
+        return true;
+    }
+
+    /**
+     * Ctrl+X：复制框选区域到 {@link RtsClipboard} 并破坏框内方块（剪切）。
+     * 破坏请求复用框选批量破坏（AREA_DESTROY 逐 tick 节流）。
+     *
+     * @return {@code true} 表示已处理（消费按键）
+     */
+    public boolean cutSelectionToClipboard() {
+        if (!isBuildMode() || isClickButtonSelected()) return false;
+        BlockPos[] box = completedSelectionBox();
+        if (box == null) return false;
+        if (!copySelectionToClipboard()) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return true;
+        com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway
+                .sendAreaBoxDestroy(box[0], box[1], mc.player.getInventory().selected, "", false);
+        return true;
+    }
+
+    /**
+     * Ctrl+V：把 {@link RtsClipboard} 内容粘贴到目标位置。
+     * 锚点优先取当前框选区域最小角（未框选时取鼠标指向方块），以允许覆盖方式
+     * 经 {@code PLACE_BLUEPRINT} 工作流逐格建造（从存储提取材料）。
+     *
+     * @return {@code true} 表示已处理（消费按键）
+     */
+    public boolean pasteClipboard() {
+        if (!isBuildMode() || isClickButtonSelected()) return false;
+        com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint bp = RtsClipboard.get();
+        if (bp == null || bp.blocks().isEmpty()) return false;
+        if (isMouseOverUiPanelApi(mouseGuiX(), mouseGuiY())) return false;
+        if (bp.blockCount() > Config.maxBlueprintBlocks()) {
+            playerMessage("message.rtsbuilding.clipboard.too_many_blocks", Config.maxBlueprintBlocks());
+            return true;
+        }
+        BlockPos anchor = null;
+        BlockPos[] box = completedSelectionBox();
+        if (box != null) {
+            anchor = box[0];
+        } else {
+            Minecraft mc = Minecraft.getInstance();
+            var ray = CursorRaycaster.computeCursorRay(mc, this);
+            if (ray != null) {
+                BlockHitResult hit = ray.raycastBlock(mc);
+                if (hit != null && hit.getType() == HitResult.Type.BLOCK) anchor = hit.getBlockPos();
+            }
+        }
+        if (anchor == null) return false;
+        com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway
+                .sendPlaceBlueprint(bp, anchor, 0, true);
+        return true;
+    }
+
+    /** 当前框选是否完成（框选模式）；返回 {min, max}（max 排他），否则 {@code null}。 */
+    @Nullable
+    private BlockPos[] completedSelectionBox() {
+        if (isClickButtonSelected()) return null;
+        BoxSelector sel = kernel.renderPipeline().boxSelector;
+        if (sel.getPhase() != BoxSelector.Phase.COMPLETE) return null;
+        BlockPos min = sel.getMinCorner();
+        BlockPos max = sel.getMaxCorner();
+        if (min == null || max == null) return null;
+        return new BlockPos[] { min, max };
+    }
+
+    /** 当前鼠标在 RTS 虚拟坐标系的 X（供 UI 悬浮判定）。 */
+    private double mouseGuiX() {
+        return Minecraft.getInstance().mouseHandler.xpos() / getRtsGuiScale();
+    }
+
+    /** 当前鼠标在 RTS 虚拟坐标系的 Y（供 UI 悬浮判定）。 */
+    private double mouseGuiY() {
+        return Minecraft.getInstance().mouseHandler.ypos() / getRtsGuiScale();
+    }
+
+    /** 向玩家发送动作栏提示（lang key 带参数）。 */
+    private void playerMessage(String key, Object... args) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.displayClientMessage(Component.translatable(key, args), true);
+        }
     }
 
     

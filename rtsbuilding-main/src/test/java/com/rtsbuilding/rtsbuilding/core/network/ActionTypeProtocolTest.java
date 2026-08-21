@@ -59,7 +59,7 @@ class ActionTypeProtocolTest {
     void fromIdUnknownReturnsNull() {
         assertNull(ActionType.fromId(-1));
         assertNull(ActionType.fromId(1000));
-        assertNull(ActionType.fromId(43));
+        assertNull(ActionType.fromId(44));
     }
 
     /** 关键动作抽查：常用的动作 id 必须稳定（防止无意识重排）。 */
@@ -75,6 +75,8 @@ class ActionTypeProtocolTest {
         assertNotNull(ActionType.fromId(41));
         assertEquals(ActionType.PLACE_BLUEPRINT, ActionType.fromId(42));
         assertNotNull(ActionType.fromId(42));
+        assertEquals(ActionType.ROTATE_AREA, ActionType.fromId(43));
+        assertNotNull(ActionType.fromId(43));
     }
 
     /** 保留占位符必须带 @Deprecated（协议约束：禁止删除导致 id 前移）。 */

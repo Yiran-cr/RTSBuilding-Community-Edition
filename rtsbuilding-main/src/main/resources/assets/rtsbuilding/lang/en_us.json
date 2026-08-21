@@ -223,6 +223,12 @@
   "ui.rtsbuilding.adjuster.blueprint_axis_x": "X",
   "ui.rtsbuilding.adjuster.blueprint_axis_y": "Y",
   "ui.rtsbuilding.adjuster.blueprint_axis_z": "Z",
+  "ui.rtsbuilding.adjuster.rotate_angle": "Rotate angle:",
+
+  "message.rtsbuilding.clipboard.copied": "Copied %d blocks",
+  "message.rtsbuilding.clipboard.empty": "No blocks to copy in selection",
+  "message.rtsbuilding.clipboard.too_large": "Selection too large to copy (over 20000 blocks)",
+  "message.rtsbuilding.clipboard.too_many_blocks": "Clipboard exceeds %d block limit",
 
   "ui.rtsbuilding.mode.solid": "Solid",
   "ui.rtsbuilding.mode.hollow": "Hollow",

@@ -93,7 +93,13 @@ public enum ActionType {
      * 服务端解析后启动 BLUEPRINT_BUILD 工作流逐格建造。
      * 仅在枚举末尾追加（id 编码协议，禁止插入到已有值之前）。
      */
-    PLACE_BLUEPRINT(42);
+    PLACE_BLUEPRINT(42),
+    /**
+     * 客户端旋转模式（左栏「方向旋转」按钮启用）框选完成后，对框选区域内的方块批量旋转：
+     * 传框选包围盒 min/max 角点 + 旋转角度 + 旋转轴（0=水平 yaw / 1=上下 pitch）。
+     * 服务端逐格旋转方块朝向。仅在枚举末尾追加（id 编码协议，禁止插入到已有值之前）。
+     */
+    ROTATE_AREA(43);
 
     private final int id;
 
@@ -157,6 +163,7 @@ public enum ActionType {
             case 40 -> REMOVE_RECENT_ENTRY;
             case 41 -> SET_FUNNEL_RADIUS;
             case 42 -> PLACE_BLUEPRINT;
+            case 43 -> ROTATE_AREA;
             default -> null;
         };
     }

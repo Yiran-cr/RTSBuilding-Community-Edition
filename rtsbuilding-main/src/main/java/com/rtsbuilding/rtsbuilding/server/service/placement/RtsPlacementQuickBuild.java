@@ -42,7 +42,7 @@ import javax.annotation.Nullable;
  * <ul>
  *   <li>{@link #resolveStatePlacementPlan(ServerPlayer, RtsPlacementBatch.PlaceBatchJob)} —
  *       从批处理作业的第一个位置解析放置计划，缓存物品、模板堆叠、旋转状态和来源 ID</li>
- *   <li>{@link #placeStateBatchEntry(ServerPlayer, RtsStorageSession, BlockPos, StatePlacementPlan)} —
+ *   <li>{@link #placeStateBatchEntry} —
  *       使用预解析计划放置单个方块，提取物品、设置方块、触发动画/声音</li>
  *   <li>{@link #canPlaceStateAt(ServerLevel, ServerPlayer, BlockPos, BlockState)} —
  *       检查目标位置是否可以放置给定方块状态（空气/可替换检查 + 碰撞检测）</li>
@@ -154,13 +154,19 @@ public final class RtsPlacementQuickBuild {
      * 再放置新方块——形成"破坏一个、放置一个"的交替替换效果，避免
      * 一次性清空区域导致中间状态混乱。物品不可用时不会破坏目标。</p>
      *
+     * <p>单方块放置（{@code instantPlace=true}）：立即落位、不播放生长动画（点击模式单方块
+     * 放置要求方块即时出现）；批量放置（{@code instantPlace=false}）保留「动画即落位」的
+     * 延迟落位语义（生长动画结束才 setBlock）。</p>
+     *
      * @param replace              替换模式：允许覆盖已有方块（先破坏再放置）
+     * @param instantPlace         单方块放置：立即落位、不播放生长动画；{@code false} 时走
+     *                             延迟落位 + 生长动画（批量放置/蓝图/历史撤销）
      * @param onCommitFinished     延迟落位最终完成的回调（成功=true/失败或放弃=false，恰好调用一次）；
      *                             {@code null} 表示不关心落位结果（此时调用方按调度即计）。
-     * @return 放置结果（{@link PlaceOutcome}）：PLACED=已调度放置 / SKIPPED=跳过该位置 / STOP=中止作业
+     * @return 放置结果（{@link PlaceOutcome}）：PLACED=已放置或已调度放置 / SKIPPED=跳过该位置 / STOP=中止作业
      */
     public static PlaceOutcome placeStateBatchEntry(ServerPlayer player, RtsStorageSession session, BlockPos targetPos,
-                                                    StatePlacementPlan plan, boolean replace,
+                                                    StatePlacementPlan plan, boolean replace, boolean instantPlace,
                                                     @Nullable Consumer<Boolean> onCommitFinished) {
         if (session == null || targetPos == null || plan == null) {
             return PlaceOutcome.STOP;
@@ -230,10 +236,23 @@ public final class RtsPlacementQuickBuild {
             }
         }
 
-        // 延迟落位（BuildingGadgets2「动画即落位」语义）：客户端收到动画包立即播放生长动画，
-        // 服务端在动画周期结束后才真正 setBlock —— 方块"生长完成即出现"。
-        // 落位前该位置保持空气/可替换状态；支持支撑依赖重试（对齐 BG2 retryList）：
-        // 落位时 canSurvive 失败（支撑方块尚未落位，如墙先于其上的火把）→ 延迟重试一次；
+        if (instantPlace) {
+            // 单方块放置：立即落位、不播放生长动画
+            boolean committed = commitPlaced(player, session, level, targetPos, plan,
+                    placementStack, extracted, fromCarried, refundExtractedOnFailure,
+                    extractHandlers, insertHandlers, onCommitFinished);
+            if (!committed) {
+                // 支撑依赖未就绪（罕见）：退款并通知失败
+                refundExtracted(player, extracted, insertHandlers, fromCarried, refundExtractedOnFailure);
+                if (onCommitFinished != null) onCommitFinished.accept(false);
+            }
+            return PlaceOutcome.PLACED;
+        }
+
+        // 批量放置（形状画笔/框选）：延迟落位（BuildingGadgets2「动画即落位」语义），
+        // 客户端收到动画包立即播放生长动画，服务端在动画周期结束后才真正 setBlock ——
+        // 方块"生长完成即出现"。落位前该位置保持空气/可替换状态；支持支撑依赖重试
+        // （对齐 BG2 retryList）：落位时 canSurvive 失败 → 延迟重试一次；
         // 重试仍失败或 setBlock 失败 → 退回已提取的物品。
         // 需要被延迟回调捕获的局部变量均转为 final 拷贝。
         ItemStack commitPlacementStack = placementStack;
@@ -243,46 +262,58 @@ public final class RtsPlacementQuickBuild {
         List<IItemHandler> commitExtractHandlers = extractHandlers;
         List<IItemHandler> commitInsertHandlers = insertHandlers;
         RtsBlockAnimationCommitter.schedulePlace(player, targetPos, plan.state(),
-                () -> {
-                    // 支撑依赖未就绪（邻居尚未落位）→ 请求延迟重试
-                    if (!plan.state().canSurvive(level, targetPos)) {
-                        return false;
-                    }
-                    // 落位本身不依赖玩家：玩家下线时仍 setBlock，保证已扣物品的方块不丢失
-                    boolean placed = BlockPlacer.setBlock(level, targetPos, plan.state());
-                    if (!placed) {
-                        refundExtracted(player, commitExtracted, commitInsertHandlers, commitFromCarried, commitRefundOnFailure);
-                        if (onCommitFinished != null) onCommitFinished.accept(false);
-                        return true;
-                    }
-                    BlockState placedState = level.getBlockState(targetPos);
-                    if (placedState.is(plan.state().getBlock())) {
-                        BlockPlacer.applyQuickBuildBlockEntity(level, targetPos, commitPlacementStack, placedState, player);
-                    }
-                    // 完全改为使用储存空间的方块进行放置，不再从主手扣除
-                    BlockPlacer.trackPlaced(level, targetPos);
-                    // 落位成功：通知调用方（无论玩家在线与否，方块已真实出现）
-                    if (onCommitFinished != null) onCommitFinished.accept(true);
-                    // 玩家相关的后置逻辑（声音/页面/续货）仅在玩家仍在线时执行
-                    if (!RtsBlockAnimationCommitter.isPlayerStillOnline(player)) {
-                        return true;
-                    }
-                    RtsPlacementSound.playRemotePlacedBlockSound(player, level, targetPos);
-                    RtsServer.get().page().recordRecentItem(session, plan.itemId(), S2CRtsStoragePagePayload.RECENT_ITEM_PLACED, 1L);
-                    if (commitFromCarried) {
-                        // 方案2：自动续货——放置成功消耗后从网络补回差额，carried 始终保持满组
-                        RtsPlacementExtractor.replenishCarried(player, commitExtractHandlers, plan.item(), plan.templateStack());
-                        // 同步权威 carried 状态（已被续货补充）给客户端
-                        Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
-                    }
-                    return true;
-                },
+                () -> commitPlaced(player, session, level, targetPos, plan,
+                        commitPlacementStack, commitExtracted, commitFromCarried, commitRefundOnFailure,
+                        commitExtractHandlers, commitInsertHandlers, onCommitFinished),
                 () -> {
                     // 重试次数用尽仍无法落位：退回已提取的物品，并通知调用方落位失败
                     refundExtracted(player, commitExtracted, commitInsertHandlers, commitFromCarried, commitRefundOnFailure);
                     if (onCommitFinished != null) onCommitFinished.accept(false);
                 });
         return PlaceOutcome.PLACED;
+    }
+
+    /**
+     * 快速建造落位：真实 {@code setBlock} 目标方块并执行后置逻辑（方块实体应用/追踪/
+     * 声音/最近物品记录/续货）。返回 {@code false} 表示支撑依赖未就绪（请求延迟重试，
+     * 仅延迟落位路径生效；单方块立即落位时由调用方退款兜底）。
+     */
+    private static boolean commitPlaced(ServerPlayer player, RtsStorageSession session, ServerLevel level, BlockPos targetPos,
+                                        StatePlacementPlan plan, ItemStack placementStack, ItemStack extracted,
+                                        boolean fromCarried, boolean refundExtractedOnFailure,
+                                        List<IItemHandler> extractHandlers, List<IItemHandler> insertHandlers,
+                                        @Nullable Consumer<Boolean> onCommitFinished) {
+        // 支撑依赖未就绪（邻居尚未落位）→ 请求延迟重试
+        if (!plan.state().canSurvive(level, targetPos)) {
+            return false;
+        }
+        // 落位本身不依赖玩家：玩家下线时仍 setBlock，保证已扣物品的方块不丢失
+        boolean placed = BlockPlacer.setBlock(level, targetPos, plan.state());
+        if (!placed) {
+            refundExtracted(player, extracted, insertHandlers, fromCarried, refundExtractedOnFailure);
+            if (onCommitFinished != null) onCommitFinished.accept(false);
+            return true;
+        }
+        BlockState placedState = level.getBlockState(targetPos);
+        if (placedState.is(plan.state().getBlock())) {
+            BlockPlacer.applyQuickBuildBlockEntity(level, targetPos, placementStack, placedState, player);
+        }
+        BlockPlacer.trackPlaced(level, targetPos);
+        // 落位成功：通知调用方（无论玩家在线与否，方块已真实出现）
+        if (onCommitFinished != null) onCommitFinished.accept(true);
+        // 玩家相关的后置逻辑（声音/页面/续货）仅在玩家仍在线时执行
+        if (!RtsBlockAnimationCommitter.isPlayerStillOnline(player)) {
+            return true;
+        }
+        RtsPlacementSound.playRemotePlacedBlockSound(player, level, targetPos);
+        RtsServer.get().page().recordRecentItem(session, plan.itemId(), S2CRtsStoragePagePayload.RECENT_ITEM_PLACED, 1L);
+        if (fromCarried) {
+            // 方案2：自动续货——放置成功消耗后从网络补回差额，carried 始终保持满组
+            RtsPlacementExtractor.replenishCarried(player, extractHandlers, plan.item(), plan.templateStack());
+            // 同步权威 carried 状态（已被续货补充）给客户端
+            Platform.sendPacket(player, new S2CRtsCarriedSyncPayload(player.containerMenu.getCarried()));
+        }
+        return true;
     }
 
     static boolean canPlaceStateAt(ServerLevel level, ServerPlayer player, BlockPos targetPos, BlockState state) {

@@ -102,6 +102,9 @@ public final class BuildInteractionHandler {
         int button = event.button();
 
         if (!isInBuildOrInteractiveMode(topBarPanel)) return PASS;
+        // 方向旋转模式：右键由 RotateModeMouseHandler（更高优先级）接管，
+        // 本处理器完全让路，避免误触发单方块放置 / 形状画笔。
+        if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT && isRotateModeActive(screen, leftSidebarPanel)) return PASS;
         if (screen.isMouseOverUiPanelApi(event.x(), event.y())) return PASS;
         if (!isWorldArea(event.x(), event.y(), screen)) return PASS;
         if (leftSidebarPanel != null && leftSidebarPanel.isClickButtonSelected()
@@ -168,6 +171,7 @@ public final class BuildInteractionHandler {
                 && !screen.isMouseOverUiPanelApi(event.x(), event.y())
                 && isWorldArea(event.x(), event.y(), screen)
                 && isInBuildOrInteractiveMode(topBarPanel)
+                && !isRotateModeActive(screen, leftSidebarPanel)
                 && !shouldSkipRightClickRelease(screen, leftSidebarPanel)) {
             // 单方块持续放置：松开右键结束持续放置。
             // 快速单击（按下后 handleTick 尚未放置）兜底放置一次，避免漏放。
@@ -657,6 +661,9 @@ public final class BuildInteractionHandler {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return PASS;
 
+        // 方向旋转模式：右键已由 RotateModeMouseHandler 处理，此处兜底放行
+        if (isRotateModeActive(screen, leftSidebarPanel)) return PASS;
+
         var ray = CursorRaycaster.computeCursorRay(mc, screen);
         if (ray == null) return PASS;
 
@@ -807,7 +814,17 @@ public final class BuildInteractionHandler {
                 && pos.getZ() >= min.getZ() && pos.getZ() < max.getZ();
     }
 
-    private static boolean isWorldArea(double mouseX, double mouseY, BuilderScreen screen) {
+    /** 方向旋转模式是否激活：建造模式 + 左栏「方向旋转」按钮选中。 */
+    private static boolean isRotateModeActive(BuilderScreen screen) {
+        return screen != null && screen.isBuildMode() && screen.isDirectionRotateActive();
+    }
+
+    /** 方向旋转模式是否激活（兼容保留签名，仅依赖屏幕状态）。 */
+    private static boolean isRotateModeActive(BuilderScreen screen, LeftSidebarPanel leftSidebarPanel) {
+        return isRotateModeActive(screen);
+    }
+
+    static boolean isWorldArea(double mouseX, double mouseY, BuilderScreen screen) {
         int leftW = screen.getLeftSidebarWidth();
         if (mouseX < leftW) return false;
 

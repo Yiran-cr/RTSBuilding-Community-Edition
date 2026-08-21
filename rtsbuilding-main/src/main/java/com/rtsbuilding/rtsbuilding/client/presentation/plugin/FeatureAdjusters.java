@@ -43,6 +43,8 @@ import java.util.function.Supplier;
  *       调节后经 {@link FeatureAdjusterState} 同步到服务端（球心吸取实际半径）。</li>
  *   <li><b>连锁挖掘（Ultimine）启用</b> → “连锁挖掘数量”框（16~256），
  *       调节后作为连锁挖掘上限参与客户端预览与服务端启动请求。</li>
+ *   <li><b>方向旋转模式启用</b> → “旋转角度”框（90°/180°/270°），
+ *       设置每次右键旋转的角度（水平旋转/上下翻转共用）。</li>
  * </ul>
  */
 public final class FeatureAdjusters {
@@ -86,6 +88,10 @@ public final class FeatureAdjusters {
     private final NumericInputBox cullingDistanceInput = createCullingDistanceInput();
     /** 剔除半径输入框（字段持例，编辑状态跨帧保留）。 */
     private final NumericInputBox cullingRadiusInput = createCullingRadiusInput();
+    /** 旋转角度滑块（右面板下嵌层，方向旋转模式激活时显示）。 */
+    private final ScaleSliderComponent rotateSlider = new ScaleSliderComponent();
+    /** 旋转角度值输入框（字段持例，编辑状态跨帧保留）。 */
+    private final NumericInputBox rotateInput = createRotateInput();
 
     /** 当前可见的调节器行（渲染时重建，供鼠标/键盘事件复用命中位置）。 */
     private final List<Row> rows = new ArrayList<>(4);
@@ -146,6 +152,8 @@ public final class FeatureAdjusters {
         boolean showFunnel = screen != null && screen.isItemPickupActive();
         boolean showUltimine = screen != null && screen.isUltimineActive();
         boolean showFillMode = screen != null && screen.isShapeAdjusterActive();
+        // 方向旋转模式激活时显示「旋转角度」调节器（90° 整数倍，仅建造模式可用）
+        boolean showRotate = screen != null && screen.isBuildMode() && screen.isDirectionRotateActive();
         // 蓝图放置模式激活时显示「蓝图放置」调节器（覆盖开关 + XYZ 三轴偏移）
         boolean showBlueprint = screen != null && screen.isBlueprintPlacementActive();
 
@@ -186,6 +194,20 @@ public final class FeatureAdjusters {
         if (showBlueprint) {
             renderBlueprintRowBox(g, cx, cy, cw, blueprintRowH, mx, my, textColor, lineHeight);
             cy += blueprintRowH + ROW_GAP;
+        }
+
+        // 旋转角度调节器（方向旋转模式激活时显示）
+        if (showRotate) {
+            Row row = new Row(rotateSlider,
+                    FeatureAdjusterState.MIN_ROTATE_DEGREES, FeatureAdjusterState.MAX_ROTATE_DEGREES,
+                    FeatureAdjusterState.ROTATE_DEGREES_STEP,
+                    value -> FeatureAdjusterState.setRotateDegrees((int) value),
+                    rotateInput,
+                    () -> String.valueOf(FeatureAdjusterState.getRotateDegrees()));
+            renderRowBox(g, cx, cy, cw, rowH, row, t("ui.rtsbuilding.adjuster.rotate_angle"),
+                    FeatureAdjusterState.getRotateDegrees(), mx, my, textColor, lineHeight);
+            rows.add(row);
+            cy += rowH + ROW_GAP;
         }
 
         if (showFunnel) {
@@ -361,6 +383,19 @@ public final class FeatureAdjusters {
             try {
                 RtsRayCylinderCullingState
                         .setRadius(Double.parseDouble(text));
+            } catch (NumberFormatException ignored) {
+                // 无效输入忽略，保持原值
+            }
+        });
+        return box;
+    }
+
+    /** 旋转角度输入框：提交解析 int（90° 整数倍）并收敛到合法范围。 */
+    private static NumericInputBox createRotateInput() {
+        NumericInputBox box = new NumericInputBox();
+        box.setOnCommit(text -> {
+            try {
+                FeatureAdjusterState.setRotateDegrees(Integer.parseInt(text));
             } catch (NumberFormatException ignored) {
                 // 无效输入忽略，保持原值
             }

@@ -147,9 +147,38 @@ public final class RtsClientPacketGateway {
         PacketDistributor.sendToServer(act(ActionType.ULTIMINE, t));
     }
 
-    public static void sendRotateBlock(BlockPos pos) {
-        var t = tag(); t.putLong("pos", pos.asLong());
+    /**
+     * 方向旋转模式（点击模式）：旋转鼠标指向的单个方块。
+     *
+     * @param pos     目标方块位置
+     * @param degrees 旋转角度（90° 整数倍，由右面板下嵌层调节器设定）
+     * @param pitch   {@code true} 上下翻转（Ctrl+右键，绕水平轴），{@code false} 水平旋转（直接右键，绕竖直轴）
+     */
+    public static void sendRotateBlock(BlockPos pos, int degrees, boolean pitch) {
+        if (pos == null) return;
+        var t = tag();
+        t.putLong("pos", pos.asLong());
+        t.putInt("angle", degrees);
+        t.putByte("axis", (byte) (pitch ? 1 : 0));
         PacketDistributor.sendToServer(act(ActionType.ROTATE_BLOCK, t));
+    }
+
+    /**
+     * 方向旋转模式（框选模式）：旋转框选区域 [min, max) 内的全部方块。
+     *
+     * @param min     框选最小角（含）
+     * @param max     框选最大角（不含，与原版 AABB 语义一致）
+     * @param degrees 旋转角度（90° 整数倍）
+     * @param pitch   {@code true} 上下翻转（Ctrl+右键），{@code false} 水平旋转（直接右键）
+     */
+    public static void sendRotateArea(BlockPos min, BlockPos max, int degrees, boolean pitch) {
+        if (min == null || max == null) return;
+        var t = tag();
+        t.putInt("minX", min.getX()); t.putInt("minY", min.getY()); t.putInt("minZ", min.getZ());
+        t.putInt("maxX", max.getX()); t.putInt("maxY", max.getY()); t.putInt("maxZ", max.getZ());
+        t.putInt("angle", degrees);
+        t.putByte("axis", (byte) (pitch ? 1 : 0));
+        PacketDistributor.sendToServer(act(ActionType.ROTATE_AREA, t));
     }
 
     public static void sendPathfindingGoTo(BlockPos target) {

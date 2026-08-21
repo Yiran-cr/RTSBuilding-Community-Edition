@@ -368,7 +368,7 @@ public final class RtsPlacementExecutor {
             RtsPlacementHelper.rotatePlacedBlock(level, placedPos, rotateSteps);
             PlacedBlockTrackerData.get(level).mark(placedPos);
             if (selectedPlacesBlock) {
-                RtsPlacementSound.playRemotePlacedBlockAnimation(player, placedPos);
+                // 单方块放置不播放生长动画（方块已由交互式 useItemOn 立即落位），仅保留放置音效
                 RtsPlacementSound.playRemotePlacedBlockSound(player, level, placedPos);
             } else {
                 SoundService.playRemoteUseSound(player, level, null, placedPos, selectedSoundStack);
@@ -397,7 +397,7 @@ public final class RtsPlacementExecutor {
         if (placedPos != null) {
             PlacedBlockTrackerData.get(level).mark(placedPos);
             if (sourcePlacesBlock) {
-                RtsPlacementSound.playRemotePlacedBlockAnimation(player, placedPos);
+                // 单方块放置不播放生长动画（方块已由交互式 useItemOn 立即落位），仅保留放置音效
                 RtsPlacementSound.playRemotePlacedBlockSound(player, level, placedPos);
             } else {
                 SoundService.playRemoteUseSound(player, level, null, placedPos, sourceSnapshot);
@@ -444,8 +444,8 @@ public final class RtsPlacementExecutor {
         if (state == null) return RtsPlacementQuickBuild.PlaceOutcome.SKIPPED; // 无法放置，跳过（不破坏）
         BlockState rotated = RtsPlacementHelper.rotateState(state, rotateSteps);
         var plan = new RtsPlacementQuickBuild.StatePlacementPlan(item, template, rotated, itemId);
-        // 单方块替换：不关心延迟落位完成（调用方交互式路径按调度即计）
-        return RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, plan, true, null);
+        // 单方块替换：立即落位、不播放生长动画（点击模式单方块放置即时出现）
+        return RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, plan, true, true, null);
     }
 
 }

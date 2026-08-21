@@ -167,7 +167,7 @@ public final class RtsPlacementBatch {
                     // 上报进度，保证进度条与世界实际落位同步；禁止调度后立即读世界状态（必然落空）。
                     BlockPos trackedPos = clickedPos;
                     RtsPlacementQuickBuild.PlaceOutcome qbOutcome = RtsPlacementQuickBuild.placeStateBatchEntry(
-                            player, session, clickedPos, statePlan, job.forcePlace(),
+                            player, session, clickedPos, statePlan, job.forcePlace(), false,
                             (Boolean committed) -> {
                                 // 延迟落位最终完成（成功或放弃）：成功才计入已放置并上报进度
                                 if (committed) {

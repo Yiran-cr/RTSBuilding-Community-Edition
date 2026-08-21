@@ -34,11 +34,21 @@ public final class FeatureAdjusterState {
     /** 滑块步进：1 个 1 个地增加/减少。 */
     public static final int ULTIMINE_LIMIT_STEP = 1;
 
+    // ==================== 旋转角度（方向旋转模式） ====================
+
+    /** 旋转角度默认值：每次旋转 90°。原版方块朝向属性仅支持 90° 整数倍。 */
+    public static final int DEFAULT_ROTATE_DEGREES = 90;
+    public static final int MIN_ROTATE_DEGREES = 90;
+    public static final int MAX_ROTATE_DEGREES = 270;
+    /** 滑块步进：90° 一个挡位（90 / 180 / 270）。 */
+    public static final int ROTATE_DEGREES_STEP = 90;
+
     /** 漏斗半径变化同步回调（由业务层注入，如发送 C2S 包）；未注入时为 no-op。 */
     private static volatile DoubleConsumer funnelRadiusSync = r -> {};
 
     private static double funnelRadius = DEFAULT_FUNNEL_RADIUS;
     private static int ultimineLimit = DEFAULT_ULTIMINE_LIMIT;
+    private static int rotateDegrees = DEFAULT_ROTATE_DEGREES;
 
     private FeatureAdjusterState() {
     }
@@ -84,5 +94,23 @@ public final class FeatureAdjusterState {
             return;
         }
         ultimineLimit = stepped;
+    }
+
+    public static int getRotateDegrees() {
+        return rotateDegrees;
+    }
+
+    /**
+     * 设置每次旋转的角度（按 {@link #ROTATE_DEGREES_STEP} 步进取整到 90° 整数倍，
+     * 并收敛到 [90, 270] 范围）。
+     */
+    public static void setRotateDegrees(int degrees) {
+        int step = ROTATE_DEGREES_STEP;
+        int clamped = Mth.clamp(degrees, MIN_ROTATE_DEGREES, MAX_ROTATE_DEGREES);
+        int stepped = Math.round((float) (clamped - MIN_ROTATE_DEGREES) / step) * step + MIN_ROTATE_DEGREES;
+        if (rotateDegrees == stepped) {
+            return;
+        }
+        rotateDegrees = stepped;
     }
 }
