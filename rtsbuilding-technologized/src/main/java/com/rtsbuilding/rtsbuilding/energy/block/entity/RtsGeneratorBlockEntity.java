@@ -73,7 +73,6 @@ public abstract class RtsGeneratorBlockEntity extends RtsEnergyBlockEntity {
      * Handles right-click with a lava bucket (fills the tank) or an empty bucket
      * (drains the tank), swapping buckets in the player's hand.
      */
-    public abstract net.minecraft.world.ItemInteractionResult interactWithBucket(ItemStack stack, net.minecraft.world.entity.player.Player player);
     public abstract boolean checkGenerate();
     public abstract void generateBehavior();
 

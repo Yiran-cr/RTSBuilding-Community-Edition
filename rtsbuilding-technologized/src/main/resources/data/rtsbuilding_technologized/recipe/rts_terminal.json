@@ -1,0 +1,36 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    "AAA",
+    "BCD",
+    "EFE"
+  ],
+
+  "key": {
+    "A": {
+      "item": "rtsbuilding_technologized:screen"
+    },
+    "B": {
+      "item": "minecraft:spyglass"
+    },
+    "C": {
+      "item": "rtsbuilding_technologized:copper_wire"
+    },
+    "D": {
+      "item": "rtsbuilding_technologized:robot_arm"
+    },
+    "E": {
+      "item": "rtsbuilding_technologized:battery_set"
+    },
+    "F": {
+      "item": "minecraft:chest"
+    }
+  },
+
+  "result": {
+    "id": "rtsbuilding:rts_terminal",
+    "rtsbuilding_technologized:terminal_energy": 0,
+    "count": 1
+  }
+}

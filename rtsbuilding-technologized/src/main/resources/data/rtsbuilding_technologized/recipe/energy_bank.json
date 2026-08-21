@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    "AAA",
+    "ABA",
+    "AAA"
+  ],
+
+  "key": {
+    "A": {
+      "item": "minecraft:iron_ingot"
+    },
+    "B": {
+      "item": "rtsbuilding_technologized:battery_set"
+    }
+  },
+
+  "result": {
+    "id": "rtsbuilding_technologized:energy_bank",
+    "count": 1
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    " A ",
+    "BCB",
+    "DED"
+  ],
+
+  "key": {
+    "A": {
+      "item": "minecraft:iron_block"
+    },
+    "B": {
+      "item": "minecraft:bucket"
+    },
+    "C": {
+      "item": "minecraft:motor"
+    },
+    "D": {
+      "item": "minecraft:furnace"
+    },
+    "E": {
+      "item": "minecraft:copper_block"
+    }
+  },
+
+  "result": {
+    "id": "rtsbuilding_technologized:thermal_generator",
+    "count": 1
+  }
+}

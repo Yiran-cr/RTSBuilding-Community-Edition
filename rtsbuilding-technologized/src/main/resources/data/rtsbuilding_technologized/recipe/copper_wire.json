@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    "AA"
+  ],
+
+  "key": {
+    "A": {
+      "item": "minecraft:copper_ingot"
+    }
+  },
+
+  "result": {
+    "id": "rtsbuilding_technologized:copper_wire",
+    "count": 4
+  }
+}

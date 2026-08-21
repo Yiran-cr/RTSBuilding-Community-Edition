@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    "AAA",
+    "ABA",
+    "AAA"
+  ],
+
+  "key": {
+    "A": {
+      "item": "minecraft:iron_nugget"
+    },
+    "B": {
+      "item": "rtsbuilding_technologized:copper_wire"
+    }
+  },
+
+  "result": {
+    "id": "rtsbuilding_technologized:copper_coil",
+    "count": 1
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    "ABC",
+    "D  ",
+    "A  "
+  ],
+
+  "key": {
+    "A": {
+      "item": "rtsbuilding_technologized:motor"
+    },
+    "B": {
+      "item": "minecraft:iron_ingot"
+    },
+    "C": {
+      "item": "minecraft:diamond"
+    },
+    "D": {
+      "item": "minecraft:copper_ingot"
+    }
+  },
+  
+  "result": {
+    "id": "rtsbuilding_technologized:robot_arm",
+    "count": 1
+  }
+}

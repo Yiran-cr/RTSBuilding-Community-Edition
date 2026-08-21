@@ -3,6 +3,13 @@
 
   "item.rtsbuilding_technologized.energy_bank": "储能单元",
   "item.rtsbuilding_technologized.thermal_generator": "热能发电机",
+  "item.rtsbuilding_technologized.battery_set": "电池组",
+  "item.rtsbuilding_technologized.battery": "电池",
+  "item.rtsbuilding_technologized.copper_coil": "铜线圈",
+  "item.rtsbuilding_technologized.copper_wire": "铜线",
+  "item.rtsbuilding_technologized.motor": "电机",
+  "item.rtsbuilding_technologized.robot_arm": "机械臂",
+  "item.rtsbuilding_technologized.screen": "屏幕",
 
   "block.rtsbuilding_technologized.energy_bank": "储能单元",
   "block.rtsbuilding_technologized.thermal_generator": "热能发电机",
