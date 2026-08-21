@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -23,6 +24,7 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -90,5 +92,17 @@ public class RtsThermalGeneratorBlock extends RtsEnergyBlock implements EntityBl
             return generator.interactWithBucket(stack, player);
         }
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
+    @Override
+    public InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        if (!level.isClientSide) {
+            if (level.getBlockEntity(pos) instanceof RtsThermalGeneratorBlockEntity generator) {
+                long energy = generator.getEnergyBuffer().getEnergy();
+                int lavaAmount = generator.getTank().getFluidAmount();
+                player.displayClientMessage(Component.literal("§e当前电量: " + energy + "/" + RtsThermalGeneratorBlockEntity.BUFFER_CAPACITY + " FE | 当前液体：熔岩 " + lavaAmount + "/"+ RtsThermalGeneratorBlockEntity.TANK_CAPACITY + " MB"), true);
+            }
+        }
+        return InteractionResult.SUCCESS;
     }
 }
