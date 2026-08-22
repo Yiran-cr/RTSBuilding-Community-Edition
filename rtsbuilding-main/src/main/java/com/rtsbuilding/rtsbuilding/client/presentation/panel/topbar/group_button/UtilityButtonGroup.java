@@ -39,7 +39,6 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
     
     private final TooltipController chunkBtnTooltip = TooltipController.builder().build();
 
-    
     private final AnimFloat arrowRotateAnim = AnimFloat.expand();
     private boolean prevArrowActive;
 
@@ -75,11 +74,16 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
                 chunkBtnTooltip.update(hovered, popupOpen);
     }
 
-    
     public void renderTooltipOverlay(GuiGraphics g, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group,
                                       int screenW, int screenH) {
-        if (!chunkBtnTooltip.shouldRender()) return;
+        if (chunkBtnTooltip.shouldRender()) {
+            renderChunkTooltip(g, group, screenW, screenH);
+        }
+    }
 
+    /** 区块显示按钮 tooltip（含快捷键提示行）。 */
+    private void renderChunkTooltip(GuiGraphics g, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group,
+            int screenW, int screenH) {
         var rect = group.rect(1);
         String keyText = RtsKeyMappings.TOGGLE_DEBUG_OVERLAY_KEY.getTranslatedKeyMessage().getString();
         int textColor = ThemeManager.getTextColor();
@@ -87,11 +91,9 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
         String text = Component.translatable("tooltip.rtsbuilding.debug.overlay").getString() + "\n"
                 + Component.translatable("tooltip.rtsbuilding.debug.overlay.desc").getString() + "\n"
                 + Component.translatable("tooltip.rtsbuilding.shortcut", keyText).getString();
-        chunkBtnTooltip.render(g, rect.x(), rect.y(), rect.width(), rect.height(),
+chunkBtnTooltip.render(g, rect.x(), rect.y(), rect.width(), rect.height(),
                 text, textColor, shortcutColor, screenW, screenH);
     }
-
-    
 
     private void renderFoldArrow(GuiGraphics g, com.rtsbuilding.uifw.window.button.ButtonGroupLayout group) {
         var rect = group.rect(0);
@@ -118,10 +120,10 @@ public final class UtilityButtonGroup extends AbstractButtonGroup {
     @Override
     protected void onButtonClick(int index) {
         if (index == 0) {
-            
+            // 折叠箭头按钮：打开/关闭调试菜单
             if (debugPopup != null) debugPopup.toggle();
         } else {
-            
+            // 区块显示按钮：切换调试覆盖层
             if (debugPopup != null) debugPopup.toggleDebugOverlay();
         }
     }

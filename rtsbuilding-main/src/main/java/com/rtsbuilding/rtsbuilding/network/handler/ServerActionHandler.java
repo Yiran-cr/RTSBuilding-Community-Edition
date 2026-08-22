@@ -1,5 +1,6 @@
 package com.rtsbuilding.rtsbuilding.network.handler;
 
+import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.common.RtsItems;
 import com.rtsbuilding.rtsbuilding.common.RtsTerminalEnergy;
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
@@ -123,7 +124,22 @@ public final class ServerActionHandler {
                 Direction face = safeFace(t);
                 RtsServer.get().fluid().placeFluid(p, BlockPos.of(t.getLong("pos")), face, t.getDouble("hitX"), t.getDouble("hitY"), t.getDouble("hitZ"), t.getBoolean("forcePlace"), t.getString("fluidId"), t.getDouble("rayOriginX"), t.getDouble("rayOriginY"), t.getDouble("rayOriginZ"), t.getDouble("rayDirX"), t.getDouble("rayDirY"), t.getDouble("rayDirZ"));
             }
-            case ROTATE_BLOCK -> RtsServer.get().placement().rotateBlock(p, BlockPos.of(t.getLong("pos")));
+            case ROTATE_BLOCK -> {
+                // 方向旋转模式：旋转按钮仅在建造模式下显示，服务端同样限定建造模式
+                if (!isBuildMode(p)) return;
+                int angle = t.getInt("angle");
+                byte axis = t.getByte("axis");
+                RtsServer.get().placement().rotateBlock(p, BlockPos.of(t.getLong("pos")), angle, axis == 1);
+            }
+            case ROTATE_AREA -> {
+                if (!isBuildMode(p)) return;
+                int angle = t.getInt("angle");
+                byte axis = t.getByte("axis");
+                RtsServer.get().placement().rotateArea(p,
+                        new BlockPos(t.getInt("minX"), t.getInt("minY"), t.getInt("minZ")),
+                        new BlockPos(t.getInt("maxX"), t.getInt("maxY"), t.getInt("maxZ")),
+                        angle, axis == 1);
+            }
             case STORE_FLUID -> RtsServer.get().fluid().storeFluidFromContainer(p, t.getByte("sourceType"), t.getByte("toolSlot"), t.getString("itemId"));
             case SUBMIT_PENDING -> RtsServer.get().placement().submitPendingPlacement(p);
             case MINE_BLOCK -> {
@@ -236,8 +252,44 @@ public final class ServerActionHandler {
             }
             case SET_FUNNEL -> RtsFunnelService.INSTANCE.setFunnelEnabled(p, t.getBoolean("enabled"));
             case SET_FUNNEL_RADIUS -> RtsFunnelService.INSTANCE.setFunnelRadius(p, t.getDouble("radius"));
+            case PLACE_BLUEPRINT -> placeBlueprint(p, t);
             default -> LOG.debug("Unhandled: {} from {}", msg.actionType(), p.getName().getString());
         }
+    }
+
+    /**
+     * 蓝图列表「使用」请求：反序列化客户端上传的蓝图 NBT → 校验 → 启动 BLUEPRINT_BUILD
+     * 工作流（同步校验 + 逐 tick 放置由蓝图管线完成）。
+     */
+    private static void placeBlueprint(ServerPlayer p, CompoundTag t) {
+        if (!RtsCameraManager.isActive(p)) return;
+        if (!Config.areBlueprintsEnabled()) return;
+        if (!t.contains("blueprint", net.minecraft.nbt.Tag.TAG_COMPOUND)) return;
+        CompoundTag blueprintTag = t.getCompound("blueprint");
+        BlockPos anchor = BlockPos.of(t.getLong("anchor"));
+        int ySteps = (t.getByte("ySteps") & 0xFF) % 4;
+
+        var blueprint = com.rtsbuilding.rtsbuilding.common.blueprint.io.VanillaStructureNbtReader
+                .parse(blueprintTag, t.getString("name"), t.getString("sourceName"), p.registryAccess());
+        if (blueprint == null || blueprint.blocks().isEmpty()) return;
+        if (blueprint.blockCount() > Config.maxBlueprintBlocks()) return;
+
+        boolean allowOverwrite = t.getByte("overwrite") != 0;
+        com.rtsbuilding.rtsbuilding.server.pipeline.context.BlueprintContext ctx =
+                com.rtsbuilding.rtsbuilding.server.pipeline.context.BlueprintContext.builder(p)
+                        .blueprint(blueprint)
+                        .anchor(anchor)
+                        .yRotationSteps(ySteps)
+                        .xRotationSteps(0)
+                        .zRotationSteps(0)
+                        .allowOverwrite(allowOverwrite)
+                        .totalBlocks(blueprint.blockCount())
+                        .build();
+        var session = RtsServer.get().session().getOrCreate(p);
+        if (session == null) return;
+        ctx.setData(com.rtsbuilding.rtsbuilding.server.pipeline.validation.SessionValidatePipe.KEY_SESSION, session);
+        com.rtsbuilding.rtsbuilding.server.pipeline.core.PipelineRegistry
+                .execute(com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowType.BLUEPRINT_BUILD, ctx);
     }
 
     private static boolean isBuildMode(ServerPlayer p) {

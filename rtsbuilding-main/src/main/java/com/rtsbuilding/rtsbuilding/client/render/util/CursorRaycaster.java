@@ -1,12 +1,15 @@
 package com.rtsbuilding.rtsbuilding.client.render.util;
 
+import com.rtsbuilding.rtsbuilding.client.culling.RtsRayCylinderCullingState;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.background.ScreenBackgroundPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.DownSidebarLayoutHelper;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.render.ViewCaptureService;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.*;
 import org.lwjgl.glfw.GLFW;
 
@@ -171,9 +174,48 @@ public final class CursorRaycaster {
             Vec3 end = origin.add(direction.scale(maxDist));
             ClipContext context = new ClipContext(origin, end,
                     ClipContext.Block.OUTLINE, fluidMode, mc.getCameraEntity());
+            if (RtsRayCylinderCullingState.isEnabled()) {
+                // 剔除开启：射线穿透圆柱体内方块（跳过命中继续向后找，直到首个非剔除方块）
+                return raycastBlockThroughCulled(mc, maxDist, fluidMode);
+            }
             HitResult hit = mc.level.clip(context);
             if (hit instanceof BlockHitResult bhr && hit.getType() == HitResult.Type.BLOCK) {
                 return bhr;
+            }
+            return null;
+        }
+
+        /**
+         * 沿射线 0.5 格步进，跳过被剔除的方块；命中首个「非剔除且非空气」的方块时
+         * 对该射线小段做精确 {@code clip} 得到表面命中点与面方向。
+         */
+        private BlockHitResult raycastBlockThroughCulled(Minecraft mc, double maxDist, ClipContext.Fluid fluidMode) {
+            Vec3 dir = direction.normalize();
+            double step = 0.5D;
+            BlockPos last = null;
+            for (double t = 0.0D; t <= maxDist; t += step) {
+                double d = Math.min(t, maxDist);
+                BlockPos pos = BlockPos.containing(
+                        origin.x + dir.x * d, origin.y + dir.y * d, origin.z + dir.z * d);
+                if (pos.equals(last)) {
+                    continue;
+                }
+                last = pos;
+                if (RtsRayCylinderCullingState.shouldCull(pos)) {
+                    continue;
+                }
+                BlockState state = mc.level.getBlockState(pos);
+                if (state.isAir()) {
+                    continue;
+                }
+                double d0 = Math.max(0.0D, d - step);
+                ClipContext sub = new ClipContext(
+                        origin.add(dir.scale(d0)), origin.add(dir.scale(d)),
+                        ClipContext.Block.OUTLINE, fluidMode, mc.getCameraEntity());
+                HitResult subHit = mc.level.clip(sub);
+                if (subHit instanceof BlockHitResult bhr && subHit.getType() == HitResult.Type.BLOCK) {
+                    return bhr;
+                }
             }
             return null;
         }

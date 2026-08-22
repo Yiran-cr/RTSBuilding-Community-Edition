@@ -160,24 +160,30 @@ public final class RtsPlacementBatch {
                     remaining--;
                     continue;
                 }
-                boolean keepGoing;
+                boolean keepGoing = true;
                 if (statePlan != null) {
-                    // 快速建造路径：记录放置前的状态，用于批撤回
+                    // 快速建造路径：以调度结果为准。方块走 RtsBlockAnimationCommitter 延迟落位
+                    // （动画结束才 setBlock），故进度以「落位完成回调」为准——落位成功才计入已放置并
+                    // 上报进度，保证进度条与世界实际落位同步；禁止调度后立即读世界状态（必然落空）。
                     BlockPos trackedPos = clickedPos;
-                    BlockState beforeState = player.serverLevel().getBlockState(trackedPos);
-                    keepGoing = RtsPlacementQuickBuild.placeStateBatchEntry(player, session, clickedPos, statePlan, job.forcePlace());
-                    if (keepGoing) {
-                        // 替换模式（forcePlace）允许覆盖已有方块：放置成功判定不依赖 beforeState 的空气性
-                        BlockState afterState = player.serverLevel().getBlockState(trackedPos);
-                        boolean actuallyPlaced = !afterState.isAir()
-                                && (beforeState.isAir() || beforeState.canBeReplaced() || job.forcePlace());
-                        if (actuallyPlaced) {
-                            job.placedPositions.add(trackedPos);
-                            RtsBuildEnergy.consumePlacement(player);
-                        } else {
-                            // keepGoing=true 但方块状态未变化（已存在/放置在其他位置）→ 计为跳过
-                            job.skippedWhileProcessing++;
-                        }
+                    RtsPlacementQuickBuild.PlaceOutcome qbOutcome = RtsPlacementQuickBuild.placeStateBatchEntry(
+                            player, session, clickedPos, statePlan, job.forcePlace(), false,
+                            (Boolean committed) -> {
+                                // 延迟落位最终完成（成功或放弃）：成功才计入已放置并上报进度
+                                if (committed) {
+                                    job.placedPositions.add(trackedPos);
+                                    if (RtsBlockAnimationCommitter.isPlayerStillOnline(player)) {
+                                        RtsBuildEnergy.consumePlacement(player);
+                                    }
+                                    tokenOpt.ifPresent(token -> token.updateProgress(1, null));
+                                }
+                                job.onPlacementCommitted();
+                            });
+                    switch (qbOutcome) {
+                        case PLACED -> job.onPlacementScheduled(); // 已调度待落位，进度待落位后由回调上报
+                        case SKIPPED -> job.skippedWhileProcessing++;
+                        case STOP -> keepGoing = false;
+                        case CONTINUE -> job.skippedWhileProcessing++; // 防御：快速建造路径不应返回 CONTINUE
                     }
                 } else {
                     Vec3 hitLocation = new Vec3(
@@ -189,7 +195,7 @@ public final class RtsPlacementBatch {
                     BlockState beforeClicked = player.serverLevel().getBlockState(clickedPos);
                     BlockState beforeAdjacent = player.serverLevel().hasChunkAt(adjPos)
                             ? player.serverLevel().getBlockState(adjPos) : null;
-                    keepGoing = RtsPlacementExecutor.placeSelectedInternal(
+                    RtsPlacementQuickBuild.PlaceOutcome outcome = RtsPlacementExecutor.placeSelectedInternal(
                             player,
                             session,
                             clickedPos,
@@ -212,16 +218,28 @@ public final class RtsPlacementBatch {
                             false,
                             job.sendRemoteHint());
                     // 检测实际放置位置（可能是 clickedPos 或 adjacentPos）
-                    if (keepGoing) {
-                        BlockPos actualPos = RtsPlacementHelper.detectPlacedPos(
-                                player.serverLevel(), clickedPos, beforeClicked, adjPos, beforeAdjacent);
-                        if (actualPos != null) {
-                            job.placedPositions.add(actualPos);
-                            RtsBuildEnergy.consumePlacement(player);
-                        } else {
-                            // placeSelectedInternal 报告成功但检测不到实际放置位置 → 计为跳过
-                            job.skippedWhileProcessing++;
+                    switch (outcome) {
+                        case CONTINUE -> {
+                            BlockPos actualPos = RtsPlacementHelper.detectPlacedPos(
+                                    player.serverLevel(), clickedPos, beforeClicked, adjPos, beforeAdjacent);
+                            if (actualPos != null) {
+                                job.placedPositions.add(actualPos);
+                                RtsBuildEnergy.consumePlacement(player);
+                                // 立即上报进度（事件驱动，与实际落位同步）
+                                tokenOpt.ifPresent(token -> token.updateProgress(1, null));
+                            } else {
+                                // placeSelectedInternal 报告已处理但检测不到实际放置位置 → 计为跳过
+                                job.skippedWhileProcessing++;
+                            }
                         }
+                        case PLACED -> {
+                            // 单方块替换（placeReplaceAt）：延迟落位已调度 → 按调度即计（单方块场景）
+                            job.placedPositions.add(clickedPos);
+                            RtsBuildEnergy.consumePlacement(player);
+                            tokenOpt.ifPresent(token -> token.updateProgress(1, null));
+                        }
+                        case SKIPPED -> job.skippedWhileProcessing++;
+                        case STOP -> keepGoing = false;
                     }
                 }
                 remaining--;
@@ -252,6 +270,10 @@ public final class RtsPlacementBatch {
                 madeProgress = true;
             }
             if (!session.placement.placeBatchJobs.isEmpty() && session.placement.placeBatchJobs.peekFirst() == job && !job.hasNext()) {
+                if (job.hasPendingPlacements()) {
+                    // 尚有延迟落位未完成：等待落位完成后再移除（避免进度/历史缺失），下一 tick 再检查
+                    break;
+                }
                 session.placement.placeBatchJobs.removeFirst();
                 // 立刻处理此 job 的完成：记录历史、更新进度、释放工作流槽位
                 fullyCompletedJobs.add(job);
@@ -259,6 +281,8 @@ public final class RtsPlacementBatch {
         }
 
         // 处理所有此 tick 内完成的 job
+        // reportCompletedDelta=false：放置的 completed 已由放置事件（落位/放置成功时 updateProgress(1)）
+        // 逐块上报，此处仅补报 failed（skippedWhileProcessing）并 complete，避免重复计数。
         RtsBatchJobTickOps.processCompletedJobs(
                 player, session,
                 fullyCompletedJobs, placedBeforeTick,
@@ -270,17 +294,20 @@ public final class RtsPlacementBatch {
                         ServerHistoryManager.recordPlacement(p, job.placedPositions, job.face());
                     }
                 },
-                null); // Placement 无需额外完成回调
+                null, // Placement 无需额外完成回调
+                false);
 
-        // 更新仍在活跃队列中的 job 的中途进度（尚未完成但此 tick 有放置进展）
+        // 放置进度由事件驱动（落位/放置成功时 updateProgress(1)），此处仅刷新存储页面标记
         RtsBatchJobTickOps.updateMidProgress(
                 player, session,
                 session.placement.placeBatchJobs, placedBeforeTick,
                 PlaceBatchJob::workflowEntryId,
-                j -> j.placedPositions.size());
+                j -> j.placedPositions.size(),
+                false);
 
-        // 放置完成后扫描世界实际状态，刷新所有工作流进度（不依赖事件触发）
-        RtsProgressRefresher.refreshWorkflowProgress(player, session);
+        // 放置进度由 placedPositions 动作计数驱动（与破坏流程一致），不做世界扫描覆盖；
+        // 此处仅刷新蓝图进度（检测「已放置的蓝图方块被挖掉」后重新入队）
+        RtsProgressRefresher.refreshBlueprintProgress(player);
     }
 
     /**
@@ -320,6 +347,35 @@ public final class RtsPlacementBatch {
          * 在 job 完成时报告为 failedBlocks。
          */
         int skippedWhileProcessing;
+
+        /**
+         * 已调度延迟落位但尚未真正 setBlock 的方块数（快速建造/单方块替换）。
+         * 每次 PLACED 时 {@link #onPlacementScheduled()} +1，落位完成（成功或放弃）
+         * 时由回调 {@link #onPlacementCommitted()} -1；归零前 job 不视为完成。
+         */
+        private int pendingPlacements;
+
+        /** 返回待落位方块数（>0 表示仍有延迟落位未完成）。 */
+        final int pendingPlacements() {
+            return this.pendingPlacements;
+        }
+
+        /** 返回是否有延迟落位尚未完成。 */
+        final boolean hasPendingPlacements() {
+            return this.pendingPlacements > 0;
+        }
+
+        /** 记录一次已调度待落位的放置。 */
+        final void onPlacementScheduled() {
+            this.pendingPlacements++;
+        }
+
+        /** 记录一次落位完成（成功或失败/放弃）。 */
+        final void onPlacementCommitted() {
+            if (this.pendingPlacements > 0) {
+                this.pendingPlacements--;
+            }
+        }
 
         private PlaceBatchJob(List<BlockPos> clickedPositions, Direction face, double hitOffsetX, double hitOffsetY,
                 double hitOffsetZ, byte rotateSteps, boolean forcePlace, boolean skipIfOccupied, String itemId,

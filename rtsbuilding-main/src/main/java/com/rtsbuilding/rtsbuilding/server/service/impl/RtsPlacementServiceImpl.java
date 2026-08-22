@@ -7,6 +7,7 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.context.PlaceContext;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.PipelineRegistry;
 import com.rtsbuilding.rtsbuilding.server.service.RtsPendingPlacementService;
 import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementBatch;
+import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
 import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementHelper;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
@@ -16,6 +17,7 @@ import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
@@ -171,11 +173,87 @@ public final class RtsPlacementServiceImpl implements RtsService {
     }
 
     public void rotateBlock(ServerPlayer player, BlockPos pos) {
+        rotateBlock(player, pos, 90, false);
+    }
+
+    /**
+     * 旋转单个方块（方向旋转模式）。
+     *
+     * @param player  执行者
+     * @param pos     目标位置
+     * @param degrees 每次旋转角度（90° 整数倍，内部归一化为步数）
+     * @param pitch   {@code true} 上下翻转（绕水平轴，轴随相机朝向选择 X/Z），
+     *                {@code false} 水平旋转（绕竖直 Y 轴）
+     */
+    public void rotateBlock(ServerPlayer player, BlockPos pos, int degrees, boolean pitch) {
         RtsStorageSession session = server.session().getIfPresent(player);
         if (session == null || !RtsLinkedStorageResolver.canAccessWorldTarget(player, pos)) {
             return;
         }
-        RtsPlacementHelper.rotatePlacedBlock(player.serverLevel(), pos, (byte) 1);
+        int steps = stepsForDegrees(degrees);
+        if (pitch) {
+            boolean aboutZ = isPitchAboutZ(player);
+            RtsPlacementHelper.rotatePlacedBlock(player.serverLevel(), pos,
+                    0, aboutZ ? 0 : steps, aboutZ ? steps : 0);
+        } else {
+            RtsPlacementHelper.rotatePlacedBlock(player.serverLevel(), pos, steps, 0, 0);
+        }
+    }
+
+    /**
+     * 批量旋转框选区域 [min, max) 内的方块（方向旋转模式 + 框选模式）。
+     * 每个位置都经过 {@link RtsLinkedStorageResolver#canAccessWorldTarget} 校验
+     * （相机动作范围 / 领地保护 / 世界边界），框体积超过
+     * {@link NetworkConstants#MAX_POSITIONS} 时拒绝处理。
+     */
+    public void rotateArea(ServerPlayer player, BlockPos min, BlockPos max,
+                           int degrees, boolean pitch) {
+        if (player == null || min == null || max == null) {
+            return;
+        }
+        long volume = (long) (max.getX() - min.getX())
+                * (max.getY() - min.getY())
+                * (max.getZ() - min.getZ());
+        if (volume <= 0 || volume > NetworkConstants.MAX_POSITIONS) {
+            return;
+        }
+        int steps = stepsForDegrees(degrees);
+        boolean aboutZ = pitch && isPitchAboutZ(player);
+        int ySteps = pitch ? 0 : steps;
+        int xSteps = pitch && !aboutZ ? steps : 0;
+        int zSteps = pitch && aboutZ ? steps : 0;
+        ServerLevel level = player.serverLevel();
+        for (int y = min.getY(); y < max.getY(); y++) {
+            for (int z = min.getZ(); z < max.getZ(); z++) {
+                for (int x = min.getX(); x < max.getX(); x++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    if (!RtsLinkedStorageResolver.canAccessWorldTarget(player, pos)) {
+                        continue;
+                    }
+                    RtsPlacementHelper.rotatePlacedBlock(level, pos, ySteps, xSteps, zSteps);
+                }
+            }
+        }
+    }
+
+    /** 把旋转角度（90° 整数倍）归一化为 0~3 步数。 */
+    private static int stepsForDegrees(int degrees) {
+        return Math.floorMod(Math.round(degrees / 90.0f), 4);
+    }
+
+    /**
+     * 上下翻转的旋转轴选择（相机相对）：绕与相机水平朝向垂直的水平轴旋转，
+     * 使方块朝相机前后方向上下翻转，直觉上“面向视角翻转”。相机朝向由
+     * {@link RtsCameraManager#getCameraYaw} 权威位置（客户端 10Hz 上报）决定。
+     *
+     * @return {@code true} 绕 Z 轴旋转（相机朝 X 方向时），{@code false} 绕 X 轴
+     */
+    private static boolean isPitchAboutZ(ServerPlayer player) {
+        float yaw = RtsCameraManager.getCameraYaw(player);
+        double rad = Math.toRadians(yaw);
+        double fx = -Math.sin(rad);
+        double fz = Math.cos(rad);
+        return Math.abs(fx) >= Math.abs(fz);
     }
 
     public int getPlaceBatchTotalBlocks(ServerPlayer player) {

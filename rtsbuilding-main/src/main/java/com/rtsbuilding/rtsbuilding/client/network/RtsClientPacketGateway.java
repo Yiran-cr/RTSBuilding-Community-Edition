@@ -32,6 +32,24 @@ public final class RtsClientPacketGateway {
         PacketDistributor.sendToServer(act(ActionType.SET_MODE, t));
     }
 
+    /**
+     * 蓝图列表「使用」请求：把蓝图方块序列化为 NBT + 锚点 + Y 轴旋转步数 + 覆盖开关发给服务端，
+     * 服务端启动 BLUEPRINT_BUILD 工作流逐格建造。
+     */
+    public static void sendPlaceBlueprint(com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint blueprint,
+                                          BlockPos anchor, int ySteps, boolean allowOverwrite) {
+        if (blueprint == null || anchor == null) return;
+        var t = tag();
+        t.put("blueprint", com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters
+                .toVanillaStructureTag(blueprint));
+        t.putLong("anchor", anchor.asLong());
+        t.putByte("ySteps", (byte) ((ySteps % 4 + 4) % 4));
+        t.putByte("overwrite", (byte) (allowOverwrite ? 1 : 0));
+        t.putString("name", blueprint.name() == null ? "" : blueprint.name());
+        t.putString("sourceName", blueprint.sourceName() == null ? "" : blueprint.sourceName());
+        PacketDistributor.sendToServer(act(ActionType.PLACE_BLUEPRINT, t));
+    }
+
     public static void sendToggleCamera(boolean startAtPlayerHead) {
         var t = tag(); t.putBoolean("startAtPlayerHead", startAtPlayerHead);
         PacketDistributor.sendToServer(act(ActionType.TOGGLE_CAMERA, t));
@@ -129,9 +147,38 @@ public final class RtsClientPacketGateway {
         PacketDistributor.sendToServer(act(ActionType.ULTIMINE, t));
     }
 
-    public static void sendRotateBlock(BlockPos pos) {
-        var t = tag(); t.putLong("pos", pos.asLong());
+    /**
+     * 方向旋转模式（点击模式）：旋转鼠标指向的单个方块。
+     *
+     * @param pos     目标方块位置
+     * @param degrees 旋转角度（90° 整数倍，由右面板下嵌层调节器设定）
+     * @param pitch   {@code true} 上下翻转（Ctrl+右键，绕水平轴），{@code false} 水平旋转（直接右键，绕竖直轴）
+     */
+    public static void sendRotateBlock(BlockPos pos, int degrees, boolean pitch) {
+        if (pos == null) return;
+        var t = tag();
+        t.putLong("pos", pos.asLong());
+        t.putInt("angle", degrees);
+        t.putByte("axis", (byte) (pitch ? 1 : 0));
         PacketDistributor.sendToServer(act(ActionType.ROTATE_BLOCK, t));
+    }
+
+    /**
+     * 方向旋转模式（框选模式）：旋转框选区域 [min, max) 内的全部方块。
+     *
+     * @param min     框选最小角（含）
+     * @param max     框选最大角（不含，与原版 AABB 语义一致）
+     * @param degrees 旋转角度（90° 整数倍）
+     * @param pitch   {@code true} 上下翻转（Ctrl+右键），{@code false} 水平旋转（直接右键）
+     */
+    public static void sendRotateArea(BlockPos min, BlockPos max, int degrees, boolean pitch) {
+        if (min == null || max == null) return;
+        var t = tag();
+        t.putInt("minX", min.getX()); t.putInt("minY", min.getY()); t.putInt("minZ", min.getZ());
+        t.putInt("maxX", max.getX()); t.putInt("maxY", max.getY()); t.putInt("maxZ", max.getZ());
+        t.putInt("angle", degrees);
+        t.putByte("axis", (byte) (pitch ? 1 : 0));
+        PacketDistributor.sendToServer(act(ActionType.ROTATE_AREA, t));
     }
 
     public static void sendPathfindingGoTo(BlockPos target) {

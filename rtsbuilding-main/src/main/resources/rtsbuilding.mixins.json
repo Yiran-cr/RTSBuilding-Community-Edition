@@ -3,15 +3,23 @@
   "package": "com.rtsbuilding.rtsbuilding.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "BlockEntityRenderDispatcherMixin",
+    "BlockRenderDispatcherMixin",
     "ClientLevelMixin",
     "ClientPacketListenerMixin",
+    "EmbeddiumWorldSliceMixin",
+    "EntityRenderDispatcherMixin",
+    "FlywheelBlockEntityStorageMixin",
     "KeyboardInputMixin",
     "LocalPlayerMixin",
     "LocalPlayerStepAiMixin",
     "MinecraftSetScreenMixin",
     "MinecraftTickMixin",
     "MouseInputMixin",
-    "ScreenRenderBgMixin"
+    "RenderChunkRegionMixin",
+    "RtsGuiOverlayMixin",
+    "ScreenRenderBgMixin",
+    "SodiumLevelSliceMixin"
   ],
   "mixins": [
     "ChestMenuMixin",

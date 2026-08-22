@@ -60,16 +60,39 @@ final class AxisGizmoInputHandler {
 
     /**
      * 拖拽处理：处于拖拽状态时把像素位移交给相机模块旋转视角。
+     * <p>拖拽期间光标处于 {@code GLFW_CURSOR_DISABLED}（锁定+隐藏）：GLFW 只上报相对位移
+     * （虚拟位置），不会产生绝对位置跳变，因此自读差分恒等于用户真实拖动位移，
+     * 无合成事件干扰、无抖动、无轴向偏移；同时光标锁定中心可实现无限旋转。</p>
      *
      * @return 是否消费了本次拖拽
      */
     boolean mouseDragged(AxisGizmoState state, double dragX, double dragY) {
         if (!state.isDragging()) return false;
+        rotateByCursorDelta(state);
+        return true;
+    }
+
+    /** 基于光标绝对位置计算旋转增量（DISABLED 模式下为相对位移）。 */
+    private void rotateByCursorDelta(AxisGizmoState state) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.getWindow() == null) return;
+        long win = mc.getWindow().getWindow();
+        double[] x = new double[1];
+        double[] y = new double[1];
+        GLFW.glfwGetCursorPos(win, x, y);
+        double dx = x[0] - state.getLastDragCursorX();
+        double dy = y[0] - state.getLastDragCursorY();
+        // 灵敏度缩放与亚像素死区：降低灵敏度、过滤噪声，旋转更丝滑
+        final double SENSITIVITY = 0.5;
+        final double DEADZONE = 0.2;
+        if (Math.abs(dx) < DEADZONE) dx = 0;
+        if (Math.abs(dy) < DEADZONE) dy = 0;
         CameraModule cam = cameraModule();
         if (cam != null) {
-            cam.queueRotateDrag(dragX, dragY);
+            cam.queueRotateDrag(dx * SENSITIVITY, dy * SENSITIVITY);
         }
-        return true;
+        state.setLastDragCursorX(x[0]);
+        state.setLastDragCursorY(y[0]);
     }
 
     /**
@@ -89,7 +112,8 @@ final class AxisGizmoInputHandler {
     }
 
     /**
-     * 隐藏系统光标，并记录当前物理像素位置（用于释放时回到该处）。
+     * 隐藏并锁定系统光标（GLFW_CURSOR_DISABLED，只上报相对位移），记录起始物理像素位置
+     * （用于释放时回到该处，也作为拖拽增量计算基点）。
      */
     private void hideCursorAndRecordStart(AxisGizmoState state) {
         Minecraft mc = Minecraft.getInstance();
@@ -100,8 +124,14 @@ final class AxisGizmoInputHandler {
         GLFW.glfwGetCursorPos(win, x, y);
         state.setDragStartCursorX(x[0]);
         state.setDragStartCursorY(y[0]);
-        GLFW.glfwSetInputMode(win, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_HIDDEN);
+        // DISABLED 模式：光标锁定+隐藏，glfwGetCursorPos 返回相对位移（虚拟位置），
+        // 不产生绝对位置跳变 → 无限旋转且无合成事件干扰
+        GLFW.glfwSetInputMode(win, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_DISABLED);
         state.setCursorHidden(true);
+        // 切换到 DISABLED 后读取一次虚拟位置作为差分基点
+        GLFW.glfwGetCursorPos(win, x, y);
+        state.setLastDragCursorX(x[0]);
+        state.setLastDragCursorY(y[0]);
     }
 
     /**

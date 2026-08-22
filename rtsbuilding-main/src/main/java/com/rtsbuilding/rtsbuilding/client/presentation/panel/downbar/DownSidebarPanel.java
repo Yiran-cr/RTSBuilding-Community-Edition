@@ -21,7 +21,30 @@ public final class DownSidebarPanel implements UiPanelApi {
 
     
     public void setCurrentHeight(int height) {
-        this.currentHeight = Math.max(8, Math.min(height, this.screen != null ? this.screen.getUiHeight() / 4 : 2000));
+        this.currentHeight = Math.max(8, Math.min(height, maxHeightLimit()));
+    }
+
+    /**
+     * 高度 clamp 上限：统一使用 RTS 虚拟坐标高/4，与拖拽保存时的基准一致。
+     * 鼠标事件期间 {@code screen.getUiHeight()} 会被 {@code BuilderScreenScaleManager}
+     * 临时改写为虚拟高，而 init() 恢复时为 GUI 高——若恢复沿用 GUI 高/4 会与保存基准
+     * 不一致，导致持久化的高度在恢复时被截断（如被压到默认值）。
+     */
+    private int maxHeightLimit() {
+        if (this.screen instanceof com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen bs) {
+            return Math.max(8, bs.getRtsVirtualHeight() / 4);
+        }
+        return this.screen != null ? Math.max(8, this.screen.getUiHeight() / 4) : 2000;
+    }
+
+    /** 当前左右分区的分隔宽度（供 UI 状态持久化读取；未拖动过返回 -1 表示使用默认比例）。 */
+    public int getLeftOverlayWidth() {
+        return this.leftOverlayWidth;
+    }
+
+    /** 直接设置左右分区分隔宽度（供 UI 状态持久化恢复使用；{@code <=0} 表示使用默认比例）。 */
+    public void setLeftOverlayWidth(int width) {
+        this.leftOverlayWidth = width;
     }
 
     
@@ -336,5 +359,12 @@ public final class DownSidebarPanel implements UiPanelApi {
      */
     public void releaseAxisGizmoCursor() {
         axisViewGizmo.releaseCursorIfNeeded();
+    }
+
+    /**
+     * 存储网格状态（含过滤/排序偏好，供 UI 状态持久化读取）。
+     */
+    public com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.GridState getGridState() {
+        return rightLayer.getGridState();
     }
 }

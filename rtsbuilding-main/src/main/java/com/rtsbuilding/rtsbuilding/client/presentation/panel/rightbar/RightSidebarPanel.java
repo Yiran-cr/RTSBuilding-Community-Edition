@@ -21,7 +21,30 @@ public final class RightSidebarPanel implements UiPanelApi {
 
     
     public void setCurrentWidth(int width) {
-        this.currentWidth = Math.max(30, Math.min(width, this.screen != null ? this.screen.getUiWidth() / 4 : 2000));
+        this.currentWidth = Math.max(30, Math.min(width, maxWidthLimit()));
+    }
+
+    /**
+     * 宽度 clamp 上限：统一使用 RTS 虚拟坐标宽/4，与拖拽保存时的基准一致。
+     * 鼠标事件期间 {@code screen.getUiWidth()} 会被 {@code BuilderScreenScaleManager}
+     * 临时改写为虚拟宽，而 init() 恢复时为 GUI 宽——若恢复沿用 GUI 宽/4 会与保存基准
+     * 不一致，导致持久化的宽度在恢复时被截断（如被压到默认值）。
+     */
+    private int maxWidthLimit() {
+        if (this.screen instanceof com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen bs) {
+            return Math.max(30, bs.getRtsVirtualWidth() / 4);
+        }
+        return this.screen != null ? Math.max(30, this.screen.getUiWidth() / 4) : 2000;
+    }
+
+    /** 当前上下分区的分隔高度（供 UI 状态持久化读取；未拖动过返回 -1 表示使用默认比例）。 */
+    public int getUpperOverlayHeight() {
+        return this.upperOverlayHeight;
+    }
+
+    /** 直接设置上下分区分隔高度（供 UI 状态持久化恢复使用；{@code <=0} 表示使用默认比例）。 */
+    public void setUpperOverlayHeight(int height) {
+        this.upperOverlayHeight = height;
     }
 
     
@@ -285,5 +308,10 @@ public final class RightSidebarPanel implements UiPanelApi {
     public boolean isMouseOverLeftEdge(int mx, int my) {
         RightSidebarLayoutHelper.Rect sb = layoutRect();
         return resizeHandler.isOverEdge(mx, my, sb.x(), sb.y(), sb.height());
+    }
+
+    /** 鼠标是否悬浮于「方块剔除」调节框内（右栏下嵌层，供圆柱预览 pass 判定）。 */
+    public boolean isMouseOverCullingAdjuster() {
+        return lowerLayer.isMouseOverCullingAdjuster();
     }
 }

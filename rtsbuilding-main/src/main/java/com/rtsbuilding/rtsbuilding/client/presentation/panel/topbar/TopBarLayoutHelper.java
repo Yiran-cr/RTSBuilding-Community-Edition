@@ -101,17 +101,24 @@ public final class TopBarLayoutHelper {
     
 
     
-    public record GroupLayout(ButtonGroup modeGroup, ButtonGroup utilityGroup) {
+    /**
+     * 顶栏按钮组布局：模式组（相机模式 2 键）、辅助显示组（折叠 + 区块显示 2 键）、
+     * 射线圆柱剔除独立按钮组（1 键）。各组间以 {@link #GROUP_GAP} 分隔，互不隶属。
+     */
+    public record GroupLayout(ButtonGroup modeGroup, ButtonGroup utilityGroup, ButtonGroup rayCullingGroup) {
 
         
         public static GroupLayout create(int screenWidth, int rightSidebarWidth) {
             int anchorRight = effectiveRightEdge(screenWidth, rightSidebarWidth) - BTN_MARGIN_R;
             int anchorY = TOP_BAR_HEIGHT + SCREEN_BORDER + (BOTTOM_SRC_H - BTN_SIZE) / 2;
 
-            var utility = ButtonGroup.fromRight(anchorRight, anchorY, BTN_SIZE, 2, 0, INNER_GAP);
+            // 射线剔除独立按钮：占据最右锚点
+            var rayCulling = ButtonGroup.singleRight(anchorRight, anchorY, BTN_SIZE, BTN_SIZE, 0);
+            // 辅助显示组（折叠 + 区块显示）在其左侧，隔 GROUP_GAP
+            var utility = ButtonGroup.fromRight(rayCulling.leftEdge() - GROUP_GAP, anchorY, BTN_SIZE, 2, 0, INNER_GAP);
             var mode = ButtonGroup.fromRight(utility.leftEdge() - GROUP_GAP, anchorY, BTN_SIZE, 2, GROUP_GAP, INNER_GAP);
 
-            return new GroupLayout(mode, utility);
+            return new GroupLayout(mode, utility, rayCulling);
         }
 
         

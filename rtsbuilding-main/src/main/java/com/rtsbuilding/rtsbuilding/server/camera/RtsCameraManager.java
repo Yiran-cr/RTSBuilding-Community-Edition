@@ -273,6 +273,17 @@ public final class RtsCameraManager {
     }
 
     /**
+     * 获取当前玩家的 RTS 相机偏航角（服务端权威值，客户端 10Hz + 变化检测上报）。
+     * 供依赖相机朝向的服务端逻辑使用（如方向旋转模式的上下翻转轴选择）。
+     *
+     * @return 偏航角（度）；相机未激活时返回 0
+     */
+    public static float getCameraYaw(ServerPlayer player) {
+        Session session = player == null ? null : SESSIONS.get(player.getUUID());
+        return session != null ? session.yawDeg() : 0.0F;
+    }
+
+    /**
      * 获取玩家 RTS 模式跟随无人机的实体 ID。
      *
      * @return 无人机实体 ID；未激活或无无人机实体时返回 {@code -1}

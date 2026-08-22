@@ -58,6 +58,13 @@ public final class RtsKeybinds {
         add("place_offset", RtsKeyMappings.PLACE_OFFSET_KEY);
         add("line_flat", RtsKeyMappings.LINE_FLAT_KEY);
         add("ultimine", RtsKeyMappings.ULTIMINE_KEY);
+        add("toggle_ray_culling", RtsKeyMappings.TOGGLE_RAY_CULLING_KEY);
+        add("blueprint_place", RtsKeyMappings.BLUEPRINT_PLACE_KEY);
+        add("blueprint_rotate", RtsKeyMappings.BLUEPRINT_ROTATE_KEY);
+        add("blueprint_move_up", RtsKeyMappings.BLUEPRINT_MOVE_UP_KEY);
+        add("blueprint_move_down", RtsKeyMappings.BLUEPRINT_MOVE_DOWN_KEY);
+        add("blueprint_move_left", RtsKeyMappings.BLUEPRINT_MOVE_LEFT_KEY);
+        add("blueprint_move_right", RtsKeyMappings.BLUEPRINT_MOVE_RIGHT_KEY);
     }
 
     public static List<Entry> entries() {

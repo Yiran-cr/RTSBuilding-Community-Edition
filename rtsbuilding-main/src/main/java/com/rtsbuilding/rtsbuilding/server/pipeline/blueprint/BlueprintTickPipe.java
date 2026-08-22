@@ -108,7 +108,7 @@ public final class BlueprintTickPipe implements TickablePipe {
             }
 
             // 碰撞检测 + 生存性检查
-            if (!canStillPlace(player, level, plan.target(), plan.state())) {
+            if (!canStillPlace(player, level, plan.target(), plan.state(), bctx.getAllowOverwrite())) {
                 skippedBlocked++;
                 continue;
             }
@@ -299,12 +299,18 @@ public final class BlueprintTickPipe implements TickablePipe {
         }
     }
 
+    /**
+     * 检查目标位置是否可以放置。
+     *
+     * @param allowOverwrite 覆盖开关：true 时跳过方块实体与替换规则检查（允许替换任何现有方块），
+     *                       false 时保留原有约束（实体占用 / 不在 {@link BlueprintReplaceRules} 白名单内均视为冲突）。
+     */
     private static boolean canStillPlace(ServerPlayer player, ServerLevel level,
-                                           BlockPos target, BlockState state) {
+                                         BlockPos target, BlockState state, boolean allowOverwrite) {
         if (!RtsLinkedStorageResolver.canAccessWorldTarget(player, target)) return false;
-        if (level.getBlockEntity(target) != null) return false;
+        if (!allowOverwrite && level.getBlockEntity(target) != null) return false;
         BlockState current = level.getBlockState(target);
-        if (!BlueprintReplaceRules.canBlueprintReplace(current)) {
+        if (!allowOverwrite && !BlueprintReplaceRules.canBlueprintReplace(current)) {
             return false;
         }
         CollisionContext collision = CollisionContext.of(player);

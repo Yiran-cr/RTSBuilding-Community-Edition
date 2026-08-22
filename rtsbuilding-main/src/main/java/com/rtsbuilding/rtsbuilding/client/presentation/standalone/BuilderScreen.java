@@ -3,8 +3,15 @@ package com.rtsbuilding.rtsbuilding.client.presentation.standalone;
 import com.rtsbuilding.uifw.render.UiPalette;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.client.application.service.ScreenCoordinator;
+import com.rtsbuilding.rtsbuilding.client.culling.RtsRayCylinderCullingState;
 import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
+import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelector;
+import com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster;
+import com.rtsbuilding.rtsbuilding.client.state.FeatureAdjusterState;
+import com.rtsbuilding.rtsbuilding.client.state.RtsClipboard;
+import com.rtsbuilding.rtsbuilding.client.state.RtsUiStateStore;
 import com.rtsbuilding.rtsbuilding.client.util.TinyFileDialogSupport;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.input.layer.CameraInputLayer;
@@ -18,6 +25,7 @@ import com.rtsbuilding.uifw.window.window.FloatingWindowLayer;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintImportPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintLibraryPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintPreviewPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.blueprint.BlueprintSavePanel;
 import com.rtsbuilding.uifw.component.color.ColorPickerPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.downbar.DownSidebarLayoutHelper;
@@ -27,17 +35,28 @@ import com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.*;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.interaction.SelectionHighlight;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.leftbar.LeftSidebarPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.rightbar.RightSidebarPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.ModeSwitcher;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarLayoutHelper;
 import com.rtsbuilding.rtsbuilding.client.presentation.panel.topbar.TopBarPanel;
+import com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.GridState;
 import com.rtsbuilding.rtsbuilding.client.render.ViewCaptureService;
+import com.rtsbuilding.rtsbuilding.client.render.pass.BoxSelectionPass;
+import com.rtsbuilding.rtsbuilding.client.render.util.CornerBracketRenderer;
 import com.rtsbuilding.rtsbuilding.client.rtsbuild.shape.BuildShape;
+import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.render.GuiItemRenderer;
+import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.theme.ThemeManager;
 import com.rtsbuilding.uifw.window.api.UiPanelHost;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -67,11 +86,46 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     /** 蓝图导入面板：顶栏「文件」→「导入」打开（网页式上传区选择文件转换导入）。 */
     private final BlueprintImportPanel blueprintImportPanel;
 
+    /** 蓝图结构预览面板：蓝图库面板单击选中文件时打开（3D 结构缩略图）。 */
+    private final BlueprintPreviewPanel blueprintPreviewPanel;
+
+    // ── 蓝图放置模式（蓝图库面板「使用」按钮进入） ──────────────────
+    /** 当前正在放置的蓝图（服务端将以准星目标为锚点逐格建造）。 */
+    private com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint activeBlueprintPlacement;
+    /** 放置模式是否激活（激活后左键定点、再次左键确认放置，Esc 取消）。 */
+    private boolean blueprintPlacementActive;
+    /** 是否已定点（第一次左键）：定点后锚点固定，不再跟随准星。 */
+    private boolean blueprintPlacementPinned;
+    /** 定点时的锚点基底（不含方向键偏移，供定点后继续用方向键微调）。 */
+    private net.minecraft.core.BlockPos pinnedAnchorBase;
+    /** 蓝图放置偏移量各轴钳位范围（右面板轴输入框支持 ±64 格）。 */
+    private static final int MAX_BLUEPRINT_OFFSET = 64;
+    /** 放置模式覆盖开关：开启后允许替换目标位置已有方块（发送服务端参与放置判定）。 */
+    private boolean blueprintOverwrite;
+    /** 放置 Y 轴旋转步数（0-3，每步 90°；R 键循环，服务端按此旋转方块与坐标）。 */
+    private int placementYSteps;
+    /** 放置模式偏移量：小键盘方向键沿相机朝向在水平面平移描述（0,0,0 表示无偏移）。 */
+    private net.minecraft.core.BlockPos placementOffset = net.minecraft.core.BlockPos.ZERO;
+    /** 当前准星瞄准的锚点方块（渲染时更新，供幽灵预览 pass 与确认使用）。 */
+    private net.minecraft.core.BlockPos placementAnchor;
+
     /** 待处理的拖放文件路径（drop 回调缓存，渲染阶段判定落点后消费）。 */
     private List<Path> pendingDropPaths;
 
     
     private final PanelRegistry panelRegistry = new PanelRegistry();
+
+    /**
+     * 界面状态是否已从持久化文件恢复（防止窗口 resize 重复触发 init() 时把
+     * 用户拖拽后的面板位置再次重置回保存值；每个 BuilderScreen 实例只恢复一次）。
+     */
+    private boolean uiStateApplied;
+
+    /** 界面状态定时落盘计数器（每 {@link #UI_STATE_SAVE_INTERVAL} tick 保存一次）。 */
+    private int uiStateSaveTick;
+
+    /** 界面状态「拖拽结束即落盘」节流（毫秒）：松开鼠标后至少间隔该时长才写盘一次。 */
+    private long lastUiStateSaveMs;
 
     private final ScreenCoordinator screenCoordinator;
 
@@ -93,6 +147,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     
     private final BuildInteractionHandler buildInteractionHandler;
     
+    private final com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.RotateModeMouseHandler rotateModeHandler;
+    
     private final EventDispatcher eventDispatcher = new EventDispatcher();
     
     private final BuilderScreenEventRouter eventRouter;
@@ -111,6 +167,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         this.blueprintSavePanel = new BlueprintSavePanel();
         this.blueprintLibraryPanel = new BlueprintLibraryPanel();
         this.blueprintImportPanel = new BlueprintImportPanel();
+        this.blueprintPreviewPanel = new BlueprintPreviewPanel();
         long t1 = System.nanoTime();
         panelRegistry.register(topBarPanel, RenderLayer.CONTENT_PANELS);
         panelRegistry.register(leftSidebarPanel, RenderLayer.CONTENT_PANELS);
@@ -133,6 +190,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         this.entityInteractionHandler = new EntityInteractionHandler();
         CameraInputLayer cameraInputLayer = kernel.inputPipeline().findLayer(CameraInputLayer.class);
         this.buildInteractionHandler = new BuildInteractionHandler(kernel, cameraInputLayer);
+        this.rotateModeHandler = new com.rtsbuilding.rtsbuilding.client.presentation.panel.handler.RotateModeMouseHandler(kernel);
         long t3 = System.nanoTime();
         this.cursorStyleManager = new CursorStyleManager((mx, my) -> {
             var fwCursor = floatingWindowLayer.resizeCursorAt(mx, my);
@@ -162,7 +220,7 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         eventRouter.registerAll(eventDispatcher, panelRegistry, this, kernel,
                 floatingWindowLayer, topBarPanel, leftSidebarPanel, gearMenuPanel,
                 movementHandler, bindModeHandler, entityInteractionHandler,
-                buildInteractionHandler);
+                buildInteractionHandler, rotateModeHandler);
         long t5 = System.nanoTime();
 
         com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
@@ -204,6 +262,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         addFloatingWindowIfAbsent(this.blueprintLibraryPanel);
         this.blueprintImportPanel.init(this);
         addFloatingWindowIfAbsent(this.blueprintImportPanel);
+        this.blueprintPreviewPanel.init(this);
+        addFloatingWindowIfAbsent(this.blueprintPreviewPanel);
         long t2 = System.nanoTime();
         panelRegistry.initAll(this);
         long t3 = System.nanoTime();
@@ -219,12 +279,25 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         }
         long t4 = System.nanoTime();
 
+        ensureUiStateApplied();
+
         long perfCostMs = (t4 - t0) / 1_000_000L;
         if (perfCostMs >= 30L) {
             com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
                     "RTS-PERF: BuilderScreen.init background/color={} ms, gear={} ms, panelRegistry.initAll={} ms, eshp/interaction={} ms, total={} ms",
                     (t1 - t0) / 1_000_000L, (t2 - t1) / 1_000_000L, (t3 - t2) / 1_000_000L,
                     (t4 - t3) / 1_000_000L, perfCostMs);
+        }
+    }
+
+    /**
+     * 确保界面状态已从持久化文件恢复。
+     * 除 {@link #init()} 调用外，还在首次 {@link #render} 兜底调用一次——
+     * 即使 init() 中某步异常导致恢复未执行，渲染首帧也会恢复，保证进入 RTS 必然生效。
+     */
+    private void ensureUiStateApplied() {
+        if (!this.uiStateApplied) {
+            applySavedUiState();
         }
     }
 
@@ -242,6 +315,17 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     public void onClose() {
         com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.debug(
                 "RTS: BuilderScreen.onClose() called");
+        // 确保界面状态已恢复后再收集：避免「未完成恢复的实例」把默认尺寸写回持久化文件
+        ensureUiStateApplied();
+        // 退出 RTS 前收集界面状态并落盘，供下次进入恢复
+        collectUiState();
+        RtsUiStateStore.save();
+        com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
+                "RTS: UI 状态已保存 sidebar(left={}, right={}, down={}) panels={}",
+                RtsUiStateStore.getSidebar().leftWidth,
+                RtsUiStateStore.getSidebar().rightWidth,
+                RtsUiStateStore.getSidebar().downHeight,
+                RtsUiStateStore.componentCount());
         screenCoordinator.closeContainerScreen();
         // 退出 RTS 模式：清空建造选材（选材仅在拿起物品期间有效，退出即失效）
         downSidebarPanel.getRightLayer().cancelSelection();
@@ -250,6 +334,9 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         this.topBarPanel.onRtsExited();
         super.onClose();
         this.cursorStyleManager.restoreDefault();
+        // 释放蓝图预览场景的 GPU 资源（FBO/VBO）并恢复可能隐藏的预览拖拽光标，避免跨会话积累
+        this.blueprintPreviewPanel.releaseGpuResources();
+        this.blueprintPreviewPanel.releaseDragCursor();
         CameraModule cam = kernel.module(CameraModule.class);
         if (cam != null) {
             cam.disableCamera();
@@ -266,6 +353,228 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     private void addFloatingWindowIfAbsent(UiPanel panel) {
         if (!this.floatingWindowLayer.frontToBackWindows().contains(panel)) {
             this.floatingWindowLayer.frontToBackWindows().add(panel);
+        }
+    }
+
+    // ── 界面状态持久化 ──────────────────────────────────────────────
+
+    /**
+     * 参与持久化的浮动面板登记（id 为持久化文件中的唯一标识）。
+     *
+     * @param persistOpen 是否持久化「开启状态」：对话框/预览类临时面板不恢复开启
+     *                    （如保存对话框、导入面板、结构预览——依赖框选区域/文件数据），
+     *                    常驻工具类面板恢复开启（如设置面板、蓝图库、调色盘）。
+     *                    位置与尺寸对所有面板都持久化。
+     */
+    private record PersistablePanel(String id, UiPanel panel, boolean persistOpen) {
+    }
+
+    private List<PersistablePanel> persistablePanels() {
+        return List.of(
+                new PersistablePanel("color_picker", this.colorPickerPanel, true),
+                new PersistablePanel("gear", this.gearMenuPanel, true),
+                new PersistablePanel("blueprint_save", this.blueprintSavePanel, false),
+                new PersistablePanel("blueprint_library", this.blueprintLibraryPanel, true),
+                new PersistablePanel("blueprint_import", this.blueprintImportPanel, false),
+                new PersistablePanel("blueprint_preview", this.blueprintPreviewPanel, false));
+    }
+
+    /**
+     * 从 {@link RtsUiStateStore} 恢复界面状态：面板位置/尺寸/开启、侧边栏宽高、各类开关。
+     * 每次 BuilderScreen 实例只执行一次（见 {@link #uiStateApplied}）。
+     * <p>各恢复段用 try-catch 隔离：单段异常只影响该段，不中断后续恢复，
+     * 确保侧边栏尺寸等关键状态尽可能恢复（避免默认尺寸被误写回文件）。</p>
+     */
+    private void applySavedUiState() {
+        if (this.uiStateApplied) {
+            return;
+        }
+        this.uiStateApplied = true;
+
+        // 面板：先按持久化开关状态决定是否开启（setOpen 会初始化默认 bounds），再覆盖为保存的位置尺寸
+        try {
+            for (PersistablePanel pp : persistablePanels()) {
+                RtsUiStateStore.PanelState state = RtsUiStateStore.getPanel(pp.id());
+                if (state == null) {
+                    continue;
+                }
+                if (pp.persistOpen() && state.open) {
+                    pp.panel().setOpen(true);
+                }
+                pp.panel().setBounds(state.x, state.y, state.w, state.h);
+            }
+        } catch (Exception ex) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.error("RTS: 恢复浮动面板状态失败", ex);
+        }
+
+        // 侧边栏：保存值大于 0 才应用（0 表示使用默认值）
+        try {
+            RtsUiStateStore.SidebarState sidebar = RtsUiStateStore.getSidebar();
+            if (sidebar != null) {
+                if (sidebar.leftWidth > 0) {
+                    this.leftSidebarPanel.setCurrentWidth(sidebar.leftWidth);
+                }
+                if (sidebar.rightWidth > 0) {
+                    this.rightSidebarPanel.setCurrentWidth(sidebar.rightWidth);
+                }
+                if (sidebar.downHeight > 0) {
+                    this.downSidebarPanel.setCurrentHeight(sidebar.downHeight);
+                }
+                if (sidebar.rightUpperHeight > 0) {
+                    this.rightSidebarPanel.setUpperOverlayHeight(sidebar.rightUpperHeight);
+                }
+                if (sidebar.downLeftWidth > 0) {
+                    this.downSidebarPanel.setLeftOverlayWidth(sidebar.downLeftWidth);
+                }
+            }
+        } catch (Exception ex) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.error("RTS: 恢复侧边栏尺寸失败", ex);
+        }
+
+        // 开关与数值设置（单段整体隔离，任一项异常不阻断其余）
+        try {
+            this.topBarPanel.setDebugOverlayEnabled(RtsUiStateStore.getToggle("debug_overlay", false));
+            this.topBarPanel.setChunkBorderVisible(RtsUiStateStore.getToggle("debug_chunk_border", true));
+            this.topBarPanel.setCollisionBoxVisible(RtsUiStateStore.getToggle("debug_collision_box", true));
+            RtsRayCylinderCullingState.setEnabled(RtsUiStateStore.getToggle("ray_culling", false));
+            ThemeManager.getInstance().setLightMode(RtsUiStateStore.getToggle("theme_light", false));
+
+            // 顶栏模式（INTERACTIVE/BUILD/BLUEPRINT，按枚举 ordinal 存取）
+            int modeIdx = (int) RtsUiStateStore.getNumber("mode_index", 0);
+            ModeSwitcher.Mode[] modes = ModeSwitcher.Mode.values();
+            if (modeIdx >= 0 && modeIdx < modes.length) {
+                this.topBarPanel.setMode(modes[modeIdx]);
+            }
+
+            // 渲染动画/深度开关与透明度
+            BoxSelectionPass.flowAnimationEnabled = RtsUiStateStore.getToggle("render_flow_anim", true);
+            CornerBracketRenderer.SmoothTarget.enabled = RtsUiStateStore.getToggle("render_smooth_anim", true);
+            AnimFloat.setEnabled(RtsUiStateStore.getToggle("render_ui_smooth", true));
+            BoxSelectionPass.depthTestEnabled = RtsUiStateStore.getToggle("render_depth_test", true);
+            CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA = (float) RtsUiStateStore.getNumber("render_alpha", 0.1D);
+
+            // 射线剔除距离/半径与功能调节器
+            RtsRayCylinderCullingState.setDistance(RtsUiStateStore.getNumber("culling_distance", 5.0D));
+            RtsRayCylinderCullingState.setRadius(RtsUiStateStore.getNumber("culling_radius", 3.0D));
+            FeatureAdjusterState.setFunnelRadius(RtsUiStateStore.getNumber("funnel_radius", 2.0D));
+            FeatureAdjusterState.setUltimineLimit((int) RtsUiStateStore.getNumber("ultimine_limit", 256));
+
+            // 存储过滤/排序开关（物品/流体/双向/仅提取 + 排序类型/方向）
+            GridState grid = this.downSidebarPanel.getGridState();
+            if (grid != null) {
+                grid.showItems = RtsUiStateStore.getToggle("grid_show_items", true);
+                grid.showFluids = RtsUiStateStore.getToggle("grid_show_fluids", true);
+                grid.showBidirectional = RtsUiStateStore.getToggle("grid_show_bidirectional", true);
+                grid.showExtractOnly = RtsUiStateStore.getToggle("grid_show_extract_only", true);
+                int sortIdx = (int) RtsUiStateStore.getNumber("grid_sort_type", 0);
+                com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.SortType[] sortTypes =
+                        com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid.SortType.values();
+                if (sortIdx >= 0 && sortIdx < sortTypes.length) {
+                    grid.currentSortType = sortTypes[sortIdx];
+                }
+                grid.reverseSortOrder = RtsUiStateStore.getToggle("grid_reverse_sort", false);
+                grid.recentSortAscending = RtsUiStateStore.getToggle("grid_recent_sort_asc", true);
+                grid.slotEntriesDirty = true;
+            }
+
+            // 左栏按钮组选中态与形状
+            this.leftSidebarPanel.applyPersistedState(
+                    RtsUiStateStore.getToggle("leftbar_select_click", true),
+                    RtsUiStateStore.getToggle("leftbar_build_destroy", true),
+                    (int) RtsUiStateStore.getNumber("build_shape", 0),
+                    (int) RtsUiStateStore.getNumber("break_shape", 0),
+                    RtsUiStateStore.getToggle("leftbar_action_bind", false),
+                    RtsUiStateStore.getToggle("leftbar_action_rotate", false),
+                    RtsUiStateStore.getToggle("leftbar_action_pickup", false));
+
+            CameraModule cam = this.kernel.module(CameraModule.class);
+            if (cam != null) {
+                cam.getState().setInvertPanX(RtsUiStateStore.getToggle("invert_pan_x", false));
+                cam.getState().setInvertPanY(RtsUiStateStore.getToggle("invert_pan_y", false));
+                cam.setInputSensitivity((float) RtsUiStateStore.getNumber("camera_sensitivity", 1.0D));
+            }
+        } catch (Exception ex) {
+            com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.error("RTS: 恢复 UI 开关/数值失败", ex);
+        }
+
+        com.rtsbuilding.rtsbuilding.RtsbuildingMod.LOGGER.info(
+                "RTS: UI 状态已恢复 sidebar(left={}, right={}, down={})，右栏实际宽度={}，下面板实际高度={}",
+                RtsUiStateStore.getSidebar().leftWidth,
+                RtsUiStateStore.getSidebar().rightWidth,
+                RtsUiStateStore.getSidebar().downHeight,
+                this.rightSidebarPanel.getCurrentWidth(),
+                this.downSidebarPanel.getCurrentHeight());
+    }
+
+    /**
+     * 把当前界面状态写入 {@link RtsUiStateStore}（实际落盘由调用方 {@link RtsUiStateStore#save()} 完成）。
+     * 仅收集已初始化过 bounds 的面板，避免从未打开过的面板以默认位置污染持久化数据。
+     */
+    private void collectUiState() {
+        for (PersistablePanel pp : persistablePanels()) {
+            UiPanel panel = pp.panel();
+            if (!panel.hasInitializedBounds()) {
+                continue;
+            }
+            RtsUiStateStore.setPanel(pp.id(), new RtsUiStateStore.PanelState(
+                    panel.getWindowX(), panel.getWindowY(),
+                    panel.getWindowWidth(), panel.getWindowHeight(),
+                    pp.persistOpen() && panel.isOpen()));
+        }
+
+        RtsUiStateStore.setSidebar(new RtsUiStateStore.SidebarState(
+                this.leftSidebarPanel.getCurrentWidth(),
+                this.rightSidebarPanel.getCurrentWidth(),
+                this.downSidebarPanel.getCurrentHeight(),
+                this.rightSidebarPanel.getUpperOverlayHeight(),
+                this.downSidebarPanel.getLeftOverlayWidth()));
+
+        RtsUiStateStore.setToggle("debug_overlay", this.topBarPanel.isDebugOverlayEnabled());
+        RtsUiStateStore.setToggle("debug_chunk_border", this.topBarPanel.isChunkBorderVisible());
+        RtsUiStateStore.setToggle("debug_collision_box", this.topBarPanel.isCollisionBoxVisible());
+        RtsUiStateStore.setToggle("ray_culling", RtsRayCylinderCullingState.isEnabled());
+        RtsUiStateStore.setToggle("theme_light", ThemeManager.getInstance().isLightMode());
+        RtsUiStateStore.setNumber("mode_index", this.topBarPanel.getCurrentMode().ordinal());
+
+        // 渲染动画/深度开关与透明度
+        RtsUiStateStore.setToggle("render_flow_anim", BoxSelectionPass.flowAnimationEnabled);
+        RtsUiStateStore.setToggle("render_smooth_anim", CornerBracketRenderer.SmoothTarget.enabled);
+        RtsUiStateStore.setToggle("render_ui_smooth", AnimFloat.isEnabled());
+        RtsUiStateStore.setToggle("render_depth_test", BoxSelectionPass.depthTestEnabled);
+        RtsUiStateStore.setNumber("render_alpha", CornerBracketRenderer.DEFAULT_NO_DEPTH_ALPHA);
+
+        // 射线剔除距离/半径与功能调节器
+        RtsUiStateStore.setNumber("culling_distance", RtsRayCylinderCullingState.getDistance());
+        RtsUiStateStore.setNumber("culling_radius", RtsRayCylinderCullingState.getRadius());
+        RtsUiStateStore.setNumber("funnel_radius", FeatureAdjusterState.getFunnelRadius());
+        RtsUiStateStore.setNumber("ultimine_limit", FeatureAdjusterState.getUltimineLimit());
+
+        // 存储过滤/排序开关
+        GridState grid = this.downSidebarPanel.getGridState();
+        if (grid != null) {
+            RtsUiStateStore.setToggle("grid_show_items", grid.showItems);
+            RtsUiStateStore.setToggle("grid_show_fluids", grid.showFluids);
+            RtsUiStateStore.setToggle("grid_show_bidirectional", grid.showBidirectional);
+            RtsUiStateStore.setToggle("grid_show_extract_only", grid.showExtractOnly);
+            RtsUiStateStore.setNumber("grid_sort_type", grid.currentSortType.ordinal());
+            RtsUiStateStore.setToggle("grid_reverse_sort", grid.reverseSortOrder);
+            RtsUiStateStore.setToggle("grid_recent_sort_asc", grid.recentSortAscending);
+        }
+
+        // 左栏按钮组选中态与形状
+        RtsUiStateStore.setToggle("leftbar_select_click", this.leftSidebarPanel.isClickButtonSelected());
+        RtsUiStateStore.setToggle("leftbar_build_destroy", this.leftSidebarPanel.isConstructionSelected());
+        RtsUiStateStore.setNumber("build_shape", this.leftSidebarPanel.getBuildShapeIndex());
+        RtsUiStateStore.setNumber("break_shape", this.leftSidebarPanel.getBreakShapeIndex());
+        RtsUiStateStore.setToggle("leftbar_action_bind", this.leftSidebarPanel.isBindModeActive());
+        RtsUiStateStore.setToggle("leftbar_action_rotate", this.leftSidebarPanel.isDirectionRotateActive());
+        RtsUiStateStore.setToggle("leftbar_action_pickup", this.leftSidebarPanel.isItemPickupActive());
+
+        CameraModule cam = this.kernel.module(CameraModule.class);
+        if (cam != null) {
+            RtsUiStateStore.setToggle("invert_pan_x", cam.getState().isInvertPanX());
+            RtsUiStateStore.setToggle("invert_pan_y", cam.getState().isInvertPanY());
+            RtsUiStateStore.setNumber("camera_sensitivity", cam.getInputSensitivity());
         }
     }
 
@@ -299,6 +608,134 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     /** 蓝图导入面板（顶栏「文件」→「导入」）。 */
     public BlueprintImportPanel getBlueprintImportPanel() {
         return this.blueprintImportPanel;
+    }
+
+    /** 蓝图结构预览面板（蓝图库面板单击选中文件时打开）。 */
+    public BlueprintPreviewPanel getBlueprintPreviewPanel() {
+        return this.blueprintPreviewPanel;
+    }
+
+    // ── 蓝图放置模式 ────────────────────────────────────────────────
+
+    /** 是否处于蓝图放置模式（等待玩家在世界中点击确认锚点）。 */
+    public boolean isBlueprintPlacementActive() {
+        return this.blueprintPlacementActive;
+    }
+
+    /** 当前正在放置的蓝图（放置模式未激活时返回 null）。 */
+    public com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint getActiveBlueprintPlacement() {
+        return this.activeBlueprintPlacement;
+    }
+
+    /** 当前准星瞄准的锚点方块（放置模式未激活或未命中时为 null）。 */
+    public net.minecraft.core.BlockPos getPlacementAnchor() {
+        return this.placementAnchor;
+    }
+
+    /** 当前 Y 轴旋转步数（0-3，供幽灵预览 pass 与服务端保持一致）。 */
+    public int getPlacementYSteps() {
+        return this.placementYSteps;
+    }
+
+    /** 进入蓝图放置模式：加载蓝图，等待玩家左键定点后再次左键确认放置。 */
+    public void startBlueprintPlacement(com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint blueprint) {
+        if (blueprint == null) return;
+        this.activeBlueprintPlacement = blueprint;
+        this.blueprintPlacementActive = true;
+        this.blueprintPlacementPinned = false;
+        this.pinnedAnchorBase = null;
+        this.placementYSteps = 0;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
+        this.placementAnchor = null;
+        this.blueprintOverwrite = false;
+    }
+
+    /** 取消蓝图放置模式（Esc / 再次点击「使用」）。 */
+    public void cancelBlueprintPlacement() {
+        this.blueprintPlacementActive = false;
+        this.blueprintPlacementPinned = false;
+        this.pinnedAnchorBase = null;
+        this.activeBlueprintPlacement = null;
+        this.placementAnchor = null;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
+    }
+
+    /** 是否已定点（第一次左键后为 true，锚点锁定不再跟随准星）。 */
+    public boolean isBlueprintPlacementPinned() {
+        return this.blueprintPlacementPinned;
+    }
+
+    /** 定点（第一次左键）：把当前瞄准的锚点锁定为放置位置；准星未命中时返回 false。 */
+    public boolean pinBlueprintPlacement() {
+        if (!blueprintPlacementActive || this.placementAnchor == null) return false;
+        // 把当前瞄准锚点作为定点基底，方向键偏移清零后继续可调
+        this.pinnedAnchorBase = this.placementAnchor;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
+        this.blueprintPlacementPinned = true;
+        var player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.displayClientMessage(
+                    net.minecraft.network.chat.Component.translatable("message.rtsbuilding.blueprint.pin_hint"), true);
+        }
+        return true;
+    }
+
+    /** 解除定点（Esc 回退一级）：恢复跟随准星的自由瞄准状态。 */
+    public void unpinBlueprintPlacement() {
+        this.blueprintPlacementPinned = false;
+        this.pinnedAnchorBase = null;
+        this.placementOffset = net.minecraft.core.BlockPos.ZERO;
+    }
+
+    /** 旋转蓝图放置（R 键）：Y 轴每按一次顺时针旋转 90°（0~3 循环）。 */
+    public void rotateBlueprintPlacement() {
+        if (!blueprintPlacementActive) return;
+        this.placementYSteps = (this.placementYSteps + 1) & 3;
+    }
+
+    /** 偏移蓝图放置（小键盘方向键）：按相机朝向在水平面将锚点平移一格。 */
+    public void offsetBlueprintPlacement(int dx, int dz) {
+        if (!blueprintPlacementActive) return;
+        this.placementOffset = this.placementOffset.offset(dx, 0, dz);
+    }
+
+    /** 调整蓝图放置高度（滚轮）：锚点 Y 偏移 ±1，定点与非定点状态均生效。 */
+    public void adjustBlueprintPlacementHeight(int dir) {
+        if (!blueprintPlacementActive) return;
+        this.placementOffset = this.placementOffset.offset(0, dir, 0);
+    }
+
+    /** 当前蓝图放置偏移量（右面板调节器滑块写入的绝对值，含滚轮/方向键累计）。 */
+    public net.minecraft.core.BlockPos getBlueprintPlacementOffset() {
+        return this.placementOffset;
+    }
+
+    /** 直接设置蓝图放置偏移量（X/Y/Z 各轴绝对值，收拢到 ±MAX_BLUEPRINT_OFFSET，供右面板调节器使用）。 */
+    public void setBlueprintPlacementOffset(int x, int y, int z) {
+        if (!blueprintPlacementActive) return;
+        int c = MAX_BLUEPRINT_OFFSET;
+        this.placementOffset = new net.minecraft.core.BlockPos(
+                net.minecraft.util.Mth.clamp(x, -c, c),
+                net.minecraft.util.Mth.clamp(y, -c, c),
+                net.minecraft.util.Mth.clamp(z, -c, c));
+    }
+
+    /** 蓝图放置是否允许覆盖目标位置已有方块（右面板调节器开关）。 */
+    public boolean isBlueprintOverwriteEnabled() {
+        return this.blueprintOverwrite;
+    }
+
+    /** 设置蓝图放置覆盖开关。 */
+    public void setBlueprintOverwriteEnabled(boolean enabled) {
+        this.blueprintOverwrite = enabled;
+    }
+
+    /** 确认放置：把蓝图 + 锚点发给服务端启动 BLUEPRINT_BUILD 工作流，并退出放置模式。 */
+    public void confirmBlueprintPlacement(net.minecraft.core.BlockPos anchor) {
+        if (anchor == null || !this.blueprintPlacementActive || this.activeBlueprintPlacement == null) return;
+        com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway
+                .sendPlaceBlueprint(this.activeBlueprintPlacement, anchor, this.placementYSteps, this.blueprintOverwrite);
+        cancelBlueprintPlacement();
     }
 
     /**
@@ -465,6 +902,11 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         return this.rightSidebarPanel.getCurrentWidth();
     }
 
+    /** 鼠标是否悬浮于「方块剔除」调节框内（供圆柱预览 pass 判定）。 */
+    public boolean isMouseOverCullingAdjuster() {
+        return this.rightSidebarPanel.isMouseOverCullingAdjuster();
+    }
+
     
     public int getDownSidebarHeight() {
         return this.downSidebarPanel.getCurrentHeight();
@@ -530,6 +972,22 @@ public class BuilderScreen extends Screen implements UiPanelHost {
      */
     public boolean isAxisGizmoDragging() {
         return downSidebarPanel != null && downSidebarPanel.isAxisGizmoDragging();
+    }
+
+    /**
+     * 查询蓝图预览面板是否正在拖拽旋转。
+     */
+    public boolean isBlueprintPreviewDragging() {
+        return blueprintPreviewPanel != null && blueprintPreviewPanel.isPreviewDragging();
+    }
+
+    /**
+     * 查询是否有任何「光标已隐藏/锁定的拖拽旋转」进行中（XYZ 轴调节器或蓝图预览）。
+     * <p>此期间光标 DISABLED 锁定，鼠标坐标与视觉不一致，世界内线框 pass 渲染与
+     * 悬浮判定应全部跳过，避免 pass/悬浮高亮渲染在错误位置造成视觉错乱。</p>
+     */
+    public boolean isAnyDragActive() {
+        return isAxisGizmoDragging() || isBlueprintPreviewDragging();
     }
 
     /**
@@ -624,6 +1082,127 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     
     public boolean isBindModeActive() {
         return leftSidebarPanel != null && leftSidebarPanel.isBindModeActive();
+    }
+
+    /** 左栏「方向旋转」按钮是否选中（建造模式下旋转功能可用）。 */
+    public boolean isDirectionRotateActive() {
+        return leftSidebarPanel != null && leftSidebarPanel.isDirectionRotateActive();
+    }
+
+    // ── 框选剪贴板（建造模式 + 框选模式：Ctrl+C 复制 / Ctrl+X 剪切 / Ctrl+V 粘贴） ──
+
+    /**
+     * Ctrl+C：把框选完成区域内的方块复制到 {@link RtsClipboard}。
+     * 仅建造模式 + 框选模式 + 框选完成 + 鼠标不在 UI 面板上时生效。
+     *
+     * @return {@code true} 表示已处理（消费按键）
+     */
+    public boolean copySelectionToClipboard() {
+        if (!isBuildMode() || isClickButtonSelected()) return false;
+        BlockPos[] box = completedSelectionBox();
+        if (box == null) return false;
+        if (isMouseOverUiPanelApi(mouseGuiX(), mouseGuiY())) return false;
+        Minecraft mc = Minecraft.getInstance();
+        Level level = mc.level;
+        if (level == null) return false;
+        com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint bp;
+        try {
+            // BoxSelector.max 为排他上界，capture 传入含 max 的闭区间角点
+            bp = com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters
+                    .capture(level, box[0], box[1].offset(-1, -1, -1), "clipboard", "clipboard", false);
+        } catch (IllegalArgumentException ex) {
+            playerMessage("message.rtsbuilding.clipboard.too_large");
+            return true;
+        }
+        if (bp.blocks().isEmpty()) {
+            playerMessage("message.rtsbuilding.clipboard.empty");
+            return true;
+        }
+        RtsClipboard.set(bp);
+        playerMessage("message.rtsbuilding.clipboard.copied", bp.blockCount());
+        return true;
+    }
+
+    /**
+     * Ctrl+X：复制框选区域到 {@link RtsClipboard} 并破坏框内方块（剪切）。
+     * 破坏请求复用框选批量破坏（AREA_DESTROY 逐 tick 节流）。
+     *
+     * @return {@code true} 表示已处理（消费按键）
+     */
+    public boolean cutSelectionToClipboard() {
+        if (!isBuildMode() || isClickButtonSelected()) return false;
+        BlockPos[] box = completedSelectionBox();
+        if (box == null) return false;
+        if (!copySelectionToClipboard()) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return true;
+        com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway
+                .sendAreaBoxDestroy(box[0], box[1], mc.player.getInventory().selected, "", false);
+        return true;
+    }
+
+    /**
+     * Ctrl+V：把 {@link RtsClipboard} 内容粘贴到目标位置。
+     * 锚点优先取当前框选区域最小角（未框选时取鼠标指向方块），以允许覆盖方式
+     * 经 {@code PLACE_BLUEPRINT} 工作流逐格建造（从存储提取材料）。
+     *
+     * @return {@code true} 表示已处理（消费按键）
+     */
+    public boolean pasteClipboard() {
+        if (!isBuildMode() || isClickButtonSelected()) return false;
+        com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint bp = RtsClipboard.get();
+        if (bp == null || bp.blocks().isEmpty()) return false;
+        if (isMouseOverUiPanelApi(mouseGuiX(), mouseGuiY())) return false;
+        if (bp.blockCount() > Config.maxBlueprintBlocks()) {
+            playerMessage("message.rtsbuilding.clipboard.too_many_blocks", Config.maxBlueprintBlocks());
+            return true;
+        }
+        BlockPos anchor = null;
+        BlockPos[] box = completedSelectionBox();
+        if (box != null) {
+            anchor = box[0];
+        } else {
+            Minecraft mc = Minecraft.getInstance();
+            var ray = CursorRaycaster.computeCursorRay(mc, this);
+            if (ray != null) {
+                BlockHitResult hit = ray.raycastBlock(mc);
+                if (hit != null && hit.getType() == HitResult.Type.BLOCK) anchor = hit.getBlockPos();
+            }
+        }
+        if (anchor == null) return false;
+        com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway
+                .sendPlaceBlueprint(bp, anchor, 0, true);
+        return true;
+    }
+
+    /** 当前框选是否完成（框选模式）；返回 {min, max}（max 排他），否则 {@code null}。 */
+    @Nullable
+    private BlockPos[] completedSelectionBox() {
+        if (isClickButtonSelected()) return null;
+        BoxSelector sel = kernel.renderPipeline().boxSelector;
+        if (sel.getPhase() != BoxSelector.Phase.COMPLETE) return null;
+        BlockPos min = sel.getMinCorner();
+        BlockPos max = sel.getMaxCorner();
+        if (min == null || max == null) return null;
+        return new BlockPos[] { min, max };
+    }
+
+    /** 当前鼠标在 RTS 虚拟坐标系的 X（供 UI 悬浮判定）。 */
+    private double mouseGuiX() {
+        return Minecraft.getInstance().mouseHandler.xpos() / getRtsGuiScale();
+    }
+
+    /** 当前鼠标在 RTS 虚拟坐标系的 Y（供 UI 悬浮判定）。 */
+    private double mouseGuiY() {
+        return Minecraft.getInstance().mouseHandler.ypos() / getRtsGuiScale();
+    }
+
+    /** 向玩家发送动作栏提示（lang key 带参数）。 */
+    private void playerMessage(String key, Object... args) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.displayClientMessage(Component.translatable(key, args), true);
+        }
     }
 
     
@@ -739,6 +1318,9 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     
     
 
+    /** UI 状态定时落盘间隔（tick 数，200 tick ≈ 10 秒）。 */
+    private static final int UI_STATE_SAVE_INTERVAL = 200;
+
     @Override
     public void tick() {
         super.tick();
@@ -747,6 +1329,13 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         screenCoordinator.tickContainerScreen();
         // 物品拾取（漏斗）自动触发：点击模式跟随指针持续拾取，框选模式确认即拾取
         buildInteractionHandler.handleTick(this, leftSidebarPanel);
+        // 界面状态定时落盘兜底：面板拖拽/拉伸、侧边栏尺寸调整后，即使异常退出（不经过 onClose）
+        // 也能在 10 秒内持久化，避免丢失。
+        if (++uiStateSaveTick >= UI_STATE_SAVE_INTERVAL) {
+            uiStateSaveTick = 0;
+            collectUiState();
+            RtsUiStateStore.save();
+        }
     }
 
     
@@ -755,6 +1344,8 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // 恢复界面状态的兜底：init() 中若某步异常未恢复，渲染首帧也保证恢复
+        ensureUiStateApplied();
         // 仅在 RTS 虚拟坐标层处理缓存的拖放文件（此时坐标系与面板渲染/命中一致，
         // 避免在外层 gui scaled 层换算导致落点命中失败）
         if (isVirtualCoordinateLayer()) {
@@ -828,12 +1419,38 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
         
         if (leftSidebarPanel != null && !leftSidebarPanel.isClickButtonSelected()
+                && !isAnyDragActive()
                 && mouseX >= getLeftSidebarWidth() && mouseX < this.width - rightW
                 && mouseY >= ScreenBackgroundPanel.BACKGROUND_TOP_Y
                 && mouseY < this.height - downH
                 && !isMouseOverUI(mouseX, mouseY)) {
             var bs = kernel.renderPipeline().boxSelector;
             bs.updateHoverFromScreen(Minecraft.getInstance(), this, RtsKeyMappings.isPlaceOffsetDown());
+        }
+
+        // 蓝图放置模式：实时更新准星瞄准的锚点（供幽灵预览 pass 渲染与左键定点/确认使用）
+        if (isBlueprintPlacementActive() && !isAnyDragActive()) {
+            if (isBlueprintPlacementPinned()) {
+                // 已定点：锚点固定 = 定点基底 + 方向键偏移，不再跟随准星（可供左键确认前微调视角）
+                this.placementAnchor = this.pinnedAnchorBase == null
+                        ? null
+                        : this.pinnedAnchorBase.offset(this.placementOffset);
+            } else {
+                var ray = com.rtsbuilding.rtsbuilding.client.render.util.CursorRaycaster
+                        .computeCursorRay(Minecraft.getInstance(), this);
+                this.placementAnchor = null;
+                if (ray != null) {
+                    var hit = ray.raycastBlock(Minecraft.getInstance());
+                    if (hit != null) {
+                        // 按住 Ctrl：往命中面外侧偏移一格（与建造放置偏移 boxSelector 一致）；
+                        // 再叠加小键盘方向键产生的 placementOffset，保证偏移不随帧重置
+                        net.minecraft.core.BlockPos base = RtsKeyMappings.isPlaceOffsetDown()
+                                ? hit.getBlockPos().relative(hit.getDirection())
+                                : hit.getBlockPos();
+                        this.placementAnchor = base.offset(this.placementOffset);
+                    }
+                }
+            }
         }
 
         cursorStyleManager.update(mouseX, mouseY);
@@ -849,9 +1466,38 @@ public class BuilderScreen extends Screen implements UiPanelHost {
         }
 
         renderLineBrushHint(guiGraphics);
+        renderOverlayMessages(guiGraphics, mouseX, mouseY, partialTick);
 
         if (Minecraft.getInstance().gui.getDebugOverlay().showDebugScreen()) {
             Minecraft.getInstance().gui.getDebugOverlay().render(guiGraphics);
+        }
+    }
+
+    /**
+     * 在 RTS 下面板之上渲染悬浮文字（actionbar 消息）。
+     * <p>RTS 是覆盖式 Screen，原版 HUD（含 actionbar）在 Screen 打开时不渲染，
+     * 这里补渲染，且位置动态跟随下面板顶部（支持任意窗口尺寸 / RTS GUI 缩放 / 下面板拖拽高度）。</p>
+     */
+    private void renderOverlayMessages(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.gui == null || mc.level == null) return;
+        // 下面板顶部（虚拟坐标，随 RTS 缩放 / 下面板拖拽高度动态变化）
+        int downBarTopY = this.height - getDownSidebarHeight();
+        int downBarW = this.width - getRightSidebarWidth();
+
+        // ── actionbar 悬浮消息（displayClientMessage(comp, true)），以下面板 x 轴中心为基准 ──
+        if (mc.gui instanceof com.rtsbuilding.rtsbuilding.client.hud.IRtsOverlayAccess ov) {
+            Component overlay = ov.rtsbuilding$getOverlayMessage();
+            if (overlay != null && ov.rtsbuilding$getOverlayMessageTime() > 0) {
+                String text = overlay.getString();
+                if (!text.isEmpty()) {
+                    int textW = mc.font.width(text);
+                    int x = Math.max(8, downBarW / 2 - textW / 2);
+                    int y = downBarTopY - 34;
+                    g.fill(x - 8, y, x + textW + 8, y + 14, UiPalette.get("overlay_bg"));
+                    g.drawString(mc.font, text, x, y + 2, UiPalette.get("tooltip_text"));
+                }
+            }
         }
     }
 
@@ -895,8 +1541,28 @@ public class BuilderScreen extends Screen implements UiPanelHost {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         Boolean scaled = scaleMouseEvent(mouseX, mouseY, (x, y) -> mouseReleased(x, y, button));
-        if (scaled != null) return scaled;
-        return eventDispatcher.dispatch(new MouseReleaseEvent(mouseX, mouseY, button));
+        if (scaled != null) {
+            return scaled;
+        }
+        boolean handled = eventDispatcher.dispatch(new MouseReleaseEvent(mouseX, mouseY, button));
+        // 面板拖拽/拉伸、侧边栏宽度/高度调整结束（松开鼠标）时立即落盘，
+        // 不依赖 onClose——关闭 RTS 前即使未触发正常退出流程也已持久化。
+        persistUiStateIfIdle();
+        return handled;
+    }
+
+    /**
+     * 节流地收集并落盘界面状态（至少间隔 {@link #lastUiStateSaveMs} 500ms）。
+     * 覆盖侧边栏拖拽、浮动面板拖拽/拉伸、分隔线调整等全部「松开鼠标」的结束时机。
+     */
+    private void persistUiStateIfIdle() {
+        long now = System.currentTimeMillis();
+        if (now - this.lastUiStateSaveMs < 500L) {
+            return;
+        }
+        this.lastUiStateSaveMs = now;
+        collectUiState();
+        RtsUiStateStore.save();
     }
 
     @Override
@@ -905,7 +1571,10 @@ public class BuilderScreen extends Screen implements UiPanelHost {
                 (x, y, btn, dx, dy) -> mouseDragged(x, y, btn, dx, dy))) {
             return true;
         }
-        return eventDispatcher.dispatch(new MouseDragEvent(mouseX, mouseY, button, dragX, dragY));
+        boolean handled = eventDispatcher.dispatch(new MouseDragEvent(mouseX, mouseY, button, dragX, dragY));
+        // 拖拽/拉伸过程中节流落盘：即使拖拽未结束就关闭 RTS，也能持久化最新尺寸
+        persistUiStateIfIdle();
+        return handled;
     }
 
     @Override

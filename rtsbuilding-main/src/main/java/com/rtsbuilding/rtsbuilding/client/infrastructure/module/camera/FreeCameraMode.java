@@ -1,5 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera;
 
+import com.rtsbuilding.rtsbuilding.client.culling.RtsRayCylinderCullingState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ClipContext;
@@ -148,15 +149,38 @@ final class FreeCameraMode {
         double dx = -Math.sin(yawRad) * Math.cos(pitchRad);
         double dy = -Math.sin(pitchRad);
         double dz = Math.cos(yawRad) * Math.cos(pitchRad);
-        Vec3 to = from.add(dx * DOLLY_DAMP_RAY_RANGE, dy * DOLLY_DAMP_RAY_RANGE, dz * DOLLY_DAMP_RAY_RANGE);
 
-        BlockHitResult hit = mc.level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.getCameraEntity()));
-        if (hit.getType() == HitResult.Type.BLOCK) {
-            double dist = from.distanceTo(hit.getLocation());
-            if (dist < DOLLY_DAMP_MAX_DIST) {
-                double t = dist / DOLLY_DAMP_MAX_DIST;
-                t = t * t * (3.0D - 2.0D * t);
-                return Mth.lerp(t, DOLLY_DAMP_MIN_FACTOR, 1.0D);
+        // 剔除开启时滚轮缩进穿透剔除圆柱：被打出射线的方块（圆柱体内）跳过，
+        // 射线继续向后推进，直到命中首个非剔除方块或超出探测范围
+        double travelled = 0.0D;
+        Vec3 dirUnit = new Vec3(dx, dy, dz);
+        while (travelled < DOLLY_DAMP_RAY_RANGE) {
+            double remaining = DOLLY_DAMP_RAY_RANGE - travelled;
+            Vec3 to = from.add(dirUnit.scale(remaining));
+            HitResult hit = mc.level.clip(new ClipContext(from, to,
+                    ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.getCameraEntity()));
+            if (hit.getType() != HitResult.Type.BLOCK) {
+                break;
+            }
+            BlockHitResult bhr = (BlockHitResult) hit;
+            if (!RtsRayCylinderCullingState.shouldCull(bhr.getBlockPos())) {
+                double dist = from.distanceTo(hit.getLocation());
+                if (dist < DOLLY_DAMP_MAX_DIST) {
+                    double t = dist / DOLLY_DAMP_MAX_DIST;
+                    t = t * t * (3.0D - 2.0D * t);
+                    return Mth.lerp(t, DOLLY_DAMP_MIN_FACTOR, 1.0D);
+                }
+                return 1.0D;
+            }
+            // 剔除方块：推进到该命中点后继续探测
+            double step = from.distanceTo(hit.getLocation());
+            if (step < 0.05D) {
+                break; // 兜底：命中点与当前位置几乎重合时不再推进，防死循环
+            }
+            travelled += step;
+            from = hit.getLocation().add(dirUnit.scale(0.1D));
+            if (travelled >= DOLLY_DAMP_RAY_RANGE) {
+                break;
             }
         }
         return 1.0D;

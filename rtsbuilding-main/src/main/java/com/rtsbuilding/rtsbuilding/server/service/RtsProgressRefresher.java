@@ -6,34 +6,28 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.blueprint.BlueprintPersistenc
 import com.rtsbuilding.rtsbuilding.server.pipeline.context.BlueprintContext;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.PipelineContext;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.TickablePipelineRegistry;
-import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementBatch;
 import com.rtsbuilding.rtsbuilding.server.storage.RtsStoragePageBuilder;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import com.rtsbuilding.rtsbuilding.server.workflow.core.RtsWorkflowEngine;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowType;
 import com.rtsbuilding.rtsbuilding.util.RtsCountUtil;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
 /**
- * Placement and blueprint progress refresh service — manages progress detection for in-game placement jobs and blueprint workflows.
+ * 蓝图工作流进度刷新服务。
  *
- * <p>Progress refresh responsibilities extracted from {@link RtsPendingPlacementService},
- * including scanning world actual block states for active/pending placement jobs, refreshing workflow progress bars,
- * and recovery detection for mined blueprint blocks.</p>
+ * <p>进度刷新职责从 {@link RtsPendingPlacementService} 抽取而来。历史上曾在此扫描世界实际方块状态
+ * 刷新范围放置/形状建造的进度条（{@code refreshPlacementProgress}），该扫描存在重复计数、误算已有方块、
+ * chunk 未加载回退等缺陷，导致放置进度与实际放置对不上，已随链路检查移除。
+ * 放置/破坏进度统一由动作计数（{@code placedPositions.size()}/{@code destroyedPositions.size()}）驱动。</p>
  *
- * <p>Blueprint progress scanning uses per-player throttling (max once per 20 ticks),
- * avoiding the performance cost of O(n) world queries every tick.</p>
+ * <p>本类当前仅负责<b>蓝图</b>工作流进度刷新：扫描已放置但被挖掉的蓝图方块，重新放回队列待重新放置。
+ * 蓝图进度扫描使用每玩家节流（最多每 20 tick 一次），避免每 tick 做 O(n) 世界查询的性能开销。</p>
  */
 public final class RtsProgressRefresher {
 
@@ -58,71 +52,20 @@ public final class RtsProgressRefresher {
     }
 
     /**
-     * Refreshes placement and blueprint workflow progress.
+     * 刷新工作流进度。
      *
-     * <p>Iterates over all jobs (pending first, then active), checking actual placement status one by one.
-     * Blueprint workflow section uses throttling (at most once per 20 ticks).</p>
+     * <p><b>放置进度不由本方法刷新</b>：范围放置/形状建造的进度由
+     * {@link com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementBatch} 中的
+     * 动作计数（{@code placedPositions.size()}）驱动，与破坏流程保持一致，无需世界扫描覆盖。
+     * 世界扫描覆盖（旧 {@code refreshPlacementProgress}）存在重复计数/误算已有方块/chunk 未加载回退等缺陷，
+     * 会导致进度条与实际放置进度对不上，已于链路检查中移除。</p>
+     *
+     * <p>本方法仅负责<b>蓝图</b>工作流进度刷新（节流：每玩家每 20 tick 一次），
+     * 处理「已放置的蓝图方块被挖掉后重新入队」的恢复检测。</p>
      */
     public static void refreshWorkflowProgress(ServerPlayer player, RtsStorageSession session) {
         if (player == null || session == null) return;
-
-        // ── Area placement workflow progress refresh ──────────────────────────────
-        refreshPlacementProgress(player, session);
-
-        // ── Blueprint workflow progress refresh (throttled) ──────────────────────────
         refreshBlueprintProgress(player);
-    }
-
-    // ======================================================================
-    //  Area placement progress
-    // ======================================================================
-
-    /**
-     * Iterates over all placement jobs, scans the actual placed block count in the world, updates workflow progress.
-     */
-    private static void refreshPlacementProgress(ServerPlayer player, RtsStorageSession session) {
-        List<RtsPlacementBatch.PlaceBatchJob> allJobs = new ArrayList<>();
-        allJobs.addAll(session.placement.pendingJobs);
-        allJobs.addAll(session.placement.placeBatchJobs);
-
-        for (RtsPlacementBatch.PlaceBatchJob job : allJobs) {
-            String itemId = job.itemId();
-            if (itemId == null || itemId.isBlank()) continue;
-
-            ResourceLocation id = ResourceLocation.tryParse(itemId);
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) continue;
-            if (!(BuiltInRegistries.ITEM.get(id) instanceof BlockItem blockItem)) continue;
-            Block expectedBlock = blockItem.getBlock();
-            if (expectedBlock == net.minecraft.world.level.block.Blocks.AIR) continue;
-
-            List<BlockPos> allPositions = new ArrayList<>(job.clickedPositions());
-            Direction face = job.face();
-            int actualPlaced = 0;
-            for (BlockPos pos : allPositions) {
-                boolean found = false;
-                if (player.serverLevel().hasChunkAt(pos)) {
-                    BlockState state = player.serverLevel().getBlockState(pos);
-                    if (state.getBlock() == expectedBlock) {
-                        found = true;
-                    }
-                }
-                if (!found) {
-                    BlockPos adjPos = pos.relative(face);
-                    if (player.serverLevel().hasChunkAt(adjPos)) {
-                        BlockState adjState = player.serverLevel().getBlockState(adjPos);
-                        if (adjState.getBlock() == expectedBlock) {
-                            found = true;
-                        }
-                    }
-                }
-                if (found) {
-                    actualPlaced++;
-                }
-            }
-
-            int finalActPlaced = actualPlaced;
-            RtsWorkflowEngine.getInstance().from(player, job.workflowEntryId()).ifPresent(token -> token.setCompletedBlocks(finalActPlaced));
-        }
     }
 
     // ======================================================================
@@ -130,10 +73,12 @@ public final class RtsProgressRefresher {
     // ======================================================================
 
     /**
-     * Scans placed but mined-out blueprint blocks, returns them to the queue for re-placement.
-     * Throttle: only scans once every 20 ticks.
+     * 扫描已放置但被挖掉的蓝图方块，重新放回队列待重新放置。
+     * 节流：每玩家最多每 20 tick 扫描一次。
+     * <p>公开供 {@link com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementBatch}
+     * 在 tick 末尾调用（仅刷新蓝图，放置进度由动作计数驱动）。</p>
      */
-    private static void refreshBlueprintProgress(ServerPlayer player) {
+    public static void refreshBlueprintProgress(ServerPlayer player) {
         UUID puid = player.getUUID();
         long currentTick = player.serverLevel().getGameTime();
         Long lastRefresh = BLUEPRINT_REFRESH_TICK.get(puid);

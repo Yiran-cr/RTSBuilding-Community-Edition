@@ -4,6 +4,7 @@ import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
 import com.rtsbuilding.uifw.layout.FlexLayout;
 import com.rtsbuilding.uifw.layout.UiBox;
 import com.rtsbuilding.uifw.layout.UiRect;
+import com.rtsbuilding.uifw.window.component.ScrollBar;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.uifw.render.UiPalette;
@@ -29,15 +30,20 @@ import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.Builder
  *   <li>无冲突且材料足够 → 「开始」；材料不足 → 按钮灰色化。</li>
  *   <li>有冲突 → 「跳过」（跳过冲突继续放置）与「覆盖」（原生破坏冲突方块后放置）。</li>
  * </ul>
+ * <p>材料清单支持滚动条：缺失物品较多时可在清单区滚轮 / 拖拽滚动条查看全部材料。</p>
  */
 public final class ResumeWorkflowPanel extends UiPanel {
 
     private static final int PANEL_W = 288;
-    private static final int PANEL_H = 190;
+    private static final int PANEL_H = 260;
     private static final int PAD = 8;
     private static final int ROW_H = 20;
     private static final int BTN_H = 16;
     private static final int BTN_W = 56;
+    /** 滚动条宽度（内容区右侧预留）。 */
+    private static final int SCROLL_BAR_W = 8;
+    /** 清单区底部与按钮区之间的留白。 */
+    private static final int LIST_BOTTOM_GAP = 6;
 
     /** 材料充足文字色。 */
     private static final int COLOR_OK = 0xFF66BB6A;
@@ -67,6 +73,15 @@ public final class ResumeWorkflowPanel extends UiPanel {
     private final int[] startRect = new int[4];
     private final int[] skipRect = new int[4];
     private final int[] overwriteRect = new int[4];
+
+    /** 材料清单滚动条：缺失物品较多时逐行滚动查看（滚轮 / 拖拽滑块）。 */
+    private final ScrollBar scrollBar = new ScrollBar().withScrollStep(1).withScrollBottomPad(0);
+    /** 清单区命中矩形（渲染时更新，供滚轮滚动与拖拽命中判断）。 */
+    private final int[] listRect = new int[4];
+    /** 滚动条渲染/命中位置（渲染时更新）。 */
+    private int scrollBarX;
+    private int scrollBarY;
+    private int scrollBarLen;
 
     private int entryId;
     private boolean blueprint;
@@ -152,21 +167,37 @@ public final class ResumeWorkflowPanel extends UiPanel {
         SdfRenderer.drawPill(g, x, cy, w, 1, 0x33888888);
         cy += 6;
 
-        // 材料清单（每行：物品图标 + 名称 + 需求/可用）
-        int shown = 0;
-        for (int i = 0; i < matLabels.size() && shown < 5; i++) {
-            int req = matReq.get(i);
-            long avail = matAvail.get(i);
-            renderMaterialRow(g, x, cy, w, matIds.get(i), matLabels.get(i), req, avail);
-            cy += ROW_H;
-            shown++;
+        // 材料清单（滚动区）：清单区 = 分隔线下方 ～ 按钮区上方，右侧预留滚动条。
+        // 可见行数由面板高度动态计算，超出部分经滚动条逐行滚动查看。
+        int btnY = bounds.getY() + getWindowHeight() - BTN_H - PAD;
+        int listTop = cy;
+        int listHeight = Math.max(ROW_H, btnY - LIST_BOTTOM_GAP - listTop);
+        int visibleRows = matLabels.isEmpty() ? 0 : Math.max(1, listHeight / ROW_H);
+        int rowW = w - SCROLL_BAR_W - 4;
+        scrollBarX = x + w - SCROLL_BAR_W;
+        scrollBarY = listTop + 2;
+        scrollBarLen = Math.max(1, listHeight - 4);
+        listRect[0] = x;
+        listRect[1] = listTop;
+        listRect[2] = w;
+        listRect[3] = listHeight;
+
+        scrollBar.setContent(Math.max(1, matLabels.size()), Math.max(1, visibleRows));
+        int scroll = scrollBar.getScroll();
+        for (int i = 0; i < visibleRows; i++) {
+            int idx = scroll + i;
+            if (idx >= matLabels.size()) break;
+            renderMaterialRow(g, x, listTop + i * ROW_H, rowW,
+                    matIds.get(idx), matLabels.get(idx), matReq.get(idx), matAvail.get(idx));
         }
         if (matLabels.isEmpty()) {
-            TextRenderer.draw(g, t("screen.rtsbuilding.resume.no_materials"), x, cy, UiPalette.border());
+            TextRenderer.draw(g, t("screen.rtsbuilding.resume.no_materials"), x, listTop, UiPalette.border());
+        }
+        if (scrollBar.isVisible()) {
+            scrollBar.render(g, scrollBarX, scrollBarY, scrollBarLen);
         }
 
         // 按钮区：FlexLayout 居中（冲突时两个按钮，否则一个）
-        int btnY = bounds.getY() + getWindowHeight() - BTN_H - PAD;
         boolean enough = missingItems <= 0;
         boolean conflict = conflictCount > 0;
         int gap = 8;
@@ -265,6 +296,10 @@ public final class ResumeWorkflowPanel extends UiPanel {
     @Override
     protected void handleContentClick(double mouseX, double mouseY, int button) {
         if (button != 0) return;
+        // 滚动条优先：点击轨道/滑块（材料较多时）进入拖拽或翻页，不再处理按钮
+        if (scrollBar.handleClick(mouseX, mouseY, scrollBarX, scrollBarY, scrollBarLen)) {
+            return;
+        }
         // 材料不足时所有恢复按钮（开始/跳过/覆盖）均不可点击
         if (missingItems > 0) return;
         boolean conflict = conflictCount > 0;
@@ -284,6 +319,39 @@ public final class ResumeWorkflowPanel extends UiPanel {
 
     private static boolean hit(int[] r, double mx, double my) {
         return r[2] > 0 && mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3];
+    }
+
+    /**
+     * 滚轮：鼠标悬浮于材料清单区时滚动清单（材料较多时），否则交由面板默认行为（吞掉滚轮）。
+     */
+    @Override
+    protected boolean handleContentScroll(double mx, double my, double sx, double sy) {
+        if (scrollBar.isVisible()
+                && mx >= listRect[0] && mx < listRect[0] + listRect[2]
+                && my >= listRect[1] && my < listRect[1] + listRect[3]) {
+            scrollBar.handleScroll(sy);
+        }
+        return true;
+    }
+
+    /**
+     * 拖拽：滚动条滑块拖动优先于面板拖动/缩放（滑块仅在清单区，面板拖动只发生在标题栏）。
+     */
+    @Override
+    public boolean mouseDragged(double mx, double my, int btn, double dx, double dy) {
+        if (btn == 0 && scrollBar.isDragging() && scrollBarLen > 0) {
+            scrollBar.handleDrag(my, scrollBarY, scrollBarLen);
+            return true;
+        }
+        return super.mouseDragged(mx, my, btn, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(double mx, double my, int btn) {
+        if (btn == 0) {
+            scrollBar.endDrag();
+        }
+        return super.mouseReleased(mx, my, btn);
     }
 
     @Override

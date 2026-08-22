@@ -50,7 +50,7 @@ public final class InteractionTargetPass implements RenderPass {
         if (!(mc.screen instanceof BuilderScreen screen)) return;
 
         // XYZ 轴调节器拖拽期间跳过：光标隐藏后不应基于其位置渲染点击目标高亮
-        if (screen.isAxisGizmoDragging()) return;
+        if (screen.isAnyDragActive()) return;
 
         if (!screen.isClickButtonSelected()) return;
 
