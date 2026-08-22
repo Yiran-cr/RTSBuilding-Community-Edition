@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    "ABA",
+    "ABA",
+    "ABA"
+  ],
+
+  "key": {
+    "A": {
+      "item": "rtsbuilding_technologized:battery"
+    },
+    "B": {
+      "item": "rtsbuilding_technologized:copper_coil"
+    }
+  },
+
+  "result": {
+    "id": "rtsbuilding_technologized:battery_set",
+    "count": 1
+  }
+}

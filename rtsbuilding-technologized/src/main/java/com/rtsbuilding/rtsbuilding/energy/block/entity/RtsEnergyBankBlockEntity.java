@@ -5,8 +5,12 @@ import com.rtsbuilding.rtsbuilding.common.energy.BasicEnergyContainer;
 import com.rtsbuilding.rtsbuilding.energy.RtsEnergyBlockEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.capabilities.BlockCapability;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 
 /**
  * Block entity for the energy bank. Holds a large {@link BasicEnergyContainer}
@@ -21,6 +25,8 @@ public class RtsEnergyBankBlockEntity extends RtsEnergyBlockEntity {
     private static final String NBT_ENERGY = "energy";
 
     private final BasicEnergyContainer buffer = BasicEnergyContainer.create(CAPACITY, this::markChanged);
+
+    private final ContainerEnergyStorage storage = new ContainerEnergyStorage(buffer, true, true);
 
     public RtsEnergyBankBlockEntity(BlockPos pos, BlockState state) {
         super(RtsEnergyBlockEntities.ENERGY_BANK.get(), pos, state);
@@ -56,5 +62,12 @@ public class RtsEnergyBankBlockEntity extends RtsEnergyBlockEntity {
         if (tag.contains(NBT_ENERGY, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             buffer.deserializeNBT(provider, tag.getCompound(NBT_ENERGY));
         }
+    }
+
+    public ContainerEnergyStorage getCapability(BlockCapability<IEnergyStorage, Direction> cap, Direction side) {
+        if (cap == Capabilities.EnergyStorage.BLOCK) {
+            return storage;
+        }
+        return null;
     }
 }

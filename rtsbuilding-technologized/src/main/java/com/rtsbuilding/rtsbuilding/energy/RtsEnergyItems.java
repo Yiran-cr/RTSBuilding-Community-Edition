@@ -6,6 +6,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredHolder;
+import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import java.util.Collections;
@@ -30,9 +31,39 @@ public final class RtsEnergyItems {
     public static final DeferredHolder<Item, BlockItem> THERMAL_GENERATOR = blockItem(
             "thermal_generator", RtsEnergyBlocks.THERMAL_GENERATOR, true);
 
+    public static final DeferredHolder<Item, Item> BATTERY_SET = item("battery_set", new Item.Properties().stacksTo(1), true);
+
+    public static final DeferredHolder<Item, Item> BATTERY = item("battery", true);
+
+    public static final DeferredHolder<Item, Item> COPPER_COIL = item("copper_coil", true);
+
+    public static final DeferredHolder<Item, Item> COPPER_WIRE = item("copper_wire", true);
+    
+    public static final DeferredHolder<Item, Item> MOTOR = item("motor", true);
+    
+    public static final DeferredHolder<Item, Item> ROBOT_ARM = item("robot_arm", new Item.Properties().stacksTo(1), true);
+    
+    public static final DeferredHolder<Item, Item> SCREEN = item("screen", new Item.Properties().stacksTo(1), true);
+
     public static DeferredHolder<Item, BlockItem> blockItem(String id,
             DeferredHolder<Block, ? extends Block> block, boolean creative) {
         DeferredHolder<Item, BlockItem> holder = ITEMS.register(id, () -> new BlockItem(block.get(), new Item.Properties()));
+        if (creative) {
+            CREATIVE_TAB_ITEMS.add(holder);
+        }
+        return holder;
+    }
+
+    public static DeferredHolder<Item, Item> item(String id, boolean creative) {
+        DeferredHolder<Item, Item> holder = ITEMS.register(id, () -> new Item(new Item.Properties()));
+        if (creative) {
+            CREATIVE_TAB_ITEMS.add(holder);
+        }
+        return holder;
+    }
+
+    public static DeferredHolder<Item, Item> item(String id, Item.Properties properties, boolean creative) {
+        DeferredHolder<Item, Item> holder = ITEMS.register(id, () -> new Item(properties));
         if (creative) {
             CREATIVE_TAB_ITEMS.add(holder);
         }

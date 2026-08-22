@@ -1,0 +1,29 @@
+{
+  "type": "minecraft:crafting_shaped",
+
+  "pattern": [
+    "AAA",
+    "BCB",
+    "BDB"
+  ],
+
+  "key": {
+    "A": {
+      "item": "minecraft:black_stained_glass_pane"
+    },
+    "B": {
+      "item": "minecraft:iron_ingot"
+    },
+    "C": {
+      "item": "minecraft:glowstone_dust"
+    },
+    "D": {
+      "item": "minecraft:redstone_dust"
+    }
+  },
+
+  "result": {
+    "id": "rtsbuilding_technologized:screen",
+    "count": 1
+  }
+}

@@ -3,6 +3,13 @@
 
   "item.rtsbuilding_technologized.energy_bank": "Energy Bank",
   "item.rtsbuilding_technologized.thermal_generator": "Thermal Generator",
+  "item.rtsbuilding_technologized.battery_set": "Battery Set",
+  "item.rtsbuilding_technologized.battery": "Battery",
+  "item.rtsbuilding_technologized.copper_coil": "Copper Coil",
+  "item.rtsbuilding_technologized.copper_wire": "Copper Wire",
+  "item.rtsbuilding_technologized.motor": "Motor",
+  "item.rtsbuilding_technologized.robot_arm": "Robot Arm",
+  "item.rtsbuilding_technologized.screen": "Screen",
 
   "block.rtsbuilding_technologized.energy_bank": "Energy Bank",
   "block.rtsbuilding_technologized.thermal_generator": "Thermal Generator",
