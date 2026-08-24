@@ -1,84 +1,114 @@
+# -- RTS Building: Community Edition - NeoForge mod descriptor --
+# This file is a Gradle template; placeholders like ${mod_id} are expanded by
+# generateModMetadata (rtsbuilding-main/build.gradle). Built-in addons are
+# merged into the main mod JAR and declared here as separate [[mods]].
+
 modLoader="javafml"
-logoFile="logo.png"
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
+logoFile="logo.png"
+
+# ------------------------------- Main mod -------------------------------
 
 [[mods]]
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
 displayURL="https://rts.ciallo.ltd/"
 description='''
 Build, manage storage, and interact with your base from an overhead RTS-style building panel.
 '''
 
+# --------------------------- Bundled UI framework ---------------------------
+
 [[mods]]
 modId="uifw"
 version="${mod_version}"
 displayName="uifw - UI Framework"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
+displayURL="https://rts.ciallo.ltd/"
 description='''
 Standalone, mod-agnostic Minecraft UI framework: SDF rendering, animation/theme
 system, and a reusable window & component library. Bundled dependency of the
 main RTS Building mod; also distributable on its own.
 '''
 
+# ----------------------- Built-in addon: Planet Rise -----------------------
+
 [[mods]]
 modId="rtsbuilding_planetrise"
 version="${mod_version}"
 displayName="Planet Rise"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
+displayURL="https://rts.ciallo.ltd/"
 description='''
-Built-in addon: the energy & power system for RTSbuilding — thermal generators
+Built-in addon: the energy & power system for RTSbuilding - thermal generators
 and the per-player energy grid that powers remote operations.
 '''
+
+# ------------------------ Built-in addon: AE2 ------------------------
 
 [[mods]]
 modId="rtsbuilding_addon_ae2"
 version="${mod_version}"
 displayName="RTSbuilding AE2 Addon"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
+displayURL="https://rts.ciallo.ltd/"
 description='''
 AE2 storage network integration for the RTS building panel.
 '''
+
+# ---------------------- Built-in addon: Refined Storage ----------------------
 
 [[mods]]
 modId="rtsbuilding_addon_refinedstorage"
 version="${mod_version}"
 displayName="RTSbuilding Refined Storage Addon"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
+displayURL="https://rts.ciallo.ltd/"
 description='''
 Refined Storage network integration for the RTS building panel.
 '''
+
+# --------------------- Built-in addon: Beyond Dimensions ---------------------
 
 [[mods]]
 modId="rtsbuilding_addon_beyonddimensions"
 version="${mod_version}"
 displayName="RTSbuilding Beyond Dimensions Addon"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
+displayURL="https://rts.ciallo.ltd/"
 description='''
 Beyond Dimensions network integration for the RTS building panel.
 '''
+
+# ------------------- Built-in addon: Sophisticated Backpacks -------------------
 
 [[mods]]
 modId="rtsbuilding_addon_sophisticatedbackpacks"
 version="${mod_version}"
 displayName="RTSbuilding Sophisticated Backpacks Addon"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
+displayURL="https://rts.ciallo.ltd/"
 description='''
-Sophisticated Backpacks integration — link backpack inventories to the RTS storage panel.
+Sophisticated Backpacks integration - link backpack inventories to the RTS storage panel.
 '''
+
+# --------------------------------- Mixins ---------------------------------
 
 [[mixins]]
 config="${mod_id}.mixins.json"
+
+# ------------------------------ Dependencies ------------------------------
+# Main mod: requires NeoForge, Minecraft, and the bundled uifw.
 
 [[dependencies.${mod_id}]]
     modId="neoforge"
@@ -101,6 +131,8 @@ config="${mod_id}.mixins.json"
     ordering="AFTER"
     side="BOTH"
 
+# uifw: requires NeoForge and Minecraft.
+
 [[dependencies.uifw]]
     modId="neoforge"
     type="required"
@@ -114,6 +146,8 @@ config="${mod_id}.mixins.json"
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
+
+# Planet Rise: requires NeoForge, Minecraft, and the main mod.
 
 [[dependencies.rtsbuilding_planetrise]]
     modId="neoforge"
@@ -135,6 +169,8 @@ config="${mod_id}.mixins.json"
     versionRange="[${mod_version},)"
     ordering="NONE"
     side="BOTH"
+
+# AE2 addon: requires NeoForge, Minecraft, the main mod; AE2 optional.
 
 [[dependencies.rtsbuilding_addon_ae2]]
     modId="neoforge"
@@ -164,6 +200,8 @@ config="${mod_id}.mixins.json"
     ordering="NONE"
     side="BOTH"
 
+# Refined Storage addon: requires NeoForge, Minecraft, the main mod; RS optional.
+
 [[dependencies.rtsbuilding_addon_refinedstorage]]
     modId="neoforge"
     type="required"
@@ -192,6 +230,8 @@ config="${mod_id}.mixins.json"
     ordering="NONE"
     side="BOTH"
 
+# Beyond Dimensions addon: requires NeoForge, Minecraft, the main mod; BD optional.
+
 [[dependencies.rtsbuilding_addon_beyonddimensions]]
     modId="neoforge"
     type="required"
@@ -219,6 +259,8 @@ config="${mod_id}.mixins.json"
     versionRange="[0.7,)"
     ordering="NONE"
     side="BOTH"
+
+# Sophisticated Backpacks addon: requires NeoForge, Minecraft, the main mod; SB optional.
 
 [[dependencies.rtsbuilding_addon_sophisticatedbackpacks]]
     modId="neoforge"

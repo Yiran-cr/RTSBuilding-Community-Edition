@@ -1,3 +1,8 @@
+# ── uifw - standalone NeoForge mod descriptor ──
+# This template is used when uifw is distributed as an independent mod.
+# When bundled inside the main RTS Building JAR, this file is excluded and
+# the mod is declared by the main mod's neoforge.mods.toml instead.
+
 modLoader="javafml"
 loaderVersion="[1,)"
 license="LGPL-3.0-only"
@@ -6,11 +11,12 @@ license="LGPL-3.0-only"
 modId="${mod_id}"
 version="${version}"
 displayName="uifw - UI Framework"
-credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
-authors="JerryLunar/\u5bc4\u5c85\u87f9H-crab"
+authors="\u4E94\u4E16\u6843\u82B1\u4EAD"
+credits="JerryLunar, Diffusion, ReConstruction-127, 可怜Bot, 卓清婉, 凌墨问"
+displayURL="https://rts.ciallo.ltd/"
 description='''
 Standalone Minecraft UI framework: SDF rendering, animation/theme system,
-and a reusable window & component library. Mod-agnostic — usable by any mod.
+and a reusable window & component library. Mod-agnostic - usable by any mod.
 '''
 
 [[dependencies.${mod_id}]]

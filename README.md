@@ -6,7 +6,7 @@
 Join the Discord to chat and provide feedback: https://discord.gg/9Pw6vZfAm
 
 License: LGPL-3.0-only for the current source tree and releases starting with
-1.0.3-beta / 0.0.3Beta. Copyright (C) 2026 JerryLunar. Earlier public
+1.0.3-beta / 0.0.3Beta. Copyright (C) 2026 五世桃花亭. Earlier public
 releases remain under the license terms that accompanied those releases.
 
 ---
@@ -77,15 +77,16 @@ point I already cannot play without it.
 
 ### Contributors and credits
 
-**Hcrab** is the project author and primary maintainer, responsible for the
+**五世桃花亭** is the project author and primary maintainer, responsible for the
 overall design direction, core gameplay, major feature implementation, releases,
 and long-term maintenance.
 
 Special thanks to the following contributors:
 
-- **Yiran**: core developer. Helped with structural refactors, parts of the UI
+- **JerryLunar**: core developer. Helped with structural refactors, parts of the UI
   implementation, community management, and systematizing bug reporting and todo
   tracking.
+- **Diffusion**: core developer.
 - **凌墨问**: core community collaborator. Helped with community outreach,
   feedback collection, and the project journal website.
 - **卓清婉**: major code contributor. Helped resolve critical bugs, contributed
@@ -95,8 +96,6 @@ Special thanks to the following contributors:
   bugs, shaped bug-fix approaches, and submitted multiple fix pull requests.
 - **[ReConstruction-127](https://github.com/ReConstruction-127)**: contributed
   UI icons for the top bar.
-- **[Eternal-Snowstorm](https://github.com/Eternal-Snowstorm)**: helped
-  organize the issue templates and provided guidance on licensing.
 
 ### Branches and source builds
 
@@ -178,13 +177,14 @@ On Windows:
 
 ### 贡献者与鸣谢
 
-**Hcrab** 是项目作者与主要维护者，负责整体设计方向、核心玩法、主要功能实现、
+**五世桃花亭** 是项目作者与主要维护者，负责整体设计方向、核心玩法、主要功能实现、
 版本发布与长期维护。
 
 特别感谢以下贡献者：
 
-- **Yiran**：核心开发者。协助项目结构重构、部分 UI 实现与社区管理，并推动
+- **JerryLunar**：核心开发者。协助项目结构重构、部分 UI 实现与社区管理，并推动
   bug 反馈与 todo 跟踪流程的系统化。
+- **Diffusion**：核心开发者。
 - **凌墨问**：核心社区协作者。协助社区宣传、收集社区反馈，并开发项目记录网页。
 - **卓清婉**：重要代码贡献者。多次参与关键 bug 攻坚，提交兼容性与 QoL 改进
   PR，并协助管理 todo。
@@ -192,8 +192,6 @@ On Windows:
   思路，并多次提交修复 PR。
 - **[ReConstruction-127](https://github.com/ReConstruction-127)**：协助绘制顶栏
   UI 图标。
-- **[Eternal-Snowstorm](https://github.com/Eternal-Snowstorm)**：协助统合 issue
-  template，并在 license 相关事项上提供指导。
 
 ### 分支与源码构建
 
