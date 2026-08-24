@@ -22,13 +22,17 @@ public final class RtsEnergyItems {
 
     private static final Set<DeferredHolder<Item, ? extends Item>> CREATIVE_TAB_ITEMS = new LinkedHashSet<>();
 
-    /** Energy bank block item */
-    public static final DeferredHolder<Item, BlockItem> ENERGY_BANK = blockItem(
-            "energy_bank", RtsEnergyBlocks.ENERGY_BANK, true);
-
     /** Thermal generator block item */
     public static final DeferredHolder<Item, BlockItem> THERMAL_GENERATOR = blockItem(
             "thermal_generator", RtsEnergyBlocks.THERMAL_GENERATOR, true);
+
+    /** Wireless power tower block item */
+    public static final DeferredHolder<Item, BlockItem> POWER_TOWER = blockItem(
+            "power_tower", RtsEnergyBlocks.POWER_TOWER, true);
+
+    /** Energy cell block item */
+    public static final DeferredHolder<Item, BlockItem> ENERGY_CELL = blockItem(
+            "energy_cell", RtsEnergyBlocks.ENERGY_CELL, true);
 
     public static DeferredHolder<Item, BlockItem> blockItem(String id,
             DeferredHolder<Block, ? extends Block> block, boolean creative) {

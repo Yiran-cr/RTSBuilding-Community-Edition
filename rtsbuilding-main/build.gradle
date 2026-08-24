@@ -102,6 +102,10 @@ dependencies {
 
     localRuntime "maven.modrinth:pipez:${pipez_version}"
 
+    // 本地 libs 目录（rtsbuilding-main/libs/）：放入的第三方 mod jar（如 Mekanism）
+    // 在 dev 环境「编译期可引用其 API」（compileOnly）、「运行时可被 NeoForge 加载」
+    // （runtimeOnly）。打包时不并入主 JAR——宿主 mod 由玩家自行放进游戏 mods 文件夹。
+    compileOnly fileTree(dir: 'libs', include: '*.jar')
     runtimeOnly fileTree(dir: 'libs', include: '*.jar')
 
     testImplementation "org.junit.jupiter:junit-jupiter:5.11.0"

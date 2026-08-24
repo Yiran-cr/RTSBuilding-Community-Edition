@@ -2,7 +2,6 @@ package com.rtsbuilding.rtsbuilding.energy.block.entity;
 
 import com.rtsbuilding.rtsbuilding.api.energy.Action;
 import com.rtsbuilding.rtsbuilding.api.energy.AutomationType;
-import com.rtsbuilding.rtsbuilding.api.energy.IEnergyContainer;
 import com.rtsbuilding.rtsbuilding.common.energy.BasicEnergyContainer;
 import com.rtsbuilding.rtsbuilding.energy.RtsEnergyBlockEntities;
 import com.rtsbuilding.rtsbuilding.energy.block.RtsThermalGeneratorBlock;
@@ -10,6 +9,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
@@ -18,10 +19,12 @@ import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
 /**
  * Block entity for the thermal generator. Burns lava to produce FE.
  * <p>
- * The internal buffer is part of the owner's energy grid. The block is lit while
- * it has lava and room to store generated energy.
+ * Generated FE accumulates in the internal buffer, which is exposed as an
+ * extract-only {@code IEnergyStorage} capability. A power tower placed inside
+ * the generator's neighbourhood can suck this buffer dry and redistribute the
+ * energy wirelessly — the Dyson-Sphere-Program-style transmission backbone.
  */
-public class RtsThermalGeneratorBlockEntity extends RtsEnergyBlockEntity {
+public class RtsThermalGeneratorBlockEntity extends BlockEntity {
 
     /** FE generated per tick while burning. */
     public static final long GENERATION_PER_TICK = 60;
@@ -83,16 +86,6 @@ public class RtsThermalGeneratorBlockEntity extends RtsEnergyBlockEntity {
             player.drop(result, false);
         }
         inHand.shrink(1);
-    }
-
-    @Override
-    public IEnergyContainer getEnergyBuffer() {
-        return buffer;
-    }
-
-    @Override
-    public long getGeneration() {
-        return tank.getFluidAmount() > 0 && buffer.getNeeded() > 0 ? GENERATION_PER_TICK : 0;
     }
 
     public BasicEnergyContainer getBuffer() {

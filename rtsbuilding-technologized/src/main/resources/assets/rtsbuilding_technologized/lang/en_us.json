@@ -1,11 +1,14 @@
 {
   "itemGroup.rtsbuilding_technologized": "RTSbuilding Technologized",
 
-  "item.rtsbuilding_technologized.energy_bank": "Energy Bank",
   "item.rtsbuilding_technologized.thermal_generator": "Thermal Generator",
-
-  "block.rtsbuilding_technologized.energy_bank": "Energy Bank",
   "block.rtsbuilding_technologized.thermal_generator": "Thermal Generator",
 
-  "message.rtsbuilding_technologized.grid_no_energy": "Not enough grid energy for that operation!"
+  "item.rtsbuilding_technologized.power_tower": "Wireless Power Tower",
+  "block.rtsbuilding_technologized.power_tower": "Wireless Power Tower",
+
+  "item.rtsbuilding_technologized.energy_cell": "Energy Cell",
+  "block.rtsbuilding_technologized.energy_cell": "Energy Cell",
+
+  "message.rtsbuilding_technologized.energy_cell_info": "Energy Cell: %s / %s FE"
 }

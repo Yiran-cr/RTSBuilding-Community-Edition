@@ -1,6 +1,5 @@
 package com.rtsbuilding.rtsbuilding.server.service.placement;
 
-import com.rtsbuilding.rtsbuilding.common.RtsBuildEnergy;
 import com.rtsbuilding.rtsbuilding.network.NetworkConstants;
 import com.rtsbuilding.rtsbuilding.server.history.ServerHistoryManager;
 import com.rtsbuilding.rtsbuilding.server.service.RtsBatchJobTickOps;
@@ -173,7 +172,7 @@ public final class RtsPlacementBatch {
                                 if (committed) {
                                     job.placedPositions.add(trackedPos);
                                     if (RtsBlockAnimationCommitter.isPlayerStillOnline(player)) {
-                                        RtsBuildEnergy.consumePlacement(player);
+                                        // 放置不消耗能量（能量机制走输电塔/发电机构成的传输基础设施）
                                     }
                                     tokenOpt.ifPresent(token -> token.updateProgress(1, null));
                                 }
@@ -224,7 +223,7 @@ public final class RtsPlacementBatch {
                                     player.serverLevel(), clickedPos, beforeClicked, adjPos, beforeAdjacent);
                             if (actualPos != null) {
                                 job.placedPositions.add(actualPos);
-                                RtsBuildEnergy.consumePlacement(player);
+                                // 放置不消耗能量（能量机制走输电塔/发电机构成的传输基础设施）
                                 // 立即上报进度（事件驱动，与实际落位同步）
                                 tokenOpt.ifPresent(token -> token.updateProgress(1, null));
                             } else {
@@ -235,7 +234,7 @@ public final class RtsPlacementBatch {
                         case PLACED -> {
                             // 单方块替换（placeReplaceAt）：延迟落位已调度 → 按调度即计（单方块场景）
                             job.placedPositions.add(clickedPos);
-                            RtsBuildEnergy.consumePlacement(player);
+                            // 放置不消耗能量（能量机制走输电塔/发电机构成的传输基础设施）
                             tokenOpt.ifPresent(token -> token.updateProgress(1, null));
                         }
                         case SKIPPED -> job.skippedWhileProcessing++;

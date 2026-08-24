@@ -1,11 +1,14 @@
 {
   "itemGroup.rtsbuilding_technologized": "RTSbuilding 科技",
 
-  "item.rtsbuilding_technologized.energy_bank": "储能单元",
   "item.rtsbuilding_technologized.thermal_generator": "热能发电机",
-
-  "block.rtsbuilding_technologized.energy_bank": "储能单元",
   "block.rtsbuilding_technologized.thermal_generator": "热能发电机",
 
-  "message.rtsbuilding_technologized.grid_no_energy": "网格能量不足，无法执行该操作！"
+  "item.rtsbuilding_technologized.power_tower": "无线输电塔",
+  "block.rtsbuilding_technologized.power_tower": "无线输电塔",
+
+  "item.rtsbuilding_technologized.energy_cell": "储能单元",
+  "block.rtsbuilding_technologized.energy_cell": "储能单元",
+
+  "message.rtsbuilding_technologized.energy_cell_info": "储能单元电量：%s / %s FE"
 }

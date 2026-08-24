@@ -1,6 +1,5 @@
 package com.rtsbuilding.rtsbuilding.api;
 
-import com.rtsbuilding.rtsbuilding.api.energy.RtsEnergyAPI;
 import org.jetbrains.annotations.ApiStatus;
 
 /**
@@ -60,9 +59,6 @@ public interface RtsAPI {
 
     /** Session query */
     RtsSessionQueryAPI sessions();
-
-    /** Energy grid access (per-player energy storage/generation) */
-    RtsEnergyAPI energy();
 
     /**
      * Set the internal implementation. Called by the RTS core during mod initialization.

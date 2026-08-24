@@ -1,6 +1,7 @@
 package com.rtsbuilding.rtsbuilding.energy;
 
-import com.rtsbuilding.rtsbuilding.energy.block.RtsEnergyBankBlock;
+import com.rtsbuilding.rtsbuilding.energy.block.RtsEnergyCellBlock;
+import com.rtsbuilding.rtsbuilding.energy.block.RtsPowerTowerBlock;
 import com.rtsbuilding.rtsbuilding.energy.block.RtsThermalGeneratorBlock;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.Block;
@@ -24,22 +25,31 @@ public final class RtsEnergyBlocks {
 
     private static final Set<DeferredHolder<Block, ? extends Block>> CREATIVE_TAB_BLOCKS = new LinkedHashSet<>();
 
-    /** Energy bank — block-level FE storage buffer (part of the player's energy grid). */
-    public static final DeferredHolder<Block, RtsEnergyBankBlock> ENERGY_BANK = registerBlock(
-            "energy_bank",
-            () -> new RtsEnergyBankBlock(BlockBehaviour.Properties.of()
-                    .strength(3.0F)
-                    .sound(SoundType.METAL)
-                    .requiresCorrectToolForDrops()),
-            true);
-
-    /** Thermal generator — burns lava to produce FE for the owner's grid. */
+    /** Thermal generator — burns lava to produce FE for nearby power towers. */
     public static final DeferredHolder<Block, RtsThermalGeneratorBlock> THERMAL_GENERATOR = registerBlock(
             "thermal_generator",
             () -> new RtsThermalGeneratorBlock(BlockBehaviour.Properties.of()
                     .strength(3.5F)
                     .sound(SoundType.METAL)
                     .lightLevel(state -> state.getValue(RtsThermalGeneratorBlock.LIT) ? 14 : 0)
+                    .requiresCorrectToolForDrops()),
+            true);
+
+    /** Wireless power tower — buffers FE and redistributes it wirelessly within its coverage area. */
+    public static final DeferredHolder<Block, RtsPowerTowerBlock> POWER_TOWER = registerBlock(
+            "power_tower",
+            () -> new RtsPowerTowerBlock(BlockBehaviour.Properties.of()
+                    .strength(3.0F)
+                    .sound(SoundType.METAL)
+                    .requiresCorrectToolForDrops()),
+            true);
+
+    /** Energy cell — large FE buffer, chargeable/dischargeable by pipes or power towers. */
+    public static final DeferredHolder<Block, RtsEnergyCellBlock> ENERGY_CELL = registerBlock(
+            "energy_cell",
+            () -> new RtsEnergyCellBlock(BlockBehaviour.Properties.of()
+                    .strength(3.0F)
+                    .sound(SoundType.METAL)
                     .requiresCorrectToolForDrops()),
             true);
 

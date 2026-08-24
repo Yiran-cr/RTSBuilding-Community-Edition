@@ -2,14 +2,9 @@ package com.rtsbuilding.rtsbuilding.energy.block;
 
 import com.rtsbuilding.rtsbuilding.common.geometry.RtsModelShapeParser;
 import com.rtsbuilding.rtsbuilding.energy.RtsEnergyMod;
-import com.rtsbuilding.rtsbuilding.energy.block.entity.RtsEnergyBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -17,9 +12,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Base block for all energy blocks of the {@code rtsbuilding_technologized}
- * addon. Records the placing player as the energy node owner so the server can
- * attribute the block to that player's energy grid.
+ * Base block for the energy blocks of the {@code rtsbuilding_technologized}
+ * addon.
  * <p>
  * Collision/selection boxes are generated automatically from the block's model
  * JSON via {@link RtsModelShapeParser}. Shapes are cached per facing, so the
@@ -42,17 +36,6 @@ public abstract class RtsEnergyBlock extends Block {
         super(properties);
         this.shapeGenerator = modelPath == null ? null
                 : new RtsModelShapeParser.CachedShapeGenerator(RtsEnergyMod.MODID, modelPath);
-    }
-
-    @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state,
-          @Nullable LivingEntity placer, ItemStack stack) {
-        super.setPlacedBy(level, pos, state, placer, stack);
-        if (!level.isClientSide && placer instanceof Player player) {
-            if (level.getBlockEntity(pos) instanceof RtsEnergyBlockEntity energyBe) {
-                energyBe.setOwner(player.getUUID());
-            }
-        }
     }
 
     @Override

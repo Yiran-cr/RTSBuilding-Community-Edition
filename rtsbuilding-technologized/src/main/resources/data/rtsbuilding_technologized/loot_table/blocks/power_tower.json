@@ -11,7 +11,7 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "rtsbuilding_technologized:energy_bank"
+          "name": "rtsbuilding_technologized:power_tower"
         }
       ],
       "rolls": 1.0

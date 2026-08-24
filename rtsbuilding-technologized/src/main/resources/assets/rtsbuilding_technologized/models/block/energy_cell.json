@@ -1,0 +1,35 @@
+{
+  "format_version": "1.21.11",
+  "credit": "Made with Blockbench",
+  "parent": "block/block",
+  "textures": {
+    "all": "rtsbuilding_technologized:block/energy_cell/energy_cell",
+    "particle": "rtsbuilding_technologized:block/energy_cell/energy_cell"
+  },
+  "elements": [
+    {
+      "from": [2, 1, 2],
+      "to": [14, 15, 14],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "east": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "west": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "up": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "down": {"uv": [0, 0, 16, 16], "texture": "#all"}
+      }
+    },
+    {
+      "from": [3, 15, 3],
+      "to": [13, 16, 13],
+      "faces": {
+        "north": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "east": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "west": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "up": {"uv": [0, 0, 16, 16], "texture": "#all"},
+        "down": {"uv": [0, 0, 16, 16], "texture": "#all"}
+      }
+    }
+  ]
+}

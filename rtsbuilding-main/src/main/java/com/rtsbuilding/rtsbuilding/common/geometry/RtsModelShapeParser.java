@@ -9,6 +9,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -35,6 +37,8 @@ public final class RtsModelShapeParser {
 
     private static final Map<String, List<ElementData>> modelCache = new ConcurrentHashMap<>();
     private static final Map<String, Map<Direction, VoxelShape>> shapeCache = new ConcurrentHashMap<>();
+    /** 按 blockstate (xRot, yRot) 旋转的碰撞箱缓存，key 形如 {@code <modId>:<model>#x_<x>_y_<y>}。 */
+    private static final Map<String, VoxelShape> rotatedShapeCache = new ConcurrentHashMap<>();
 
     private RtsModelShapeParser() {
     }
@@ -43,7 +47,7 @@ public final class RtsModelShapeParser {
      * Builds (or returns cached) the collision/selection shape for a model.
      *
      * @param modId      The namespace of the model, e.g. {@code "rtsbuilding"}.
-     * @param modelPath  The model path relative to {@code assets/<modId>/}, e.g. {@code "models/block/energy_bank.json"}.
+     * @param modelPath  The model path relative to {@code assets/<modId>/}, e.g. {@code "models/block/thermal_generator_off.json"}.
      * @param direction  The facing the shape should be rotated for.
      *
      * @return The combined {@link VoxelShape}; falls back to a full block when
@@ -67,6 +71,58 @@ public final class RtsModelShapeParser {
     public static void clearAllCache() {
         modelCache.clear();
         shapeCache.clear();
+        rotatedShapeCache.clear();
+    }
+
+    /**
+     * Builds (or returns cached) the collision/selection shape for a model rotated
+     * by the given blockstate {@code x} / {@code y} rotations.
+     * <p>
+     * Unlike {@link #createShapeFromModel(String, String, Direction)} — which only
+     * supports the six fixed single-axis facing rotations — this variant accepts
+     * arbitrary {@code x}+{@code y} combinations and mirrors how the game bakes
+     * block models ({@code Quaternionf.rotateYXZ(-y, -x, 0)} around the model
+     * center), so shapes for models whose default orientation isn't {@code NORTH}
+     * (e.g. a vertical antenna tower) still match rendering exactly.
+     *
+     * @param modId     The namespace of the model, e.g. {@code "rtsbuilding"}.
+     * @param modelPath The model path relative to {@code assets/<modId>/}.
+     * @param xRot      The blockstate {@code x} rotation in degrees.
+     * @param yRot      The blockstate {@code y} rotation in degrees.
+     *
+     * @return The combined {@link VoxelShape}; falls back to a full block when
+     *         the model cannot be parsed.
+     */
+    public static VoxelShape createShapeFromModelRotated(String modId, String modelPath, int xRot, int yRot) {
+        String cacheKey = buildCacheKey(modId, modelPath) + "#x_" + xRot + "_y_" + yRot;
+        return rotatedShapeCache.computeIfAbsent(cacheKey, k -> generateShapeRotated(modId, modelPath, xRot, yRot));
+    }
+
+    private static VoxelShape generateShapeRotated(String modId, String modelPath, int xRot, int yRot) {
+        List<ElementData> elements = getModelElements(modId, modelPath);
+        if (elements.isEmpty()) {
+            return Shapes.block();
+        }
+        // 与 BlockModelRotation 一致：绕模型中心，角度取负、先 X 后 Y。
+        Quaternionf rotation = new Quaternionf().rotateYXZ(
+                (float) Math.toRadians(-yRot), (float) Math.toRadians(-xRot), 0);
+        List<VoxelShape> shapes = new ArrayList<>();
+        for (ElementData element : elements) {
+            if (element.skipCollision()) {
+                continue;
+            }
+            double[] from = transformPointRotated(element.from(), rotation);
+            double[] to = transformPointRotated(element.to(), rotation);
+            shapes.add(createElementShape(from, to));
+        }
+        return RtsVoxelShapeUtils.combine(shapes);
+    }
+
+    /** 绕模型中心 (8,8,8) 应用旋转后的像素坐标变换。 */
+    private static double[] transformPointRotated(double[] point, Quaternionf rotation) {
+        Vector3f v = new Vector3f((float) (point[0] - 8), (float) (point[1] - 8), (float) (point[2] - 8));
+        rotation.transform(v);
+        return new double[]{v.x + 8, v.y + 8, v.z + 8};
     }
 
     private static VoxelShape generateShape(String modId, String modelPath, Direction direction) {

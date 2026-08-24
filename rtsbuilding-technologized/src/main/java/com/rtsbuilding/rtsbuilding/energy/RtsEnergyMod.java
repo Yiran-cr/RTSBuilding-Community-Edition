@@ -2,10 +2,6 @@ package com.rtsbuilding.rtsbuilding.energy;
 
 import com.mojang.logging.LogUtils;
 import com.rtsbuilding.rtsbuilding.Config;
-import com.rtsbuilding.rtsbuilding.common.RtsBuildEnergy;
-import com.rtsbuilding.rtsbuilding.energy.server.RtsEnergyApiImpl;
-import com.rtsbuilding.rtsbuilding.energy.server.RtsEnergyCostService;
-import com.rtsbuilding.rtsbuilding.server.api.impl.RtsAPIImpl;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -18,8 +14,8 @@ import java.nio.file.Path;
 
 /**
  * Entry point of the built-in addon mod {@code rtsbuilding_technologized} —
- * the energy &amp; power system (energy banks, thermal generators and the
- * per-player energy grid).
+ * the energy &amp; power system (thermal generators, wireless power towers and
+ * the terminal energy).
  * <p>
  * This mod is a separate project that gets packaged together with the main
  * {@code rtsbuilding} mod in the same JAR. It registers its own
@@ -84,19 +80,11 @@ public final class RtsEnergyMod {
     }
 
     private static void commonSetup(FMLCommonSetupEvent event) {
-        // Hook into the main mod's runtime services here — during construction the
-        // main mod's RtsServer isn't initialized yet (that happens in its own
-        // commonSetup), and touching RtsAPIImpl early would trip its static init.
-        // The required-dependency order guarantees the main mod's commonSetup ran first.
         event.enqueueWork(() -> {
             if (!Config.isTechnologizedEnabled()) {
                 LOGGER.info("rtsbuilding-technologized disabled by config — energy system inactive");
                 return;
             }
-            // Activate the build-operation energy cost only while this addon is loaded.
-            RtsBuildEnergy.install(player -> RtsEnergyCostService.consume(player, 1));
-            // Provide the RtsAPI.energy() implementation to the main mod.
-            RtsAPIImpl.setEnergyApi(new RtsEnergyApiImpl());
             // Make the main mod's terminal energy-powered again.
             RtsTerminalEnergyImpl.installProvider();
         });

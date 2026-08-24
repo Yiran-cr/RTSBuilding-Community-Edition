@@ -56,15 +56,39 @@ public class Config {
 
     public static final ModConfigSpec.BooleanValue ENABLE_TECHNOLOGIZED = BUILDER
             .comment("Enable the built-in rtsbuilding-technologized addon (energy & power system).",
-                    "Set to false to disable the energy addon's functionality (no energy grid, no energy blocks, no build-energy cost).")
+                    "Set to false to disable the energy addon's functionality (no energy blocks, no energy transfer).")
             .translation("rtsbuilding.configuration.enableTechnologized")
             .define("enableTechnologized", true);
 
-    public static final ModConfigSpec.LongValue ENERGY_PER_PLACEMENT = BUILDER
-            .comment("FE consumed from the player's energy grid for each block remotely placed.",
-                    "0 disables the energy cost. Players without any energy blocks are never charged.")
-            .translation("rtsbuilding.configuration.energyPerPlacement")
-            .defineInRange("energyPerPlacement", 50L, 0L, Long.MAX_VALUE);
+    public static final ModConfigSpec.LongValue POWER_TOWER_CAPACITY = BUILDER
+            .comment("FE storage capacity of one wireless power tower (rtsbuilding_technologized).",
+                    "The tower buffers energy locally and distributes it wirelessly within its coverage area.")
+            .translation("rtsbuilding.configuration.powerTowerCapacity")
+            .defineInRange("powerTowerCapacity", 1_000_000L, 1L, Long.MAX_VALUE);
+
+    public static final ModConfigSpec.IntValue POWER_TOWER_HORIZONTAL_RADIUS = BUILDER
+            .comment("Horizontal radius (blocks) of one power tower's wireless coverage area.",
+                    "Set to 0 to disable wireless transfer entirely.")
+            .translation("rtsbuilding.configuration.powerTowerHorizontalRadius")
+            .defineInRange("powerTowerHorizontalRadius", 16, 0, 128);
+
+    public static final ModConfigSpec.IntValue POWER_TOWER_VERTICAL_RADIUS = BUILDER
+            .comment("Vertical radius (blocks, up and down) of one power tower's wireless coverage area.",
+                    "Set to 0 to disable wireless transfer entirely.")
+            .translation("rtsbuilding.configuration.powerTowerVerticalRadius")
+            .defineInRange("powerTowerVerticalRadius", 8, 0, 128);
+
+    public static final ModConfigSpec.LongValue POWER_TOWER_TRANSFER_RATE = BUILDER
+            .comment("Maximum FE moved per tick by one power tower (sucking sources + feeding targets).",
+                    "Set to 0 to disable wireless transfer entirely.")
+            .translation("rtsbuilding.configuration.powerTowerTransferRate")
+            .defineInRange("powerTowerTransferRate", 2000L, 0L, Long.MAX_VALUE);
+
+    public static final ModConfigSpec.LongValue ENERGY_CELL_CAPACITY = BUILDER
+            .comment("FE storage capacity of one energy cell block (rtsbuilding_technologized).",
+                    "The cell buffers energy and can be charged/discharged by pipes or power towers.")
+            .translation("rtsbuilding.configuration.energyCellCapacity")
+            .defineInRange("energyCellCapacity", 4_000_000L, 1L, Long.MAX_VALUE);
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 
@@ -160,9 +184,29 @@ public class Config {
         return ENABLE_TECHNOLOGIZED.getAsBoolean();
     }
 
-    /** FE charged per remotely placed block (0 disables the cost). */
-    public static long energyPerPlacement() {
-        return ENERGY_PER_PLACEMENT.getAsLong();
+    /** FE storage capacity of one power tower. */
+    public static long powerTowerCapacity() {
+        return POWER_TOWER_CAPACITY.getAsLong();
+    }
+
+    /** Horizontal radius (blocks) of one power tower's wireless coverage. */
+    public static int powerTowerHorizontalRadius() {
+        return POWER_TOWER_HORIZONTAL_RADIUS.getAsInt();
+    }
+
+    /** Vertical radius (blocks, up and down) of one power tower's wireless coverage. */
+    public static int powerTowerVerticalRadius() {
+        return POWER_TOWER_VERTICAL_RADIUS.getAsInt();
+    }
+
+    /** Maximum FE moved per tick by one power tower. */
+    public static long powerTowerTransferRate() {
+        return POWER_TOWER_TRANSFER_RATE.getAsLong();
+    }
+
+    /** FE storage capacity of one energy cell block. */
+    public static long energyCellCapacity() {
+        return ENERGY_CELL_CAPACITY.getAsLong();
     }
 
 }

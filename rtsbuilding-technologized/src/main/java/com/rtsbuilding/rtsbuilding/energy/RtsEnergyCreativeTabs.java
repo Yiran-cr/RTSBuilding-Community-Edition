@@ -20,7 +20,7 @@ public final class RtsEnergyCreativeTabs {
             "energy",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.rtsbuilding_technologized"))
-                    .icon(() -> new ItemStack(RtsEnergyItems.ENERGY_BANK.get()))
+                    .icon(() -> new ItemStack(RtsEnergyItems.THERMAL_GENERATOR.get()))
                     .displayItems((parameters, output) -> {
                         for (var holder : RtsEnergyItems.getCreativeTabItems()) {
                             output.accept(holder.get());

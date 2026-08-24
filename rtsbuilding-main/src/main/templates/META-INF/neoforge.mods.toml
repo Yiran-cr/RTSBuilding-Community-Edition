@@ -33,8 +33,8 @@ displayName="RTSbuilding Technologized"
 credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
 description='''
-Built-in addon: the energy & power system for RTSbuilding — energy banks,
-thermal generators and the per-player energy grid that powers remote operations.
+Built-in addon: the energy & power system for RTSbuilding — thermal generators
+and the per-player energy grid that powers remote operations.
 '''
 
 [[mods]]

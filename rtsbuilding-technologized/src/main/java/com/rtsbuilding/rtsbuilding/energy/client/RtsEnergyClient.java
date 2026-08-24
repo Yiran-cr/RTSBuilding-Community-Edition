@@ -28,7 +28,8 @@ public final class RtsEnergyClient {
         }
         // Custom break particles: consolidate multi-element collision shapes into
         // a single bounding-box particle burst (see RtsBlockRenderProperties).
-        event.registerBlock(RtsBlockRenderProperties.INSTANCE, RtsEnergyBlocks.ENERGY_BANK.get());
         event.registerBlock(RtsBlockRenderProperties.INSTANCE, RtsEnergyBlocks.THERMAL_GENERATOR.get());
+        event.registerBlock(RtsBlockRenderProperties.INSTANCE, RtsEnergyBlocks.POWER_TOWER.get());
+        event.registerBlock(RtsBlockRenderProperties.INSTANCE, RtsEnergyBlocks.ENERGY_CELL.get());
     }
 }

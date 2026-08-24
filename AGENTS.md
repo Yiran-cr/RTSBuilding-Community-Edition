@@ -41,9 +41,9 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 
 | 包 | 内容与职责 |
 |---|---|
-| `api` | 全局门面 `RtsAPI.get()`（`@ApiStatus.Internal setImplementation` 由 main 注入）+ 10 个子 API：`storage`（存储查询）、`blueprint`（蓝图材料）、`placement`（远程放置）、`interaction`（远程交互）、`mining`（挖掘/超挖/区域）、`transfer`（物品转移）、`fluids`（流体）、`bindings`（存储绑定）、`sessions`（会话查询）、`energy`（见下）。另含领地保护 `ProtectionCheck`（@FunctionalInterface）+ `ProtectionRegistry`（静态注册表，远程操作前逐一 DENY/PASS 检查） |
+| `api` | 全局门面 `RtsAPI.get()`（`@ApiStatus.Internal setImplementation` 由 main 注入）+ 9 个子 API：`storage`（存储查询）、`blueprint`（蓝图材料）、`placement`（远程放置）、`interaction`（远程交互）、`mining`（挖掘/超挖/区域）、`transfer`（物品转移）、`fluids`（流体）、`bindings`（存储绑定）、`sessions`（会话查询）。另含领地保护 `ProtectionCheck`（@FunctionalInterface）+ `ProtectionRegistry`（静态注册表，远程操作前逐一 DENY/PASS 检查） |
 | `api.compat` | 宿主集成 SPI。`RtsCompatRegistry`（静态注册表：integration/storageProvider/fluidProvider/backpackProvider/iconResolver 五类列表）；`RtsIntegration`（addon 统一生命周期：integrationId/available/selfCheck/register，@Experimental）；`RtsStorageNetworkProvider`（把宿主存储网络暴露为 IItemHandler）、`RtsFluidNetworkProvider`、`RtsBackpackProvider`、`RtsIconResolver`；4 个 handler 增强接口：`ReportedCountItemHandler`（上报非堆叠精确计数）、`AnySlotInsertItemHandler`（任意槽插入）、`RefreshableSnapshotHandler`（快照刷新）、`DirectExtractHandler`（按物品直接提取） |
-| `api.energy` | Mekanism 风格能量 API（FE 单位）：`RtsEnergyAPI`（每玩家能量电网门面，`consume` 原子扣费）、`IEnergyContainer`（单容器，实现方只需 3 个方法其余默认）、`IEnergyHandler`（多容器分面）、`Action`（EXECUTE/SIMULATE）、`AutomationType`（EXTERNAL/INTERNAL/MANUAL）、`IContentsListener` |
+| `api.energy` | Mekanism 风格能量容器 API（FE 单位）：`IEnergyContainer`（单容器，实现方只需 3 个方法其余默认）、`IEnergyHandler`（多容器分面）、`Action`（EXECUTE/SIMULATE）、`AutomationType`（EXTERNAL/INTERNAL/MANUAL）、`IContentsListener` |
 | `common.build` | `BuilderMode`（OFF/SELECT_PAN/LINK_STORAGE/FUNNEL/INTERACT/ROTATE/BUILD/BLUEPRINT）。**故意放 api 模块**避免 common↔api 循环依赖 |
 
 ### 3.2 rtsbuilding-common — 共享玩法逻辑（包 `com.rtsbuilding.rtsbuilding`）
@@ -92,25 +92,24 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 | `client.scene` | **结构预览场景渲染**（参考 LDLib2 `WorldSceneRenderer`/`FBOWorldSceneRenderer`/`DummyWorld`，同为 NeoForge 1.21.1）：`RtsDummyLevel`（继承 Level 的纯内存虚拟世界，方块存 Map、光照固定 15、无实体/刻调度）、`RtsSceneRenderer`（VBO 缓存编译 + FBO 相机渲染 + 纹理绘制；球坐标相机 yaw/pitch/radius 支持拖拽旋转滚轮缩放；`RenderTargetScope` 保存/恢复 FBO+viewport+scissor） |
 | `client.rtsbuild.shape` | `BuildShape`（建造形状枚举：线/墙/平面/体/圆面/球）+ `ShapeGeometry` 纯几何计算；`LineBrushSelector` 画笔状态机 |
 | `client` 其他 | `camera/RtsCameraEntityRenderer`（隐形渲染器）、`domain/`（客户端领域模型）、`entity/`（`rts_drone` 无人机渲染 + 动画）、`application/service/ScreenCoordinator`（容器交互面板协调器）、`blueprint/BlueprintLocalStore`（本地蓝图文件存储 config/rts_building/blueprints）、`compat/`、`state/FeatureAdjusterState`、`util/` |
-| `common` | 主模组自有注册与桥：`RtsBlocks`/`RtsItems`/`RtsEntities`/`RtsCreativeTabs`（注册表）、`item/RtsTerminalItem`（终端物品，右键切换 RTS 模式 + 能量条）、`entity/RtsDroneEntity`（服务端权威无人机）、`RtsTerminalEnergy`（**终端能量桥**：静态 `AtomicReference<Provider>`，供能量插件注入）、`RtsBuildEnergy`（**建造耗能桥**，同上）、`geometry/RtsModelShapeParser`（模型 JSON→碰撞箱） |
+| `common` | 主模组自有注册与桥：`RtsBlocks`/`RtsItems`/`RtsEntities`/`RtsCreativeTabs`（注册表）、`item/RtsTerminalItem`（终端物品，右键切换 RTS 模式 + 能量条）、`entity/RtsDroneEntity`（服务端权威无人机）、`RtsTerminalEnergy`（**终端能量桥**：静态 `AtomicReference<Provider>`，供能量插件注入）、`geometry/RtsModelShapeParser`（模型 JSON→碰撞箱） |
 | `compat` | `jei/`（RtsJeiPlugin + 全局 GUI 处理器）、`remote/RtsRemoteMenuCompat`（原版箱子/铁炉/GeneratorGalore/Sophisticated 远程菜单检测）、`RemoteMenuTracker` |
 | `mixin` | 16 个 mixin（`rtsbuilding.mixins.json`）：`KeyboardInputMixin`（RTS 下完全接管键盘）、`MouseInputMixin`（阻断侧键）、`MinecraftSetScreenMixin`（容器屏幕嵌入 BuilderScreen 而非替换）、`LocalPlayerMixin`（强制 isControlledCamera）、`ChestMenuMixin`/`ModdedRemoteStillValidMixin`（远程 stillValid 强制通过，@Pseudo）、`ClientPacketListenerMixin`（吞 2001 破坏事件）、`ClientLevelMixin`（抑制粒子）、`ScreenRenderBgMixin`、`RtsGuiOverlayMixin`/`RtsChatComponentMixin`（暴露原版 actionbar/聊天消息，供 RTS 覆盖式 Screen 在下面板之上补渲染）、`RtsChatScreenMixin`（RTS 下打开原版 ChatScreen 关闭时恢复 BuilderScreen，聊天不退出 RTS）、`MinecraftTickMixin`、`LocalPlayerStepAiMixin` 等 |
 | `network` | `RtsPayloadRegistrar`（统一 payload 注册入口）、`ClientPayloadDispatcher`（S2C 分发桥，IS_CLIENT 守卫）、`NetworkConstants`、`message/C2SAction`（统一 C2S 动作：ActionType + NBT 参数，未知 id 返回 null 防恶意包）、`message/C2SCameraPosePayload`（高频姿态）、`handler/ServerActionHandler`（服务端统一分发约 40 种动作）、`{camera,storage,builder,feedback,blueprint,resume}/` 各领域 payload |
 | `platform` | `Platform`（注册表/配置/能力/发包的加载器统一抽象） |
-| `server` | 服务端逻辑（加载器侧）：`RtsServer`（服务注册表核心：ServiceLoader 发现 10 个 `RtsService`，按 dependencies 拓扑排序装配 + 集成健康检查）、`RtsService`（init/shutdown/dependencies）、`api/impl/`（`RtsAPIImpl` 总实现 + 各子 API *Impl，energy 由插件 `setEnergyApi` 注入）、`camera/RtsCameraManager`（相机会话/锚点/姿态钳位/动作范围 AABB）、`data/`（持久化：DataCluster/DataComponent/NbtCodec/SaveScheduler 每 200 tick 刷盘）、`history/ServerHistoryManager`（撤销系统：服务端权威记录、10 分钟过期、64 格/ tick 预算）、`pipeline/`（**工作流管道系统**：core 的 PipelinePipe/WorkflowPipeline/PipelineRegistry、validation 会话/维度校验、tool 工具借用/归还、mining、placement、blueprint、execution/SyncPipe、workflow）、`service/`（10 个服务实现 + mining/placement/fluids/transfer/page/interaction/bindings/beam 子包）、`storage/`（会话 `RtsStorageSession`/绑定/页面/流体/缓存/解析器/视图）、`workflow/`（工作流引擎 `RtsWorkflowEngine` 单例：每玩家每维度槽位管理器、脏标记每 tick 合并发包、存档恢复）、`tracking/RtsBlockTrackingEvents`、`util/` |
+| `server` | 服务端逻辑（加载器侧）：`RtsServer`（服务注册表核心：ServiceLoader 发现 10 个 `RtsService`，按 dependencies 拓扑排序装配 + 集成健康检查）、`RtsService`（init/shutdown/dependencies）、`api/impl/`（`RtsAPIImpl` 总实现 + 各子 API *Impl）、`camera/RtsCameraManager`（相机会话/锚点/姿态钳位/动作范围 AABB）、`data/`（持久化：DataCluster/DataComponent/NbtCodec/SaveScheduler 每 200 tick 刷盘）、`history/ServerHistoryManager`（撤销系统：服务端权威记录、10 分钟过期、64 格/ tick 预算）、`pipeline/`（**工作流管道系统**：core 的 PipelinePipe/WorkflowPipeline/PipelineRegistry、validation 会话/维度校验、tool 工具借用/归还、mining、placement、blueprint、execution/SyncPipe、workflow）、`service/`（10 个服务实现 + mining/placement/fluids/transfer/page/interaction/bindings/beam 子包）、`storage/`（会话 `RtsStorageSession`/绑定/页面/流体/缓存/解析器/视图）、`workflow/`（工作流引擎 `RtsWorkflowEngine` 单例：每玩家每维度槽位管理器、脏标记每 tick 合并发包、存档恢复）、`tracking/RtsBlockTrackingEvents`、`util/` |
 
 资源：`assets/rtsbuilding/`（lang 中英文各 ~284 key、`theme/uifw.json` 主题覆盖、`pinyin/data.txt` 拼音字典、`textures/gui/` 面板贴图、模型/纹理）、`data/rtsbuilding/tags/block/blueprint_soft_replaceable.json`、`META-INF/services/...RtsService`（ServiceLoader 声明）。`src/main/templates/META-INF/neoforge.mods.toml` 是构建期模板（见第五节）。
 
 ### 3.5 rtsbuilding-technologized — 内置能量插件（modId `rtsbuilding_technologized`，包 `com.rtsbuilding.rtsbuilding.energy`）
 
-"RTSbuilding 科技"：能量生产/存储 + 玩家能量网格 + 终端用电。可被 `Config.enableTechnologized` 整体禁用。
+"RTSbuilding 科技"：热能发电机产能 + 无线输电塔传输 + 储能单元 + 终端用电。可被 `Config.enableTechnologized` 整体禁用。**方块共三个：热能发电机 + 无线输电塔 + 储能单元**（无线节点/无线充电站/玩家能量网格等机制已移除）。
 
 | 包 | 内容与职责 |
 |---|---|
-| 根 | `RtsEnergyMod`（@Mod 入口，commonSetup 时向主模组注入三处钩子）、`RtsEnergyBlocks`/`RtsEnergyBlockEntities`/`RtsEnergyItems`/`RtsEnergyCreativeTabs`/`RtsEnergyCapabilities`（方块/方块实体/物品/创造栏/能力注册）、`RtsEnergyGameEvents`、`RtsTerminalEnergyImpl`（终端用电：`terminal_energy` 数据组件 + 物品 IEnergyStorage + `RtsTerminalEnergy.Provider` 实现，开启 RTS 扣 500 FE，亮绿能量条） |
-| `block` | `RtsEnergyBlock`（基类：记录归属者 UUID + RtsModelShapeParser 碰撞箱）、`RtsEnergyBankBlock`（储能单元）、`RtsThermalGeneratorBlock`（热能发电机：LIT/FACING 状态） |
-| `block.entity` | `RtsEnergyBlockEntity`（基类：RtsEnergyNode 网格注册/注销生命周期 + owner NBT）、`RtsEnergyBankBlockEntity`（400 万 FE 缓冲）、`RtsThermalGeneratorBlockEntity`（2 万 FE + 8000mB 岩浆罐，tick 产 60 FE）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
-| `server` | `RtsEnergyNetworkManager`（**玩家能量网格**：按维度/坐标索引节点，按 owner UUID 聚合，跨缓冲分摊充放）、`RtsEnergyApiImpl`（RtsEnergyAPI 实现，`setEnergyApi` 注入）、`RtsEnergyCostService`（建造耗能：energyPerPlacement × count，无网格不收费、电量不足限流提示）、`RtsEnergyNode`（节点接口） |
+| 根 | `RtsEnergyMod`（@Mod 入口，commonSetup 注入终端能量 Provider）、`RtsEnergyBlocks`/`RtsEnergyBlockEntities`/`RtsEnergyItems`/`RtsEnergyCreativeTabs`/`RtsEnergyCapabilities`（方块/方块实体/物品/创造栏/能力注册）、`RtsTerminalEnergyImpl`（终端用电：`terminal_energy` 数据组件 + 物品 IEnergyStorage + `RtsTerminalEnergy.Provider` 实现，开启 RTS 扣 500 FE，亮绿能量条） |
+| `block` | `RtsEnergyBlock`（基类：RtsModelShapeParser 碰撞箱）、`RtsThermalGeneratorBlock`（热能发电机：LIT/FACING 状态，岩浆燃烧产能）、`RtsPowerTowerBlock`（**无线输电塔**：戴森球式能量传输核心设施）、`RtsEnergyCellBlock`（储能单元：右键查看电量） |
+| `block.entity` | `RtsThermalGeneratorBlockEntity`（2 万 FE 缓冲 + 8000mB 岩浆罐，tick 产 60 FE，缓冲暴露 extract-only IEnergyStorage）、`RtsPowerTowerBlockEntity`（**无线输电塔**：自带 FE 缓冲（Config 容量），在覆盖范围（水平+垂直半径可配，默认 33×17×33）内分片扫描吸取能量源 + 分发给用电目标，限流/轮转防卡顿，塔间可互为源/目标接力）、`RtsEnergyCellBlockEntity`（储能单元：Config 容量缓冲，双向 IEnergyStorage，无 tick）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
 | `client` | `RtsEnergyClient`/`RtsBlockRenderProperties`（破坏粒子聚合器，参考 Mekanism） |
 
 ### 3.6 rtsaddon-* — 内置宿主集成插件（仓库根目录独立项目）
@@ -127,16 +126,16 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 ## 四、核心架构数据流（理解用）
 
 - **进入 RTS 模式**：手持 `rts_terminal` 右键 → 客户端 `RtsClientPacketGateway.sendToggleCamera` → `C2SAction(TOGGLE_CAMERA)` → `ServerActionHandler`（校验终端能量 `RtsTerminalEnergy`）→ `RtsCameraManager.toggle`（创建相机+无人机实体、建会话）→ S2C 相机回包 → `RtsClientKernel.dispatch` → 打开 `BuilderScreen`。
-- **远程建造**：BuilderScreen 捕获鼠标 → 形状计算（`BuildShape`/`LineBrushSelector`）→ `sendPlace/sendLinePlace/sendAreaBoxPlace` → `C2SAction(PLACE_BLOCK/PLACE_BATCH)` → `ServerActionHandler` → `RtsPlacementServiceImpl` → `PipelineRegistry.execute` 工作流（校验→工具借用→放置→同步）→ 放置批处理逐 tick 落位 → 动画/音效回客户端；每放一块 `RtsBuildEnergy.consumePlacement`（能量插件扣费，尽力扣费不阻断）。
+- **远程建造**：BuilderScreen 捕获鼠标 → 形状计算（`BuildShape`/`LineBrushSelector`）→ `sendPlace/sendLinePlace/sendAreaBoxPlace` → `C2SAction(PLACE_BLOCK/PLACE_BATCH)` → `ServerActionHandler` → `RtsPlacementServiceImpl` → `PipelineRegistry.execute` 工作流（校验→工具借用→放置→同步）→ 放置批处理逐 tick 落位 → 动画/音效回客户端。
 - **相机权威边界**：相机移动/旋转是纯客户端计算，客户端 10Hz + 变化检测上报姿态（专用 `C2SCameraPosePayload`），服务端 `RtsCameraManager` 钳位校验后作为权威位置（动作范围 AABB 判定、无人机跟随）。
-- **能量链路**：发电机 tick 产 60 FE → 入自身缓冲（`BasicEnergyContainer`）→ `RtsEnergyNetworkManager` 按 owner 聚合为玩家网格 → `RtsAPI.get().energy().consume(player, n)`（原子扣费）。外部模组经方块 `IEnergyStorage` capability ↔ `ContainerEnergyStorage` 适配器互动。
+- **能量链路（戴森球式无线输电）**：发电机 tick 产 60 FE → 入自身缓冲（`BasicEnergyContainer`）→ 无线输电塔在覆盖范围内吸取可提取的 FE 源（含发电机 extract-only 缓冲）进塔自带缓冲 → 再把 FE 无线分发给范围内需要能量的机器（模拟注入探测真实可接收量）。塔与塔互为源/目标可接力中继；能量只搬运、不凭空产生。外部模组经方块 `IEnergyStorage` capability ↔ `ContainerEnergyStorage` 适配器互动。建造操作不耗能。
 - **AE2 作为链接存储**：面板对准 ME 节点方块链接 → `RtsLinkedCapabilities.findLinkedItemHandler` 遍历 `RtsCompatRegistry.getStorageProviders()` → `Ae2StorageProvider.createItemHandler`（反射：GridHelper→Grid→StorageService）→ 注册进存储缓存，`RtsPageCore` 构建页面 S2C 推送；下线时 `releaseItemHandler` 释放网络句柄。
 
 ## 五、扩展点与打包机制（新增内置插件必读）
 
 - **`builtin_mods` 机制**：`gradle.properties` 的 `builtin_mods=rtsbuilding-technologized,rtsaddon-*` 是**单一来源清单**。`rtsbuilding-main/build.gradle` 从它派生：① `neoForge.mods{}` 把各插件 sourceSet 并入主 mod（dev 运行时）；② `jar{}` 把各插件 output 合并进主 JAR（uifw 合并时 exclude 自身 `META-INF/neoforge.mods.toml`）；③ `verifyAddonPackaging` 校验每个插件入口类已合入 + toml 已声明（挂在 `check`）。
 - **新增内置 addon 四步**：① `settings.gradle` include；② `gradle.properties` 的 `builtin_mods` 追加；③ `rtsbuilding-main/src/main/templates/META-INF/neoforge.mods.toml` 追加 `[[mods]]` 与 `[[dependencies.*]]`（主 mod required、宿主 mod optional 如 `ae2 [15,)`）；④ `rtsbuilding-main/build.gradle` 的 `addonManifest` 登记项目→modId→@Mod 入口类。任何宿主集成先检查是否已有 `rtsaddon-<host>/`。
-- **桥接注入模式**：主模组与内置插件通信走 3 种 `AtomicReference` 静态桥/注入——`RtsBuildEnergy`（主模组主动调用的耗能回调）、`RtsTerminalEnergy.Provider`（主模组被动查询的供应器）、`RtsAPIImpl.setEnergyApi`（对外 API 注入）；宿主集成统一走 `RtsCompatRegistry`。
+- **桥接注入模式**：主模组与内置插件通信走 1 种 `AtomicReference` 静态桥/注入——`RtsTerminalEnergy.Provider`（主模组被动查询的供应器）；宿主集成统一走 `RtsCompatRegistry`。
 - **协议枚举规则**（`ActionType`/`RtsWorkflowType`/`RtsWorkflowPriority`/`BuilderMode`）：必须**显式 id** 编解码（`fromId` 越界返回 null），删除值用 `@Deprecated` 占位保留 id 防新老端协议错位；改枚举后必须跑 `:rtsbuilding-main:test`（`ProtocolEnumTest` 等护栏）。
 - **uifw 打包注意**：toml 只放 `src/main/templates/`，**不要**放 `src/main/resources/`（否则 dev 运行与主 toml 双声明 modId 触发 `dangling_entrypoint`）；主模组依赖 uifw 用 `compileOnly` 而非 `implementation`（否则 `duplicate_mod`）。
 
@@ -147,6 +146,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 - **UI 布局规范**：新增面板 / 重构 UI 排布时，一律使用 uifw 布局包 `com.rtsbuilding.uifw.layout`（`FlexLayout` 行/列 + justify/align/gap/flex 权重、`GridLayout` 网格、`UiBox`/`UiSize` 尺寸声明），禁止手写散落坐标。行内排布用 `FlexLayout`；规则网格用 `GridLayout`；**渲染与命中检测必须复用同一布局计算**（参考 `ColorPickerPanel` 示范）。现有稳定面板不强改（tooltip/滚动/命中坐标耦合），后续重构时按此规范迁移。
 - **面板生成位置统一**：所有浮窗面板（`UiPanel` 子类）的 `computeDefaultPosition()` 一律使用统一基准——尺寸自适应（`w=min(getDefaultWidth(), 屏幕宽-16)`、`h` 类似，留 8px 边距）+ `positionCentered(TOP_H + 6, 8)`（水平居中 + 垂直居中，顶部避开顶栏、底部留 8px 边距）。参考 `GearMenuPanel`/`ResumeWorkflowPanel`/`InteractionPanel`/蓝图系面板实现。**禁止**自定义锚定（如固定右侧/左上），除非有强交互理由并注释说明。
 - **大尺寸贴图必须模糊化（mipmap）**：凡源图 ≥256px、实际绘制到 ≤24px（约 20 倍以上缩小）的 GUI 贴图，一律用 mipmap 平滑方案，禁止像素风采样。三要素缺一不可：① `TextureInfo.FilterMode` 用 `HQ`（linear+mipmap=true，绘制由 `TextureStateShard` 强制 `setFilter(true,true)`）；② 启动/资源重载时注册进 `RtsMipmapTextures.registerAll()`（用 `MipmapTexture` 加载生成完整 mip 链）；③ 贴图尺寸必须为 2 的幂。**不要**给这类贴图写 `blur:true` 的 `.mcmeta`（无效且误导，vanilla `SimpleTexture` 永不生成 mipmap）。已迁移：`textures/gui/left/right_button`、`textures/gui/left/button`、`textures/gui/top` 全部图标。
+- **多元素模型破坏粒子必须聚合**：凡碰撞箱由多个元素合并（`RtsModelShapeParser` 组合 / `VoxelShape` 含多个 AABB）的方块，破坏/挖掘时必须覆写 `IClientBlockExtensions.addDestroyEffects` 用整体包围盒聚合生成一组粒子（参考 `rtsbuilding-technologized` 的 `RtsBlockRenderProperties`，仿照 Mekanism：按 0.25 间隔在 shape 包围盒内散布 `TerrainParticle`），**禁止**用原版按碰撞箱每个 AABB 逐段生成粒子的默认行为（会造成粒子爆炸）。挂载方式：在客户端扩展注册事件（`RegisterClientExtensionsEvent`）中 `event.registerBlock(RtsBlockRenderProperties.INSTANCE, <block>)`。已挂载：`thermal_generator`/`power_tower`/`energy_cell`。新增多元素模型方块时必须同步挂载。
 
 ## 七、语言文件（lang）约定
 
