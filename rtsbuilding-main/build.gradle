@@ -147,9 +147,9 @@ tasks.named('processResources').configure {
 // 内置附加 mod 的「Gradle 子项目 → modId → 主 @Mod 类（相对 class 路径）」映射。
 // 新增内置 addon 时需在此登记（与 gradle.properties builtin_mods 及 neoforge.mods.toml 一致）。
 def addonManifest = [
-    'rtsbuilding-technologized'           : [
-        modId  : 'rtsbuilding_technologized',
-        entryClass: 'com/rtsbuilding/rtsbuilding/energy/RtsEnergyMod.class'
+    'rtsbuilding-planetrise'              : [
+        modId  : 'rtsbuilding_planetrise',
+        entryClass: 'com/rtsbuilding/rtsbuilding/planetrise/EnergyMod.class'
     ],
     'rtsaddon-ae2'                        : [
         modId  : 'rtsbuilding_addon_ae2',

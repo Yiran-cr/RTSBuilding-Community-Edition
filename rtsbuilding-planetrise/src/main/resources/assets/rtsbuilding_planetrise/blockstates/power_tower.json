@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "rtsbuilding_planetrise:block/power_tower"
+    }
+  }
+}

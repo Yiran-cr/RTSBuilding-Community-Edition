@@ -58,7 +58,7 @@ public final class RtsItems {
     // ============================================================
 
     /** RTS terminal — the handheld management console of the RTS system.
-     *  Durability-free by default; the rtsbuilding_technologized addon installs
+     *  Durability-free by default; the rtsbuilding_planetrise addon installs
      *  the energy capability to make it energy-powered. */
     public static final DeferredHolder<Item, Item> RTS_TERMINAL = registerItem(
             "rts_terminal", () -> new RtsTerminalItem(new Item.Properties().stacksTo(1)), true);

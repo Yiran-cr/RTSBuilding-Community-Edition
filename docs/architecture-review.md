@@ -28,9 +28,9 @@ RTS Building 是一个"像 RTS 一样从俯视视角建造"的 Minecraft 模组�
 | 定位 | 俯视视角 RTS 式建造模组（规划 / 放置 / 挖掘 / 材料管理） |
 | 版本 | 1.1.4（beta），LGPL-3.0-only |
 | 技术栈 | NeoForge 21.1.219 / Parchment 2024.11.17 / Java 21 / Gradle（ModDevGradle 2.0.140） |
-| 模块数 | 7 个 Gradle 子项目（common / api / main / technologized / addon×4） |
-| 代码量 | main ≈ 63,106 行（client 33,044 / server 25,357 / 其余 ~4.7K）；common 26 类；api 28 类；technologized 21 类 |
-| 内置 mod 数 | 6 个 modId 共居一 JAR（主 mod + technologized + AE2/RS/BD/SB 四个 addon） |
+| 模块数 | 7 个 Gradle 子项目（common / api / main / planetrise / addon×4） |
+| 代码量 | main ≈ 63,106 行（client 33,044 / server 25,357 / 其余 ~4.7K）；common 26 类；api 28 类；planetrise 21 类 |
+| 内置 mod 数 | 6 个 modId 共居一 JAR（主 mod + planetrise + AE2/RS/BD/SB 四个 addon） |
 | 测试 | 6 个 JUnit 5 测试类 + 3 个 `build.gradle` 残留依赖（JMH/SQLite） |
 | 文档体系 | `docs/reports/*.json`（链路检查报告，Vue SPA 渲染）+ `docs/change-log/*.md`（每日总结） |
 | 分支 | main / NeoForge-RTSBuildin-v2.0 / forge-1.20.1 / forge-1.19.2 / forge-1.12.2 / forge-1.7.10 / fabric-1.21.1 / neoforge-26.1 |
@@ -48,7 +48,7 @@ rtsbuilding-common（共享游戏逻辑，依赖 Minecraft 但不依赖 NeoForge
       ▲ compileOnly / sourceSet 合并
 rtsbuilding-main（NeoForge 平台层：注册 / 服务端 / 客户端 / 网络 / mixin）
       ▲ compileOnly
-rtsbuilding-technologized（能量附加：compileOnly api+common+main）
+rtsbuilding-planetrise（能量附加：compileOnly api+common+main）
 rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks（宿主集成，compileOnly api）
 ```
 
@@ -56,7 +56,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks（宿�
 
 - `rtsbuilding-main/build.gradle` 对 common/api 仅 `compileOnly`（运行时靠 `mods{sourceSet}` 合并 + `jar{from}` 打包），**main 绝不编译引用任何 addon 模块**。
 - common 依赖 api（`api project(':rtsbuilding-api')`），方向单向，无循环。
-- technologized 反向依赖 main 的桥接类（`RtsBuildEnergy`/`RtsTerminalEnergy`/`RtsAPIImpl`），即"主模挖洞、附加填洞"。
+- planetrise 反向依赖 main 的桥接类（`RtsBuildEnergy`/`RtsTerminalEnergy`/`RtsAPIImpl`），即"主模挖洞、附加填洞"。
 - 包名分区技巧规避循环：`BuilderMode` 放在 api 模块却保留 `common.build` 包名（注释明确说明原因）。
 
 ### 2.2 各模块职责与体量
@@ -66,7 +66,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks（宿�
 | rtsbuilding-api | 10 个子 API（placement/mining/interaction/fluid/blueprint/binding/transfer/session/storage/energy）+ `RtsCompatRegistry`（4 类 provider）+ `ProtectionRegistry` + 仿 Mekanism 能量 API（`Action`/`AutomationType`/`IEnergyContainer`） | `RtsAPI`、`RtsCompatRegistry`、`ProtectionRegistry` |
 | rtsbuilding-common | 蓝图格式解析（原版 NBT/Sponge/Litematica/BuildingGadgets）、蓝图模型（record）、蓝图旋转、软替换规则、能量容器默认实现、Ultimine BFS 收集器、工作流数据模型、拼音搜索、UI 状态持久化抽象 | `RtsBlueprint`、`BlueprintReaders`/`BlueprintWriters`、`RtsUltimineCollector`、`ActionType`、`RtsWorkflowStatus` |
 | rtsbuilding-main | 注册层（方块/物品/实体/创造页）、客户端全屏 UI 体系、形状画笔、世界渲染 pass 管线、mixin（11 个）、服务端 20+ 服务、工作流引擎、网络（C2S 统一通道 + 多域 S2C）、宿主兼容 | `RtsbuildingMod`、`RtsServer`、`BuilderScreen`、`BuildShape`、`RtsWorkflowEngine`、`RtsCameraManager`、`ServerActionHandler` |
-| rtsbuilding-technologized | 玩家级能量网格（按 owner 聚合，非空间网格）、储能单元/热能发电机、终端耗电、放置计费、config 可整体关闭 | `RtsEnergyNetworkManager`、`RtsEnergyCostService`、`RtsTerminalEnergyImpl` |
+| rtsbuilding-planetrise | 玩家级能量网格（按 owner 聚合，非空间网格）、储能单元/热能发电机、终端耗电、放置计费、config 可整体关闭 | `RtsEnergyNetworkManager`、`RtsEnergyCostService`、`RtsTerminalEnergyImpl` |
 | rtsaddon-ae2 | MethodHandles 反射绑定 appeng API，注册存储/流体/图标 3 个 provider | `RtsAe2Addon`、`Ae2NetworkItemHandler` |
 | rtsaddon-refinedstorage | 反射绑定 RS2 API，注册存储 provider（**当前只读，见问题 P0-1**） | `RtsRefinedStorageAddon` |
 | rtsaddon-beyonddimensions | **直接编译引用**宿主 mod（唯一非反射），注册存储/流体 provider | `RtsBeyondDimensionsAddon` |
@@ -78,7 +78,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks（宿�
 
 ### 3.1 "单 JAR 多 mod"打包范式
 
-`rtsbuilding-main/build.gradle:189` 的 `jar` 任务用 `from project(':xxx').sourceSets.main.output` 把 7 个子项目的 class 全部并入主 JAR；`neoforge.mods.toml` 模板声明 6 个 `[[mods]]`（rtsbuilding、rtsbuilding_technologized、rtsbuilding_addon_ae2/refinedstorage/beyonddimensions/sophisticatedbackpacks），各自带独立 `@Mod` 注解由 FML 在同 JAR 内实例化。
+`rtsbuilding-main/build.gradle:189` 的 `jar` 任务用 `from project(':xxx').sourceSets.main.output` 把 7 个子项目的 class 全部并入主 JAR；`neoforge.mods.toml` 模板声明 6 个 `[[mods]]`（rtsbuilding、rtsbuilding_planetrise、rtsbuilding_addon_ae2/refinedstorage/beyonddimensions/sophisticatedbackpacks），各自带独立 `@Mod` 注解由 FML 在同 JAR 内实例化。
 
 依赖声明用 `[[dependencies]]` 控制顺序：addon 对主 mod `required`（保证主 mod 先构造）、对宿主 mod `optional`。这解决了 NeoForge 多项目 mod 的加载顺序问题，无需额外产物管理。
 
@@ -86,8 +86,8 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks（宿�
 
 ### 3.2 主模/附加解耦的三板斧
 
-1. **`AtomicReference` 桥钩子**：`RtsBuildEnergy`（放置计费）、`RtsTerminalEnergy`（终端耗电）定义在主 mod 的 `common` 包，由 technologized 在 `commonSetup` 注入；主模调用点 `get()` 判空，无附加时零开销 no-op。
-2. **API 单例注入**：`RtsAPIImpl.setEnergyApi()`（`volatile` 字段）由 technologized 注入。
+1. **`AtomicReference` 桥钩子**：`RtsBuildEnergy`（放置计费）、`RtsTerminalEnergy`（终端耗电）定义在主 mod 的 `common` 包，由 planetrise 在 `commonSetup` 注入；主模调用点 `get()` 判空，无附加时零开销 no-op。
+2. **API 单例注入**：`RtsAPIImpl.setEnergyApi()`（`volatile` 字段）由 planetrise 注入。
 3. **静态注册表**：`RtsCompatRegistry`（api 模块）——addon 构造时 `register()`，主模 8+ 个消费点遍历取用。
 
 整个体系没有 `ServiceLoader`/反射做跨 mod 服务发现（ServiceLoader 仅用于 main 内部 `RtsService` 发现 10 个 ServiceImpl）。
@@ -134,7 +134,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks（宿�
 ```
 客户端按下终端 → RtsClientPacketGateway.sendToggleCamera → C2SAction(TOGGLE_CAMERA)
   → ServerActionHandler.handle (enqueueWork)
-  → RtsTerminalEnergy.Provider 判空扣费（无 technologized 则跳过）
+  → RtsTerminalEnergy.Provider 判空扣费（无 planetrise 则跳过）
   → 记录终端 UUID、点亮 lit、创建 RtsCameraEntity
   → 回 S2CRtsCameraStatePayload
 客户端 handleCameraState → CameraModule 应用状态
@@ -190,7 +190,7 @@ AE2/RS/SB 三处 MethodHandles 硬编码类名+方法签名（如 `com.refinedst
 ### P3 — 代码质量/待迁移
 
 - **P3-1**：`BuildShape.hint()` 交互提示硬编码中文（含 `LineBrushSelector` 的 `replace("建造","破坏")` 文案替换）；`BindingRenderer`/`RowLayout` 绑定按钮文字、`RenderingSection` 颜色标签均未迁移 lang（AGENTS.md 自知，列为后续项）。
-- **P3-2**：`@EventBusSubscriber` 默认 GAME 总线却监听 `RegisterClientExtensionsEvent` 等 MOD 生命周期事件（technologized 与 main 的 `RtsClientBootstrap` 同模式），未显式 `bus = Bus.MOD`，依赖 NeoForge 对事件类型的特殊处理，属隐性约定。
+- **P3-2**：`@EventBusSubscriber` 默认 GAME 总线却监听 `RegisterClientExtensionsEvent` 等 MOD 生命周期事件（planetrise 与 main 的 `RtsClientBootstrap` 同模式），未显式 `bus = Bus.MOD`，依赖 NeoForge 对事件类型的特殊处理，属隐性约定。
 - **P3-3**：中英注释混用（model 包英文 / io、transform 包中文），与"统一简体中文注释"约定有出入。
 - **P3-4**：`BuildingGadgetsTemplateReader` 的魔法字节掩码（`B1/B2/B3_BYTE_MASK`、`legacyPos/legacyStateId`）无独立注释说明编码布局，依赖 BG 格式领域知识。
 

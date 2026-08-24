@@ -1,7 +1,7 @@
 // ============================================================
 // RTS Building · 功能总览数据
 // 由源码逐模块梳理（rtsbuilding-common / rtsbuilding-main /
-// rtsbuilding-api / rtsbuilding-technologized / rtsaddon-*）
+// rtsbuilding-api / rtsbuilding-planetrise / rtsaddon-*）
 // 结构：modules[].features[].{name,desc,classes}
 // ============================================================
 
@@ -510,7 +510,7 @@ export const featuresCatalog = {
     {
       id: 'energy',
       name: '能源系统',
-      tagline: '内置 addon（rtsbuilding_technologized）：热能发电 + 储能 + 建造计费',
+      tagline: '内置 addon（rtsbuilding_planetrise）：热能发电 + 储能 + 建造计费',
       features: [
         {
           name: '热能发电机',

@@ -24,7 +24,7 @@ import java.util.UUID;
  * <p>
  * By default the terminal is a plain, durability-free item: it can be used
  * unlimited times and shows no energy bar. When the built-in
- * {@code rtsbuilding_technologized} addon is present it installs an energy
+ * {@code rtsbuilding_planetrise} addon is present it installs an energy
  * provider (plus the standard {@code IEnergyStorage} item capability), turning
  * the terminal into an energy-powered tool with a Mekanism-style energy bar and
  * tooltip.

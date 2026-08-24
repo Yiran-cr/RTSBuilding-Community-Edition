@@ -28,12 +28,12 @@ rtsbuilding-api        ← 依赖底层（仅 NeoForge 环境 + JetBrains 注解
 rtsbuilding-common ──api──▶ rtsbuilding-api          （共享玩法逻辑）
 rtsbuilding-ui      ◀── 完全独立，不引用任何 RTS 代码（modId=uifw，独立版本号）
 rtsbuilding-main    ──compileOnly──▶ api / common / ui （主模组：NeoForge 平台层 + 打包宿主）
-rtsbuilding-technologized ──compileOnly──▶ api / common / main  （内置能量插件）
+rtsbuilding-planetrise ──compileOnly──▶ api / common / main  （内置能量插件）
 rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
                     ──compileOnly──▶ api（BD 额外编译期耦合宿主）  （内置宿主集成插件）
 ```
 
-**关键约束**：主模组**禁止**编译期引用内置插件模块（technologized / rtsaddon-*）。插件通过 `rtsbuilding-api` 的接口 + `common`/`main` 中的静态桥（`AtomicReference` 注入）与主模组通信。最终所有内置插件 + ui + common + api 的产物全部**合并进主模组 JAR**（单 JAR 多 mod）。
+**关键约束**：主模组**禁止**编译期引用内置插件模块（planetrise / rtsaddon-*）。插件通过 `rtsbuilding-api` 的接口 + `common`/`main` 中的静态桥（`AtomicReference` 注入）与主模组通信。最终所有内置插件 + ui + common + api 的产物全部**合并进主模组 JAR**（单 JAR 多 mod）。
 
 ### 3.1 rtsbuilding-api — 公共 API 层（包 `com.rtsbuilding.rtsbuilding.api`）
 
@@ -101,16 +101,16 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 
 资源：`assets/rtsbuilding/`（lang 中英文各 ~284 key、`theme/uifw.json` 主题覆盖、`pinyin/data.txt` 拼音字典、`textures/gui/` 面板贴图、模型/纹理）、`data/rtsbuilding/tags/block/blueprint_soft_replaceable.json`、`META-INF/services/...RtsService`（ServiceLoader 声明）。`src/main/templates/META-INF/neoforge.mods.toml` 是构建期模板（见第五节）。
 
-### 3.5 rtsbuilding-technologized — 内置能量插件（modId `rtsbuilding_technologized`，包 `com.rtsbuilding.rtsbuilding.energy`）
+### 3.5 rtsbuilding-planetrise — 内置能量插件（modId `rtsbuilding_planetrise`，包 `com.rtsbuilding.rtsbuilding.planetrise`）
 
-"RTSbuilding 科技"：热能发电机产能 + 无线输电塔传输 + 储能单元 + 终端用电。可被 `Config.enableTechnologized` 整体禁用。**方块共三个：热能发电机 + 无线输电塔 + 储能单元**（无线节点/无线充电站/玩家能量网格等机制已移除）。
+"Planet Rise（星球崛起）"：热能发电机产能 + 无线输电塔传输 + 储能单元 + 终端用电。可被 `Config.enableTechnologized` 整体禁用。**方块共三个：热能发电机 + 无线输电塔 + 储能单元**（无线节点/无线充电站/玩家能量网格等机制已移除）。
 
 | 包 | 内容与职责 |
 |---|---|
-| 根 | `RtsEnergyMod`（@Mod 入口，commonSetup 注入终端能量 Provider）、`RtsEnergyBlocks`/`RtsEnergyBlockEntities`/`RtsEnergyItems`/`RtsEnergyCreativeTabs`/`RtsEnergyCapabilities`（方块/方块实体/物品/创造栏/能力注册）、`RtsTerminalEnergyImpl`（终端用电：`terminal_energy` 数据组件 + 物品 IEnergyStorage + `RtsTerminalEnergy.Provider` 实现，开启 RTS 扣 500 FE，亮绿能量条） |
-| `block` | `RtsEnergyBlock`（基类：RtsModelShapeParser 碰撞箱）、`RtsThermalGeneratorBlock`（热能发电机：LIT/FACING 状态，岩浆燃烧产能）、`RtsPowerTowerBlock`（**无线输电塔**：戴森球式能量传输核心设施）、`RtsEnergyCellBlock`（储能单元：右键查看电量） |
-| `block.entity` | `RtsThermalGeneratorBlockEntity`（2 万 FE 缓冲 + 8000mB 岩浆罐，tick 产 60 FE，缓冲暴露 extract-only IEnergyStorage）、`RtsPowerTowerBlockEntity`（**无线输电塔**：自带 FE 缓冲（Config 容量），在覆盖范围（水平+垂直半径可配，默认 33×17×33）内分片扫描吸取能量源 + 分发给用电目标；搬运用**公平按需调度**：按需求/存量比例配额 + 欠账 credit 补偿（不饿死不硬塞、均衡抽取），塔间可互为源/目标接力）、`RtsEnergyCellBlockEntity`（储能单元：Config 容量缓冲，双向 IEnergyStorage，无 tick）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
-| `client` | `RtsEnergyClient`/`RtsBlockRenderProperties`（破坏粒子聚合器，参考 Mekanism） |
+| 根 | `EnergyMod`（@Mod 入口，commonSetup 注入终端能量 Provider）、`EnergyBlocks`/`EnergyBlockEntities`/`EnergyItems`/`EnergyCreativeTabs`/`EnergyCapabilities`（方块/方块实体/物品/创造栏/能力注册）、`TerminalEnergyImpl`（终端用电：`terminal_energy` 数据组件 + 物品 IEnergyStorage + `RtsTerminalEnergy.Provider` 实现，开启 RTS 扣 500 FE，亮绿能量条） |
+| `block` | `EnergyBlock`（基类：RtsModelShapeParser 碰撞箱）、`ThermalGeneratorBlock`（热能发电机：LIT/FACING 状态，岩浆燃烧产能）、`PowerTowerBlock`（**无线输电塔**：戴森球式能量传输核心设施）、`EnergyCellBlock`（储能单元：右键查看电量） |
+| `block.entity` | `ThermalGeneratorBlockEntity`（2 万 FE 缓冲 + 8000mB 岩浆罐，tick 产 60 FE，缓冲暴露 extract-only IEnergyStorage）、`PowerTowerBlockEntity`（**无线输电塔**：自带 FE 缓冲（Config 容量），在覆盖范围（水平+垂直半径可配，默认 33×17×33）内分片扫描吸取能量源 + 分发给用电目标；搬运用**公平按需调度**：按需求/存量比例配额 + 欠账 credit 补偿（不饿死不硬塞、均衡抽取），塔间可互为源/目标接力）、`EnergyCellBlockEntity`（储能单元：Config 容量缓冲，双向 IEnergyStorage，无 tick）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
+| `client` | `EnergyClient`/`BlockRenderProperties`（破坏粒子聚合器，参考 Mekanism） |
 
 ### 3.6 rtsaddon-* — 内置宿主集成插件（仓库根目录独立项目）
 
@@ -133,7 +133,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 
 ## 五、扩展点与打包机制（新增内置插件必读）
 
-- **`builtin_mods` 机制**：`gradle.properties` 的 `builtin_mods=rtsbuilding-technologized,rtsaddon-*` 是**单一来源清单**。`rtsbuilding-main/build.gradle` 从它派生：① `neoForge.mods{}` 把各插件 sourceSet 并入主 mod（dev 运行时）；② `jar{}` 把各插件 output 合并进主 JAR（uifw 合并时 exclude 自身 `META-INF/neoforge.mods.toml`）；③ `verifyAddonPackaging` 校验每个插件入口类已合入 + toml 已声明（挂在 `check`）。
+- **`builtin_mods` 机制**：`gradle.properties` 的 `builtin_mods=rtsbuilding-planetrise,rtsaddon-*` 是**单一来源清单**。`rtsbuilding-main/build.gradle` 从它派生：① `neoForge.mods{}` 把各插件 sourceSet 并入主 mod（dev 运行时）；② `jar{}` 把各插件 output 合并进主 JAR（uifw 合并时 exclude 自身 `META-INF/neoforge.mods.toml`）；③ `verifyAddonPackaging` 校验每个插件入口类已合入 + toml 已声明（挂在 `check`）。
 - **新增内置 addon 四步**：① `settings.gradle` include；② `gradle.properties` 的 `builtin_mods` 追加；③ `rtsbuilding-main/src/main/templates/META-INF/neoforge.mods.toml` 追加 `[[mods]]` 与 `[[dependencies.*]]`（主 mod required、宿主 mod optional 如 `ae2 [15,)`）；④ `rtsbuilding-main/build.gradle` 的 `addonManifest` 登记项目→modId→@Mod 入口类。任何宿主集成先检查是否已有 `rtsaddon-<host>/`。
 - **桥接注入模式**：主模组与内置插件通信走 1 种 `AtomicReference` 静态桥/注入——`RtsTerminalEnergy.Provider`（主模组被动查询的供应器）；宿主集成统一走 `RtsCompatRegistry`。
 - **协议枚举规则**（`ActionType`/`RtsWorkflowType`/`RtsWorkflowPriority`/`BuilderMode`）：必须**显式 id** 编解码（`fromId` 越界返回 null），删除值用 `@Deprecated` 占位保留 id 防新老端协议错位；改枚举后必须跑 `:rtsbuilding-main:test`（`ProtocolEnumTest` 等护栏）。
@@ -146,7 +146,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 - **UI 布局规范**：新增面板 / 重构 UI 排布时，一律使用 uifw 布局包 `com.rtsbuilding.uifw.layout`（`FlexLayout` 行/列 + justify/align/gap/flex 权重、`GridLayout` 网格、`UiBox`/`UiSize` 尺寸声明），禁止手写散落坐标。行内排布用 `FlexLayout`；规则网格用 `GridLayout`；**渲染与命中检测必须复用同一布局计算**（参考 `ColorPickerPanel` 示范）。现有稳定面板不强改（tooltip/滚动/命中坐标耦合），后续重构时按此规范迁移。
 - **面板生成位置统一**：所有浮窗面板（`UiPanel` 子类）的 `computeDefaultPosition()` 一律使用统一基准——尺寸自适应（`w=min(getDefaultWidth(), 屏幕宽-16)`、`h` 类似，留 8px 边距）+ `positionCentered(TOP_H + 6, 8)`（水平居中 + 垂直居中，顶部避开顶栏、底部留 8px 边距）。参考 `GearMenuPanel`/`ResumeWorkflowPanel`/`InteractionPanel`/蓝图系面板实现。**禁止**自定义锚定（如固定右侧/左上），除非有强交互理由并注释说明。
 - **大尺寸贴图必须模糊化（mipmap）**：凡源图 ≥256px、实际绘制到 ≤24px（约 20 倍以上缩小）的 GUI 贴图，一律用 mipmap 平滑方案，禁止像素风采样。三要素缺一不可：① `TextureInfo.FilterMode` 用 `HQ`（linear+mipmap=true，绘制由 `TextureStateShard` 强制 `setFilter(true,true)`）；② 启动/资源重载时注册进 `RtsMipmapTextures.registerAll()`（用 `MipmapTexture` 加载生成完整 mip 链）；③ 贴图尺寸必须为 2 的幂。**不要**给这类贴图写 `blur:true` 的 `.mcmeta`（无效且误导，vanilla `SimpleTexture` 永不生成 mipmap）。已迁移：`textures/gui/left/right_button`、`textures/gui/left/button`、`textures/gui/top` 全部图标。
-- **多元素模型破坏粒子必须聚合**：凡碰撞箱由多个元素合并（`RtsModelShapeParser` 组合 / `VoxelShape` 含多个 AABB）的方块，破坏/挖掘时必须覆写 `IClientBlockExtensions.addDestroyEffects` 用整体包围盒聚合生成一组粒子（参考 `rtsbuilding-technologized` 的 `RtsBlockRenderProperties`，仿照 Mekanism：按 0.25 间隔在 shape 包围盒内散布 `TerrainParticle`），**禁止**用原版按碰撞箱每个 AABB 逐段生成粒子的默认行为（会造成粒子爆炸）。挂载方式：在客户端扩展注册事件（`RegisterClientExtensionsEvent`）中 `event.registerBlock(RtsBlockRenderProperties.INSTANCE, <block>)`。已挂载：`thermal_generator`/`power_tower`/`energy_cell`。新增多元素模型方块时必须同步挂载。
+- **多元素模型破坏粒子必须聚合**：凡碰撞箱由多个元素合并（`RtsModelShapeParser` 组合 / `VoxelShape` 含多个 AABB）的方块，破坏/挖掘时必须覆写 `IClientBlockExtensions.addDestroyEffects` 用整体包围盒聚合生成一组粒子（参考 `rtsbuilding-planetrise` 的 `BlockRenderProperties`，仿照 Mekanism：按 0.25 间隔在 shape 包围盒内散布 `TerrainParticle`），**禁止**用原版按碰撞箱每个 AABB 逐段生成粒子的默认行为（会造成粒子爆炸）。挂载方式：在客户端扩展注册事件（`RegisterClientExtensionsEvent`）中 `event.registerBlock(BlockRenderProperties.INSTANCE, <block>)`。已挂载：`thermal_generator`/`power_tower`/`energy_cell`。新增多元素模型方块时必须同步挂载。
 
 ## 七、语言文件（lang）约定
 

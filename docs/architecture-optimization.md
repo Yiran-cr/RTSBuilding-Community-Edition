@@ -276,7 +276,7 @@ CI 脚本（或独立 Gradle task）比对 `zh_cn.json` / `en_us.json` 的 key �
 **现状**：`neoforge.mods.toml` 模板手写 6 个 `[[mods]]`，`build.gradle` 的 `mods{}`/`jar{from}` 手列 7 个 sourceSet——两处易失同步。
 
 **方案**：
-- `gradle.properties` 定义 `builtin_mods = rtsbuilding-technologized,rtsaddon-ae2,...` 单一来源
+- `gradle.properties` 定义 `builtin_mods = rtsbuilding-planetrise,rtsaddon-ae2,...` 单一来源
 - `build.gradle` 读取该列表生成 `mods{}` sourceSet 引用与 `jar{from}` 输出
 - `neoforge.mods.toml` 模板改为由 Gradle task 从列表生成（或保留模板但加校验 task：清单一致性断言）
 

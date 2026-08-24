@@ -27,9 +27,9 @@ main RTS Building mod; also distributable on its own.
 '''
 
 [[mods]]
-modId="rtsbuilding_technologized"
+modId="rtsbuilding_planetrise"
 version="${mod_version}"
-displayName="RTSbuilding Technologized"
+displayName="Planet Rise"
 credits="卓清婉, 凌墨问, 可怜Bot, Yiran, ReConstruction-127"
 authors="${mod_authors}"
 description='''
@@ -115,21 +115,21 @@ config="${mod_id}.mixins.json"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.rtsbuilding_technologized]]
+[[dependencies.rtsbuilding_planetrise]]
     modId="neoforge"
     type="required"
     versionRange="[${neo_version},)"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.rtsbuilding_technologized]]
+[[dependencies.rtsbuilding_planetrise]]
     modId="minecraft"
     type="required"
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.rtsbuilding_technologized]]
+[[dependencies.rtsbuilding_planetrise]]
     modId="${mod_id}"
     type="required"
     versionRange="[${mod_version},)"

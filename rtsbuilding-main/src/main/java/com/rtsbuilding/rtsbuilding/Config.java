@@ -55,13 +55,13 @@ public class Config {
     // ---- Energy system options ----
 
     public static final ModConfigSpec.BooleanValue ENABLE_TECHNOLOGIZED = BUILDER
-            .comment("Enable the built-in rtsbuilding-technologized addon (energy & power system).",
+            .comment("Enable the built-in rtsbuilding-planetrise addon (energy & power system).",
                     "Set to false to disable the energy addon's functionality (no energy blocks, no energy transfer).")
             .translation("rtsbuilding.configuration.enableTechnologized")
             .define("enableTechnologized", true);
 
     public static final ModConfigSpec.LongValue POWER_TOWER_CAPACITY = BUILDER
-            .comment("FE storage capacity of one wireless power tower (rtsbuilding_technologized).",
+            .comment("FE storage capacity of one wireless power tower (rtsbuilding_planetrise).",
                     "The tower buffers energy locally and distributes it wirelessly within its coverage area.")
             .translation("rtsbuilding.configuration.powerTowerCapacity")
             .defineInRange("powerTowerCapacity", 1_000_000L, 1L, Long.MAX_VALUE);
@@ -85,7 +85,7 @@ public class Config {
             .defineInRange("powerTowerTransferRate", 2000L, 0L, Long.MAX_VALUE);
 
     public static final ModConfigSpec.LongValue ENERGY_CELL_CAPACITY = BUILDER
-            .comment("FE storage capacity of one energy cell block (rtsbuilding_technologized).",
+            .comment("FE storage capacity of one energy cell block (rtsbuilding_planetrise).",
                     "The cell buffers energy and can be charged/discharged by pipes or power towers.")
             .translation("rtsbuilding.configuration.energyCellCapacity")
             .defineInRange("energyCellCapacity", 4_000_000L, 1L, Long.MAX_VALUE);
@@ -179,7 +179,7 @@ public class Config {
         SPEC.save();
     }
 
-    /** Whether the built-in rtsbuilding-technologized (energy & power) addon is enabled. */
+    /** Whether the built-in rtsbuilding-planetrise (energy & power) addon is enabled. */
     public static boolean isTechnologizedEnabled() {
         return ENABLE_TECHNOLOGIZED.getAsBoolean();
     }

@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Optional bridge to the terminal energy system, provided by the built-in
- * {@code rtsbuilding_technologized} addon.
+ * {@code rtsbuilding_planetrise} addon.
  * <p>
  * The main mod's {@code rts_terminal} is a plain, durability-free item by
  * default: when no energy provider is installed it can be used unlimited times

@@ -1,0 +1,14 @@
+{
+  "itemGroup.rtsbuilding_planetrise": "Planet Rise",
+
+  "item.rtsbuilding_planetrise.thermal_generator": "热能发电机",
+  "block.rtsbuilding_planetrise.thermal_generator": "热能发电机",
+
+  "item.rtsbuilding_planetrise.power_tower": "无线输电塔",
+  "block.rtsbuilding_planetrise.power_tower": "无线输电塔",
+
+  "item.rtsbuilding_planetrise.energy_cell": "储能单元",
+  "block.rtsbuilding_planetrise.energy_cell": "储能单元",
+
+  "message.rtsbuilding_planetrise.energy_cell_info": "储能单元电量：%s / %s FE"
+}

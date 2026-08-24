@@ -19,7 +19,7 @@ include "rtsbuilding-api"
 include "rtsbuilding-main"
 
 // Built-in addon: energy & power system, packaged inside the main mod JAR
-include "rtsbuilding-technologized"
+include "rtsbuilding-planetrise"
 
 // Addon mods
 include "rtsaddon-ae2"

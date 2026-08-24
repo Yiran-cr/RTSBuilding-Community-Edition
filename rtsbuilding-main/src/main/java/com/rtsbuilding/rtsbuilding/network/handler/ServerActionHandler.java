@@ -54,7 +54,7 @@ public final class ServerActionHandler {
                 String terminalUuid = null;
                 if (enable) {
                     ItemStack terminal = ItemStack.EMPTY;
-                    // Turn-on may consume terminal energy when the rtsbuilding_technologized
+                    // Turn-on may consume terminal energy when the rtsbuilding_planetrise
                     // addon is installed; without it the terminal is durability-free.
                     RtsTerminalEnergy.Provider energy = RtsTerminalEnergy.get();
                     if (energy != null) {
