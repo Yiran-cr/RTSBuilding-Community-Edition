@@ -2,6 +2,7 @@ build/
 !rtsbuilding-api/src/main/java/com/rtsbuilding/rtsbuilding/common/build/
 .gradle/
 .github/
+.vscode/
 run/
 /entity/
 
