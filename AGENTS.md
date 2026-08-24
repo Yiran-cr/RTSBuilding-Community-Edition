@@ -109,7 +109,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 |---|---|
 | 根 | `RtsEnergyMod`（@Mod 入口，commonSetup 注入终端能量 Provider）、`RtsEnergyBlocks`/`RtsEnergyBlockEntities`/`RtsEnergyItems`/`RtsEnergyCreativeTabs`/`RtsEnergyCapabilities`（方块/方块实体/物品/创造栏/能力注册）、`RtsTerminalEnergyImpl`（终端用电：`terminal_energy` 数据组件 + 物品 IEnergyStorage + `RtsTerminalEnergy.Provider` 实现，开启 RTS 扣 500 FE，亮绿能量条） |
 | `block` | `RtsEnergyBlock`（基类：RtsModelShapeParser 碰撞箱）、`RtsThermalGeneratorBlock`（热能发电机：LIT/FACING 状态，岩浆燃烧产能）、`RtsPowerTowerBlock`（**无线输电塔**：戴森球式能量传输核心设施）、`RtsEnergyCellBlock`（储能单元：右键查看电量） |
-| `block.entity` | `RtsThermalGeneratorBlockEntity`（2 万 FE 缓冲 + 8000mB 岩浆罐，tick 产 60 FE，缓冲暴露 extract-only IEnergyStorage）、`RtsPowerTowerBlockEntity`（**无线输电塔**：自带 FE 缓冲（Config 容量），在覆盖范围（水平+垂直半径可配，默认 33×17×33）内分片扫描吸取能量源 + 分发给用电目标，限流/轮转防卡顿，塔间可互为源/目标接力）、`RtsEnergyCellBlockEntity`（储能单元：Config 容量缓冲，双向 IEnergyStorage，无 tick）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
+| `block.entity` | `RtsThermalGeneratorBlockEntity`（2 万 FE 缓冲 + 8000mB 岩浆罐，tick 产 60 FE，缓冲暴露 extract-only IEnergyStorage）、`RtsPowerTowerBlockEntity`（**无线输电塔**：自带 FE 缓冲（Config 容量），在覆盖范围（水平+垂直半径可配，默认 33×17×33）内分片扫描吸取能量源 + 分发给用电目标；搬运用**公平按需调度**：按需求/存量比例配额 + 欠账 credit 补偿（不饿死不硬塞、均衡抽取），塔间可互为源/目标接力）、`RtsEnergyCellBlockEntity`（储能单元：Config 容量缓冲，双向 IEnergyStorage，无 tick）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
 | `client` | `RtsEnergyClient`/`RtsBlockRenderProperties`（破坏粒子聚合器，参考 Mekanism） |
 
 ### 3.6 rtsaddon-* — 内置宿主集成插件（仓库根目录独立项目）

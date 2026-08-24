@@ -17,7 +17,10 @@ import net.neoforged.neoforge.energy.IEnergyStorage;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 无线输电塔方块实体——戴森球式能量传输的核心设施。
@@ -32,12 +35,22 @@ import java.util.List;
  * 塔与塔之间可互为源/目标实现中继，能量只搬运、不凭空产生（守恒）。覆盖范围在创建时从
  * 配置读取一次，改配置需重启生效。
  * <p>
+ * <b>搬运调度（公平按需调度，欠账补偿）</b>：吸取与分发不再是简单的先到先得，而是每个
+ * 源/目标都维护一份「欠账」credit：
+ * <ul>
+ *   <li><b>分发侧</b>：每 tick 按各目标<b>需求余量占比</b>累计配额（需求越大配额越高），
+ *       随后每次都优先服务「欠账最高」的目标——快满的目标配额自然趋零，被跳过的目标
+ *       欠账累积、下次优先补偿，长期看每个目标按需求比例获得能量，不会饿死也不会硬塞；</li>
+ *   <li><b>提取侧</b>：每 tick 按各源<b>存量占比</b>累计配额，均衡抽取——不会盯住一个源
+ *       掏空，长期让各源存量趋于均衡。</li>
+ * </ul>
+ * <p>
  * <b>性能优化</b>（覆盖范围默认 33×17×33 格）：
  * <ul>
  *   <li><b>分片扫描</b>：把整个范围按 {@link #SCAN_INTERVAL} tick 分摊，每 tick 只扫描一小段，
  *       新源/新目标最多 1 秒内被发现；</li>
- *   <li><b>每 tick 限流 + 公平轮转</b>：吸取与分发各受每 tick 处理数上限与速率预算
- *       （{@code powerTowerTransferRate}）约束，并用游标轮转保证大范围内多个目标轮流服务。</li>
+ *   <li><b>每 tick 限流</b>：吸取与分发各受每 tick 处理数上限（{@link #MAX_PROCESS_PER_TICK}）
+ *       与速率预算（{@code powerTowerTransferRate}）约束，配合欠账补偿保证公平。</li>
  * </ul>
  * 目标/源只缓存坐标，每 tick 实时查询能力（一次任意面 + 个别方块回退 6 面），兼容所有注册了
  * FE 能量能力的模组方块。
@@ -50,7 +63,7 @@ public class RtsPowerTowerBlockEntity extends BlockEntity {
     private static final int MAX_SOURCES = 64;
     /** 同时跟踪的可接收目标数量上限（防列表膨胀）。 */
     private static final int MAX_TARGETS = 128;
-    /** 每 tick 实际处理的源/目标数上限（配合轮转控制单 tick 开销）。 */
+    /** 每 tick 实际处理的源/目标数上限（控制单 tick 开销）。 */
     private static final int MAX_PROCESS_PER_TICK = 32;
 
     private static final String NBT_ENERGY = "energy";
@@ -63,6 +76,17 @@ public class RtsPowerTowerBlockEntity extends BlockEntity {
     /** 已跟踪的可接收能量目标坐标（分片扫描发现）。 */
     private final List<BlockPos> targets = new ArrayList<>();
 
+    /**
+     * 提取侧欠账表：{@code sourceCredit[p]} = 该源累计应提而未提的 FE（按存量比例配额累积）。
+     * 欠账越高的源在下一次调度中越优先被提取，保证长期均衡。
+     */
+    private final Map<BlockPos, Long> sourceCredit = new HashMap<>();
+    /**
+     * 分发侧欠账表：{@code targetCredit[p]} = 该目标累计应得而未得的 FE（按需求比例配额累积）。
+     * 欠账越高的目标在下一次调度中越优先被充能，保证长期公平。
+     */
+    private final Map<BlockPos, Long> targetCredit = new HashMap<>();
+
     private final int radiusX;
     private final int radiusY;
     private final int radiusZ;
@@ -73,9 +97,6 @@ public class RtsPowerTowerBlockEntity extends BlockEntity {
 
     /** 分片扫描游标（展平后的一维下标，0..rangeSize-1）。 */
     private int scanCursor;
-    /** 每 tick 处理游标（公平轮转）。 */
-    private int sourceIndex;
-    private int targetIndex;
 
     public RtsPowerTowerBlockEntity(BlockPos pos, BlockState state) {
         super(RtsEnergyBlockEntities.POWER_TOWER.get(), pos, state);
@@ -140,6 +161,7 @@ public class RtsPowerTowerBlockEntity extends BlockEntity {
             if (sources.size() < MAX_SOURCES && buffer.getNeeded() > 0
                     && storage.canExtract() && storage.getEnergyStored() > 0) {
                 sources.add(p);
+                sourceCredit.put(p, 0L);
             } else if (targets.size() < MAX_TARGETS && buffer.getEnergy() > 0 && storage.canReceive()) {
                 // 模拟注入探测真实可接收量——canReceive() 可能恒 true 但内部拒绝，
                 // 仅把真实可注入的目标加入列表。
@@ -148,6 +170,7 @@ public class RtsPowerTowerBlockEntity extends BlockEntity {
                     int simulated = storage.receiveEnergy((int) Math.min(room, Integer.MAX_VALUE), true);
                     if (simulated > 0) {
                         targets.add(p);
+                        targetCredit.put(p, 0L);
                     }
                 }
             }
@@ -157,75 +180,194 @@ public class RtsPowerTowerBlockEntity extends BlockEntity {
         }
     }
 
-    /** 从已跟踪的源按预算吸取能量进缓冲，多抽的（缓冲瞬间占满）退回源。 */
+    /**
+     * 从已跟踪的源均衡提取能量进缓冲。
+     * <p>
+     * 公平调度（提取侧）：每 tick 按各源<b>存量占比</b>累计配额
+     * {@code credit_i += rate * stored_i / totalStored}，再反复选取「欠账最高」的源实际提取
+     * {@code min(credit_i, stored_i, 缓冲余量, 剩余预算)} 并扣减其欠账。多抽的（缓冲瞬间占满）
+     * 退回源。长期看每个源按相同比例被消耗，不会盯住单一源掏空。
+     */
     private void pullFromSources(long rate) {
         if (rate <= 0 || sources.isEmpty() || buffer.getNeeded() <= 0) {
             return;
         }
+        // 快照有效源（可提取且有余量），同时移除失效/抽空的源。
+        List<BlockPos> valid = new ArrayList<>();
+        long[] stored = new long[sources.size()];
+        long totalStored = 0;
+        for (Iterator<BlockPos> it = sources.iterator(); it.hasNext(); ) {
+            BlockPos p = it.next();
+            IEnergyStorage s = findStorage(p);
+            long avail = s == null || !s.canExtract() ? 0 : s.getEnergyStored();
+            if (avail <= 0) {
+                it.remove();
+                sourceCredit.remove(p);
+                continue;
+            }
+            valid.add(p);
+            stored[valid.size() - 1] = avail;
+            totalStored = saturatingAdd(totalStored, avail);
+        }
+        if (valid.isEmpty() || totalStored <= 0) {
+            return;
+        }
+        // 按存量占比累计本 tick 配额。
+        for (int i = 0; i < valid.size(); i++) {
+            long share = (long) ((double) rate * stored[i] / totalStored);
+            if (share > 0) {
+                sourceCredit.merge(valid.get(i), share, Long::sum);
+            }
+        }
         long remaining = rate;
-        int checked = 0;
-        while (checked < MAX_PROCESS_PER_TICK && remaining > 0
-                && buffer.getNeeded() > 0 && !sources.isEmpty()) {
-            int idx = (sourceIndex + checked) % sources.size();
-            BlockPos p = sources.get(idx);
-            IEnergyStorage storage = findStorage(p);
-            if (storage == null || !storage.canExtract() || storage.getEnergyStored() <= 0) {
-                // 源已失效/被抽空 → 移除并刷新。
-                sources.remove(idx);
+        int processed = 0;
+        while (processed < MAX_PROCESS_PER_TICK && remaining > 0
+                && buffer.getNeeded() > 0 && !valid.isEmpty()) {
+            // 选取欠账最高的源。
+            int bestIdx = pickHighestCredit(valid, sourceCredit);
+            if (bestIdx < 0) {
+                break;
+            }
+            BlockPos best = valid.get(bestIdx);
+            IEnergyStorage s = findStorage(best);
+            if (s == null || !s.canExtract() || s.getEnergyStored() <= 0) {
+                valid.remove(bestIdx);
+                sources.remove(best);
+                sourceCredit.remove(best);
                 continue;
             }
-            long toTake = Math.min(remaining, Math.min(storage.getEnergyStored(), buffer.getNeeded()));
+            long credit = sourceCredit.getOrDefault(best, 0L);
+            if (credit <= 0) {
+                break;
+            }
+            long toTake = Math.min(Math.min(credit, s.getEnergyStored()),
+                    Math.min(remaining, buffer.getNeeded()));
             if (toTake <= 0) {
-                checked++;
-                continue;
+                sourceCredit.put(best, 0L);
+                break;
             }
-            int extracted = storage.extractEnergy((int) Math.min(toTake, Integer.MAX_VALUE), false);
+            int extracted = s.extractEnergy((int) Math.min(toTake, Integer.MAX_VALUE), false);
             if (extracted > 0) {
                 long leftover = buffer.insert(extracted, Action.EXECUTE, AutomationType.INTERNAL);
+                long actuallyKept = extracted - leftover;
                 if (leftover > 0) {
                     // 缓冲被瞬间占满，把多抽出的能量退回源。
-                    storage.receiveEnergy((int) Math.min(leftover, Integer.MAX_VALUE), false);
+                    s.receiveEnergy((int) Math.min(leftover, Integer.MAX_VALUE), false);
                 }
-                remaining -= (extracted - leftover);
+                sourceCredit.compute(best, (k, v) -> v == null ? 0L : Math.max(0L, v - actuallyKept));
+                remaining -= actuallyKept;
             }
-            checked++;
+            processed++;
         }
-        sourceIndex = (sourceIndex + checked) % Math.max(1, sources.size());
     }
 
-    /** 把缓冲能量按预算轮转注入各目标，多抽出的能量退回缓冲。 */
+    /**
+     * 把缓冲能量按需求比例公平分发给目标。
+     * <p>
+     * 公平调度（分发侧）：每 tick 按各目标<b>需求余量占比</b>累计配额
+     * {@code credit_i += rate * room_i / totalRoom}，再反复选取「欠账最高」的目标实际注入
+     * {@code min(credit_i, room_i, 缓冲余量, 剩余预算)} 并扣减其欠账。多抽出的能量退回缓冲。
+     * 长期看每个目标按需求比例获得能量：快满的目标配额趋零、不会硬塞；被跳过的目标欠账累积、
+     * 下次优先补偿、不会饿死。
+     */
     private void pushToTargets(long rate) {
         if (rate <= 0 || targets.isEmpty() || buffer.getEnergy() <= 0) {
             return;
         }
-        long remaining = rate;
-        int checked = 0;
-        while (checked < MAX_PROCESS_PER_TICK && remaining > 0
-                && buffer.getEnergy() > 0 && !targets.isEmpty()) {
-            int idx = (targetIndex + checked) % targets.size();
-            BlockPos p = targets.get(idx);
-            IEnergyStorage storage = findStorage(p);
-            if (storage == null) {
-                // 能力已失效（方块被移除/替换/卸载）→ 移除目标并刷新。
-                targets.remove(idx);
+        // 快照有效目标（可接收且有余量），同时移除失效/已满的目标。
+        List<BlockPos> valid = new ArrayList<>();
+        long[] rooms = new long[targets.size()];
+        long totalRoom = 0;
+        for (Iterator<BlockPos> it = targets.iterator(); it.hasNext(); ) {
+            BlockPos p = it.next();
+            IEnergyStorage s = findStorage(p);
+            long room = s == null || !s.canReceive()
+                    ? 0 : (long) s.getMaxEnergyStored() - s.getEnergyStored();
+            if (room <= 0) {
+                it.remove();
+                targetCredit.remove(p);
                 continue;
             }
-            long room = (long) storage.getMaxEnergyStored() - storage.getEnergyStored();
-            if (room > 0) {
-                long toMove = Math.min(remaining, Math.min(room, buffer.getEnergy()));
-                long extracted = buffer.extract(toMove, Action.EXECUTE, AutomationType.INTERNAL);
-                if (extracted > 0) {
-                    int accepted = storage.receiveEnergy((int) Math.min(extracted, Integer.MAX_VALUE), false);
-                    if (accepted < extracted) {
-                        // 容器被瞬间塞满，把多抽出的能量退回自身缓冲。
-                        buffer.insert(extracted - accepted, Action.EXECUTE, AutomationType.INTERNAL);
-                    }
-                    remaining -= accepted;
-                }
-            }
-            checked++;
+            valid.add(p);
+            rooms[valid.size() - 1] = room;
+            totalRoom = saturatingAdd(totalRoom, room);
         }
-        targetIndex = (targetIndex + checked) % Math.max(1, targets.size());
+        if (valid.isEmpty() || totalRoom <= 0) {
+            return;
+        }
+        // 按需求占比累计本 tick 配额。
+        for (int i = 0; i < valid.size(); i++) {
+            long share = (long) ((double) rate * rooms[i] / totalRoom);
+            if (share > 0) {
+                targetCredit.merge(valid.get(i), share, Long::sum);
+            }
+        }
+        long remaining = rate;
+        int processed = 0;
+        while (processed < MAX_PROCESS_PER_TICK && remaining > 0
+                && buffer.getEnergy() > 0 && !valid.isEmpty()) {
+            // 选取欠账最高的目标。
+            int bestIdx = pickHighestCredit(valid, targetCredit);
+            if (bestIdx < 0) {
+                break;
+            }
+            BlockPos best = valid.get(bestIdx);
+            IEnergyStorage s = findStorage(best);
+            if (s == null || !s.canReceive()) {
+                valid.remove(bestIdx);
+                targets.remove(best);
+                targetCredit.remove(best);
+                continue;
+            }
+            long room = (long) s.getMaxEnergyStored() - s.getEnergyStored();
+            if (room <= 0) {
+                valid.remove(bestIdx);
+                targets.remove(best);
+                targetCredit.remove(best);
+                continue;
+            }
+            long credit = targetCredit.getOrDefault(best, 0L);
+            if (credit <= 0) {
+                break;
+            }
+            long toMove = Math.min(Math.min(credit, room),
+                    Math.min(remaining, buffer.getEnergy()));
+            if (toMove <= 0) {
+                targetCredit.put(best, 0L);
+                break;
+            }
+            long extracted = buffer.extract(toMove, Action.EXECUTE, AutomationType.INTERNAL);
+            if (extracted > 0) {
+                int accepted = s.receiveEnergy((int) Math.min(extracted, Integer.MAX_VALUE), false);
+                if (accepted < extracted) {
+                    // 容器被瞬间塞满，把多抽出的能量退回自身缓冲。
+                    buffer.insert(extracted - accepted, Action.EXECUTE, AutomationType.INTERNAL);
+                }
+                targetCredit.compute(best, (k, v) -> v == null ? 0L : Math.max(0L, v - accepted));
+                remaining -= accepted;
+            }
+            processed++;
+        }
+    }
+
+    /** 返回 {@code creditMap} 中欠账最高的元素在 {@code valid} 中的下标；全部非正时返回 -1。 */
+    private int pickHighestCredit(List<BlockPos> valid, Map<BlockPos, Long> creditMap) {
+        int bestIdx = -1;
+        long bestCredit = 0;
+        for (int i = 0; i < valid.size(); i++) {
+            long c = creditMap.getOrDefault(valid.get(i), 0L);
+            if (c > bestCredit) {
+                bestCredit = c;
+                bestIdx = i;
+            }
+        }
+        return bestIdx;
+    }
+
+    /** 饱和加法：累加溢出时钳制到 {@link Long#MAX_VALUE}，避免总量异常破坏比例计算。 */
+    private static long saturatingAdd(long a, long b) {
+        long sum = a + b;
+        return (sum < a) ? Long.MAX_VALUE : sum;
     }
 
     /**
