@@ -1,6 +1,8 @@
 {
   "itemGroup.rtsbuilding_planetrise": "Planet Rise",
 
+  "dimension.rtsbuilding_planetrise.moon": "Moon",
+
   "item.rtsbuilding_planetrise.thermal_generator": "Thermal Generator",
   "block.rtsbuilding_planetrise.thermal_generator": "Thermal Generator",
 

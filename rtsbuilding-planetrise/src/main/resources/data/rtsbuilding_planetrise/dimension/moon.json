@@ -2,10 +2,10 @@
   "type": "rtsbuilding_planetrise:moon",
   "generator": {
     "type": "minecraft:noise",
-    "settings": "minecraft:overworld",
+    "settings": "rtsbuilding_planetrise:moon",
     "biome_source": {
       "type": "minecraft:fixed",
-      "biome": "minecraft:plains"
+      "biome": "rtsbuilding_planetrise:moon"
     }
   }
 }

@@ -1,5 +1,7 @@
 {
-  "itemGroup.rtsbuilding_planetrise": "Planet Rise",
+  "itemGroup.rtsbuilding_planetrise": "星球崛起",
+
+  "dimension.rtsbuilding_planetrise.moon": "月球",
 
   "item.rtsbuilding_planetrise.thermal_generator": "热能发电机",
   "block.rtsbuilding_planetrise.thermal_generator": "热能发电机",
