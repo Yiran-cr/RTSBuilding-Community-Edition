@@ -1,8 +1,10 @@
 package com.rtsbuilding.rtsbuilding.planetrise;
 
+import com.rtsbuilding.rtsbuilding.planetrise.block.entity.BoundingBlockEntity;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.EnergyCellBlockEntity;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.PowerTowerBlockEntity;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.ThermalGeneratorBlockEntity;
+import com.rtsbuilding.rtsbuilding.planetrise.block.entity.WindGeneratorBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
@@ -29,6 +31,14 @@ public final class EnergyBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<EnergyCellBlockEntity>> ENERGY_CELL =
             BLOCK_ENTITY_TYPES.register("energy_cell", () ->
                     BlockEntityType.Builder.of(EnergyCellBlockEntity::new, EnergyBlocks.ENERGY_CELL.get()).build(null));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<WindGeneratorBlockEntity>> WIND_GENERATOR =
+            BLOCK_ENTITY_TYPES.register("wind_generator", () ->
+                    BlockEntityType.Builder.of(WindGeneratorBlockEntity::new, EnergyBlocks.WIND_GENERATOR.get()).build(null));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<BoundingBlockEntity>> BOUNDING_BLOCK =
+            BLOCK_ENTITY_TYPES.register("bounding_block", () ->
+                    BlockEntityType.Builder.of(BoundingBlockEntity::new, EnergyBlocks.BOUNDING_BLOCK.get()).build(null));
 
     /** Registers all block entity types on the energy mod's event bus. */
     public static void register(IEventBus modEventBus) {

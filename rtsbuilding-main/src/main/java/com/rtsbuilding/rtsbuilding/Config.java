@@ -61,34 +61,63 @@ public class Config {
             .define("enableTechnologized", true);
 
     public static final ModConfigSpec.LongValue POWER_TOWER_CAPACITY = BUILDER
-            .comment("FE storage capacity of one wireless power tower (rtsbuilding_planetrise).",
-                    "The tower buffers energy locally and distributes it wirelessly within its coverage area.")
+            .comment("FE storage capacity of one power tower's internal buffer (rtsbuilding_planetrise).",
+                    "The tower only relays this buffer for external pipes; grid power flow is rate-based and does not store here.")
             .translation("rtsbuilding.configuration.powerTowerCapacity")
             .defineInRange("powerTowerCapacity", 1_000_000L, 1L, Long.MAX_VALUE);
 
-    public static final ModConfigSpec.IntValue POWER_TOWER_HORIZONTAL_RADIUS = BUILDER
-            .comment("Horizontal radius (blocks) of one power tower's wireless coverage area.",
-                    "Set to 0 to disable wireless transfer entirely.")
-            .translation("rtsbuilding.configuration.powerTowerHorizontalRadius")
-            .defineInRange("powerTowerHorizontalRadius", 16, 0, 128);
+    public static final ModConfigSpec.LongValue POWER_TOWER_LINK_RANGE = BUILDER
+            .comment("Link range (blocks) of one power tower (rtsbuilding_planetrise).",
+                    "How far a tower can build grid links to other power nodes (generators/other towers), forming the grid (electric network).")
+            .translation("rtsbuilding.configuration.powerTowerLinkRange")
+            .defineInRange("powerTowerLinkRange", 32L, 0L, 1024L);
+
+    public static final ModConfigSpec.IntValue POWER_TOWER_POWER_RANGE = BUILDER
+            .comment("Power range (blocks, horizontal) of one power tower (rtsbuilding_planetrise).",
+                    "Radius of the circular area in which the tower broadcasts power to consumers. Set to 0 to disable supply entirely.")
+            .translation("rtsbuilding.configuration.powerTowerPowerRange")
+            .defineInRange("powerTowerPowerRange", 12, 0, 128);
 
     public static final ModConfigSpec.IntValue POWER_TOWER_VERTICAL_RADIUS = BUILDER
-            .comment("Vertical radius (blocks, up and down) of one power tower's wireless coverage area.",
-                    "Set to 0 to disable wireless transfer entirely.")
+            .comment("Vertical radius (blocks, up and down) of one power tower's power supply area (rtsbuilding_planetrise).")
             .translation("rtsbuilding.configuration.powerTowerVerticalRadius")
             .defineInRange("powerTowerVerticalRadius", 8, 0, 128);
 
-    public static final ModConfigSpec.LongValue POWER_TOWER_TRANSFER_RATE = BUILDER
-            .comment("Maximum FE moved per tick by one power tower (sucking sources + feeding targets).",
-                    "Set to 0 to disable wireless transfer entirely.")
-            .translation("rtsbuilding.configuration.powerTowerTransferRate")
-            .defineInRange("powerTowerTransferRate", 2000L, 0L, Long.MAX_VALUE);
+    public static final ModConfigSpec.LongValue POWER_TOWER_THROUGHPUT = BUILDER
+            .comment("Maximum FE/t one power tower can broadcast to consumers (rtsbuilding_planetrise).",
+                    "A tower receives grid power proportionally to demand but capped by this throughput. Set to 0 to disable supply.")
+            .translation("rtsbuilding.configuration.powerTowerThroughput")
+            .defineInRange("powerTowerThroughput", 2000L, 0L, Long.MAX_VALUE);
+
+    public static final ModConfigSpec.LongValue GENERATOR_LINK_RANGE = BUILDER
+            .comment("Link range (blocks) of generators (thermal / wind, rtsbuilding_planetrise).",
+                    "How far a generator can build grid links to power towers, forming the grid. Generators never link to each other.")
+            .translation("rtsbuilding.configuration.generatorLinkRange")
+            .defineInRange("generatorLinkRange", 32L, 0L, 1024L);
+
 
     public static final ModConfigSpec.LongValue ENERGY_CELL_CAPACITY = BUILDER
             .comment("FE storage capacity of one energy cell block (rtsbuilding_planetrise).",
                     "The cell buffers energy and can be charged/discharged by pipes or power towers.")
             .translation("rtsbuilding.configuration.energyCellCapacity")
             .defineInRange("energyCellCapacity", 4_000_000L, 1L, Long.MAX_VALUE);
+
+    public static final ModConfigSpec.LongValue WIND_GENERATOR_CAPACITY = BUILDER
+            .comment("FE storage capacity of one wind generator (rtsbuilding_planetrise).",
+                    "Produced energy is buffered here until a power tower sucks it away.")
+            .translation("rtsbuilding.configuration.windGeneratorCapacity")
+            .defineInRange("windGeneratorCapacity", 5_000L, 1L, Long.MAX_VALUE);
+
+    public static final ModConfigSpec.LongValue WIND_GENERATOR_MIN_GENERATION = BUILDER
+            .comment("FE per tick generated by a wind generator at the lowest buildable height (rtsbuilding_planetrise).")
+            .translation("rtsbuilding.configuration.windGeneratorMinGeneration")
+            .defineInRange("windGeneratorMinGeneration", 8L, 1L, Long.MAX_VALUE);
+
+    public static final ModConfigSpec.LongValue WIND_GENERATOR_MAX_GENERATION = BUILDER
+            .comment("FE per tick generated by a wind generator at the world's max build height (rtsbuilding_planetrise).",
+                    "Generation scales linearly with tower top height between min and max.")
+            .translation("rtsbuilding.configuration.windGeneratorMaxGeneration")
+            .defineInRange("windGeneratorMaxGeneration", 32L, 1L, Long.MAX_VALUE);
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 
@@ -184,29 +213,54 @@ public class Config {
         return ENABLE_TECHNOLOGIZED.getAsBoolean();
     }
 
-    /** FE storage capacity of one power tower. */
+    /** FE storage capacity of one power tower's internal buffer. */
     public static long powerTowerCapacity() {
         return POWER_TOWER_CAPACITY.getAsLong();
     }
 
-    /** Horizontal radius (blocks) of one power tower's wireless coverage. */
-    public static int powerTowerHorizontalRadius() {
-        return POWER_TOWER_HORIZONTAL_RADIUS.getAsInt();
+    /** Link range (blocks) of one power tower — how far it can form grid links to other nodes. */
+    public static long powerTowerLinkRange() {
+        return POWER_TOWER_LINK_RANGE.getAsLong();
     }
 
-    /** Vertical radius (blocks, up and down) of one power tower's wireless coverage. */
+    /** Power range (blocks, horizontal) of one power tower's broadcast area. */
+    public static int powerTowerPowerRange() {
+        return POWER_TOWER_POWER_RANGE.getAsInt();
+    }
+
+    /** Vertical radius (blocks, up and down) of one power tower's supply area. */
     public static int powerTowerVerticalRadius() {
         return POWER_TOWER_VERTICAL_RADIUS.getAsInt();
     }
 
-    /** Maximum FE moved per tick by one power tower. */
-    public static long powerTowerTransferRate() {
-        return POWER_TOWER_TRANSFER_RATE.getAsLong();
+    /** Maximum FE/t one power tower can broadcast to consumers. */
+    public static long powerTowerThroughput() {
+        return POWER_TOWER_THROUGHPUT.getAsLong();
+    }
+
+    /** Link range (blocks) of generators (thermal / wind). */
+    public static long generatorLinkRange() {
+        return GENERATOR_LINK_RANGE.getAsLong();
     }
 
     /** FE storage capacity of one energy cell block. */
     public static long energyCellCapacity() {
         return ENERGY_CELL_CAPACITY.getAsLong();
+    }
+
+    /** FE storage capacity of one wind generator. */
+    public static long windGeneratorCapacity() {
+        return WIND_GENERATOR_CAPACITY.getAsLong();
+    }
+
+    /** Minimum FE per tick generated by a wind generator at the lowest buildable height. */
+    public static long windGeneratorMinGeneration() {
+        return WIND_GENERATOR_MIN_GENERATION.getAsLong();
+    }
+
+    /** Maximum FE per tick generated by a wind generator at the world's max build height. */
+    public static long windGeneratorMaxGeneration() {
+        return WIND_GENERATOR_MAX_GENERATION.getAsLong();
     }
 
 }

@@ -1,8 +1,10 @@
 package com.rtsbuilding.rtsbuilding.planetrise;
 
+import com.rtsbuilding.rtsbuilding.planetrise.block.BoundingBlock;
 import com.rtsbuilding.rtsbuilding.planetrise.block.EnergyCellBlock;
 import com.rtsbuilding.rtsbuilding.planetrise.block.PowerTowerBlock;
 import com.rtsbuilding.rtsbuilding.planetrise.block.ThermalGeneratorBlock;
+import com.rtsbuilding.rtsbuilding.planetrise.block.WindGeneratorBlock;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -52,6 +54,23 @@ public final class EnergyBlocks {
                     .sound(SoundType.METAL)
                     .requiresCorrectToolForDrops()),
             true);
+
+    /** Wind generator — a multi-place tower (1 main block + 4 invisible bounding blocks above). */
+    public static final DeferredHolder<Block, WindGeneratorBlock> WIND_GENERATOR = registerBlock(
+            "wind_generator",
+            () -> new WindGeneratorBlock(BlockBehaviour.Properties.of()
+                    .strength(3.0F)
+                    .sound(SoundType.METAL)
+                    .requiresCorrectToolForDrops()),
+            true);
+
+    /** Invisible shared bounding block used by multi-place blocks (wind generator tower). No item, not in creative tab. */
+    public static final DeferredHolder<Block, BoundingBlock> BOUNDING_BLOCK = registerBlock(
+            "bounding_block",
+            () -> new BoundingBlock(BlockBehaviour.Properties.of()
+                    .strength(3.5F, 4.8F)
+                    .requiresCorrectToolForDrops()),
+            false);
 
     public static <T extends Block> DeferredHolder<Block, T> registerBlock(String id,
             java.util.function.Supplier<? extends T> factory, boolean creative) {

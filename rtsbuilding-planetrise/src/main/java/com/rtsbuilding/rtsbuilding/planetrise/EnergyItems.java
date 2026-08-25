@@ -34,6 +34,10 @@ public final class EnergyItems {
     public static final DeferredHolder<Item, BlockItem> ENERGY_CELL = blockItem(
             "energy_cell", EnergyBlocks.ENERGY_CELL, true);
 
+    /** Wind generator block item (the tower occupies 1 + 4 bounding blocks above) */
+    public static final DeferredHolder<Item, BlockItem> WIND_GENERATOR = blockItem(
+            "wind_generator", EnergyBlocks.WIND_GENERATOR, true);
+
     public static DeferredHolder<Item, BlockItem> blockItem(String id,
             DeferredHolder<Block, ? extends Block> block, boolean creative) {
         DeferredHolder<Item, BlockItem> holder = ITEMS.register(id, () -> new BlockItem(block.get(), new Item.Properties()));

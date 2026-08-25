@@ -5,7 +5,7 @@ import com.mojang.serialization.MapCodec;
 import com.rtsbuilding.rtsbuilding.common.geometry.RtsJavaModelShape;
 import com.rtsbuilding.rtsbuilding.planetrise.EnergyBlockEntities;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.IBoundingBlock;
-import com.rtsbuilding.rtsbuilding.planetrise.block.entity.PowerTowerBlockEntity;
+import com.rtsbuilding.rtsbuilding.planetrise.block.entity.WindGeneratorBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -22,60 +22,57 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
- * 无线输电塔——戴森球式能量传输的核心设施（参考 Mekanism 的多占位方块示例）。
+ * 风力发电机——参考 Mekanism 的多占位方块示例。
  * <p>
- * 占用 <b>1 主方块 + 上方 4 个不可见占位方块</b>（{@link BoundingBlock}），塔身碰撞由
- * {@link #SHAPE} 提供（跨 5 格），占位方块按自身相对偏移平移共享该形状。视觉上整座塔
- * 由一个方块实体渲染器（Java 模型平移绘制）呈现，占位方块只负责碰撞与交互代理。
- * <p>
- * 塔自带 FE 缓冲，并在可配置的覆盖范围内（水平半径 + 上下垂直半径）无线搬运能量：
- * 从范围内的能量源（热能发电机等）吸取 FE 进自身缓冲，再向范围内的用电机器分发。
- * 塔与塔之间可以互为源/目标组成接力中继，扩大无线供电覆盖。
+ * 占用 <b>1 主方块 + 上方 2 个不可见占位方块</b>（{@link BoundingBlock}），塔身
+ * 碰撞由 {@link #SHAPE} 提供（跨 3 格），占位方块按自身相对偏移平移共享该形状。
+ * 视觉上整座塔由一个方块实体渲染器（Java 模型平移绘制）呈现，占位方块只负责
+ * 碰撞与交互代理，不参与渲染。
  * <p>
  * 放置/拆除钩子：
  * <ul>
- *   <li>{@link #onPlace}：放置成功后创建 4 个占位方块；任一占位位置不可放置则回滚整个放置；</li>
+ *   <li>{@link #onPlace}：放置成功后创建 2 个占位方块；任一占位位置不可放置则回滚整个放置；</li>
  *   <li>{@link #onRemove}：拆除时清除全部占位方块（先移除实体再移除方块，防递归）。</li>
  * </ul>
+ * RTS 远程放置/挖掘走 {@code level.setBlock}，同样会触发这两个钩子，因此多占位
+ * 在 RTS 模式下自动生效。
  */
-public class PowerTowerBlock extends Block implements EntityBlock {
+public class WindGeneratorBlock extends Block implements EntityBlock {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public static final MapCodec<PowerTowerBlock> CODEC = simpleCodec(PowerTowerBlock::new);
+    public static final MapCodec<WindGeneratorBlock> CODEC = simpleCodec(WindGeneratorBlock::new);
 
     /**
      * 塔身几何（方块像素坐标，模型原点对准方块底部中心，可跨格）——<b>与渲染模型同源</b>：
-     * 逐盒对应 Blockbench {@code Wireless_Energy_Transmission_Tower} 的 {@code body} 塔身
-     * （y 0..78 像素 ≈ 5 格高）：底座 → 中层收窄 → 塔杆 → 平台 → 四角柱 → 塔顶。
-     * 顶部天线（{@code rotate} 组）为旋转部件，不参与碰撞。
+     * 逐盒对应 Blockbench {@code Wind_Turbine} 的 {@code bb_main} 塔身（y 0..48 像素 = 3 格高）：
+     * 底座 y0..5 → 中层 y5..16 → 塔杆 y17..30 → 装饰环 y30..43 → 塔顶 y43..48，含各段收窄/凸台。
      * 由 {@link RtsJavaModelShape#buildShape()} 自动生成碰撞箱（服务端安全），客户端渲染模型
-     * 由 {@code ModelPowerTower}（Blockbench 导出几何）呈现，碰撞与塔身视觉同源。
+     * 由 {@code com.rtsbuilding.rtsbuilding.client.model.JavaModelShapeUtil#toCubeListBuilder(RtsJavaModelShape, float, float, float)}
+     * 以原点 {@code (8, 0, 8)}（方块底部中心）从同一份数据构建，保证碰撞与视觉一致。
      */
     public static final RtsJavaModelShape MODEL = RtsJavaModelShape.builder()
             // 底座（含外圈四边板合并后的全宽平台）
             .addBox(1, 0, 1, 14, 5, 14)
             // 中层收窄
             .addBox(2, 5, 2, 12, 5, 12)
-            .addBox(5, 10, 5, 6, 7, 6)
+            .addBox(5, 10, 5, 6, 6, 6)
+            .addBox(5, 16, 5, 6, 1, 6)
             // 塔杆
-            .addBox(6, 17, 6, 4, 38, 4)
-            // 平台
-            .addBox(4, 55, 4, 8, 4, 8)
-            // 塔杆上部 + 四角柱（y 59..70）
-            .addBox(6, 59, 6, 4, 11, 4)
-            .addBox(10, 59, 10, 1, 11, 1)
-            .addBox(10, 59, 5, 1, 11, 1)
-            .addBox(5, 59, 5, 1, 11, 1)
-            .addBox(5, 59, 10, 1, 11, 1)
-            // 塔顶平台与顶盖
-            .addBox(4, 70, 4, 8, 6, 8)
-            .addBox(5, 76, 5, 6, 2, 6);
+            .addBox(6, 17, 6, 4, 13, 4)
+            .addBox(5, 30, 5, 6, 2, 6)
+            // 装饰环（机舱区下方）
+            .addBox(5, 32, 5, 6, 11, 6)
+            .addBox(4, 33, 4, 8, 3, 8)
+            .addBox(4, 38, 4, 8, 3, 8)
+            // 塔顶
+            .addBox(4, 43, 4, 8, 4, 8)
+            .addBox(5, 47, 5, 6, 1, 6);
 
-    /** 整塔碰撞/选择形状（跨 5 格，由几何数据生成）。 */
+    /** 整塔碰撞/选择形状（跨 3 格，由几何数据生成）。 */
     public static final VoxelShape SHAPE = MODEL.buildShape();
 
-    public PowerTowerBlock(BlockBehaviour.Properties properties) {
+    public WindGeneratorBlock(BlockBehaviour.Properties properties) {
         super(properties);
     }
 
@@ -97,21 +94,27 @@ public class PowerTowerBlock extends Block implements EntityBlock {
     @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new PowerTowerBlockEntity(pos, state);
+        return new WindGeneratorBlockEntity(pos, state);
     }
 
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        if (!level.isClientSide && type == EnergyBlockEntities.POWER_TOWER.get()) {
-            return (lvl, pos, blockState, be) -> ((PowerTowerBlockEntity) be).tickServer();
+        if (type != EnergyBlockEntities.WIND_GENERATOR.get()) {
+            return null;
         }
-        return null;
+        if (level.isClientSide) {
+            // 客户端 tick 仅驱动风叶旋转动画。
+            return (lvl, pos, blockState, be) -> ((WindGeneratorBlockEntity) be).tickClient();
+        }
+        return (lvl, pos, blockState, be) -> ((WindGeneratorBlockEntity) be).tickServer();
     }
 
     @Override
     protected void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
         super.onPlace(state, level, pos, oldState, isMoving);
+        LOGGER.debug("[WIND-ONPLACE] side={} pos={} old={} be={}", level.isClientSide ? "CLIENT" : "SERVER", pos,
+                oldState.getBlock(), level.getBlockEntity(pos));
         if (state.is(oldState.getBlock())) {
             return;
         }
@@ -119,11 +122,13 @@ public class PowerTowerBlock extends Block implements EntityBlock {
         // 保证客户端占位格子同样具备碰撞/交互/连带破坏逻辑。
         if (level.getBlockEntity(pos) instanceof IBoundingBlock ib) {
             boolean allPlaced = ib.placeBoundingBlocks();
-            LOGGER.debug("[POWER-TOWER-ONPLACE] side={} pos={} allPlaced={}", level.isClientSide ? "CLIENT" : "SERVER", pos, allPlaced);
+            LOGGER.debug("[WIND-ONPLACE] side={} allPlaced={}", level.isClientSide ? "CLIENT" : "SERVER", allPlaced);
             if (!allPlaced && !level.isClientSide) {
                 // 服务端：某个占位位置被占用，回滚整个放置，避免残缺塔身。
                 level.removeBlock(pos, false);
             }
+        } else {
+            LOGGER.debug("[WIND-ONPLACE] side={} be is not IBoundingBlock", level.isClientSide ? "CLIENT" : "SERVER");
         }
     }
 

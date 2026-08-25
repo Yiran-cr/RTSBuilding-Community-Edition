@@ -1,9 +1,12 @@
 package com.rtsbuilding.rtsbuilding.planetrise;
 
+import com.rtsbuilding.rtsbuilding.planetrise.block.entity.BoundingBlockEntity;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.ContainerEnergyStorage;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.EnergyCellBlockEntity;
+import com.rtsbuilding.rtsbuilding.planetrise.block.entity.IBoundingBlock;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.PowerTowerBlockEntity;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.ThermalGeneratorBlockEntity;
+import com.rtsbuilding.rtsbuilding.planetrise.block.entity.WindGeneratorBlockEntity;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
@@ -57,6 +60,31 @@ public final class EnergyCapabilities {
                                 ? new ContainerEnergyStorage(cell.getBuffer(), true, true)
                                 : null,
                 EnergyBlocks.ENERGY_CELL.get());
+
+        // 风力发电机：提取侧缓冲（产出的 FE 只能被抽走，供热电塔当源吸取）。
+        event.registerBlock(Capabilities.EnergyStorage.BLOCK,
+                (level, pos, state, blockEntity, side) -> !com.rtsbuilding.rtsbuilding.Config.isTechnologizedEnabled() ? null
+                        : blockEntity instanceof WindGeneratorBlockEntity wind
+                                ? new ContainerEnergyStorage(wind.getBuffer(), false, true)
+                                : null,
+                EnergyBlocks.WIND_GENERATOR.get());
+
+        // 占位方块：能量能力代理到主方块（参考 Mekanism proxyCapability），
+        // 使风力发电机塔身格子也可被取能量（管道/输电塔从塔身吸取）。
+        event.registerBlock(Capabilities.EnergyStorage.BLOCK,
+                (level, pos, state, blockEntity, side) -> {
+                    if (!com.rtsbuilding.rtsbuilding.Config.isTechnologizedEnabled()) {
+                        return null;
+                    }
+                    if (blockEntity instanceof BoundingBlockEntity bounding) {
+                        IBoundingBlock main = bounding.getMain();
+                        if (main != null) {
+                            return main.getBoundingEnergyStorage(side, pos.subtract(bounding.getMainPos()));
+                        }
+                    }
+                    return null;
+                },
+                EnergyBlocks.BOUNDING_BLOCK.get());
     }
 }
 

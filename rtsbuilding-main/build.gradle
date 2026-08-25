@@ -118,6 +118,8 @@ dependencies {
     // （否则 BlueprintFormatTest/RtsCountUtilTest 抛 NoClassDefFoundError）
     testImplementation project(':rtsbuilding-common')
     testImplementation project(':rtsbuilding-api')
+    // planetrise 的纯算法类（PowerScheduler/GridNode 等）在 main 测试中验证（无 MC 依赖）。
+    testImplementation project(':rtsbuilding-planetrise')
 }
 
 // ── Pinyin dictionary verification ──

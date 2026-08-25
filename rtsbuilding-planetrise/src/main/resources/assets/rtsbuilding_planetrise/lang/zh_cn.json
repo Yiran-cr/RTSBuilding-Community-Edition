@@ -10,5 +10,11 @@
   "item.rtsbuilding_planetrise.energy_cell": "储能单元",
   "block.rtsbuilding_planetrise.energy_cell": "储能单元",
 
+  "item.rtsbuilding_planetrise.wind_generator": "风力发电机",
+  "block.rtsbuilding_planetrise.wind_generator": "风力发电机",
+
+  "key.categories.rtsbuilding_planetrise": "Planet Rise 电力",
+  "key.rtsbuilding_planetrise.power_range": "显示电力范围圈（按住）",
+
   "message.rtsbuilding_planetrise.energy_cell_info": "储能单元电量：%s / %s FE"
 }

@@ -92,7 +92,8 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 | `client.scene` | **结构预览场景渲染**（参考 LDLib2 `WorldSceneRenderer`/`FBOWorldSceneRenderer`/`DummyWorld`，同为 NeoForge 1.21.1）：`RtsDummyLevel`（继承 Level 的纯内存虚拟世界，方块存 Map、光照固定 15、无实体/刻调度）、`RtsSceneRenderer`（VBO 缓存编译 + FBO 相机渲染 + 纹理绘制；球坐标相机 yaw/pitch/radius 支持拖拽旋转滚轮缩放；`RenderTargetScope` 保存/恢复 FBO+viewport+scissor） |
 | `client.rtsbuild.shape` | `BuildShape`（建造形状枚举：线/墙/平面/体/圆面/球）+ `ShapeGeometry` 纯几何计算；`LineBrushSelector` 画笔状态机 |
 | `client` 其他 | `camera/RtsCameraEntityRenderer`（隐形渲染器）、`domain/`（客户端领域模型）、`entity/`（`rts_drone` 无人机渲染 + 动画）、`application/service/ScreenCoordinator`（容器交互面板协调器）、`blueprint/BlueprintLocalStore`（本地蓝图文件存储 config/rts_building/blueprints）、`compat/`、`state/FeatureAdjusterState`、`util/` |
-| `common` | 主模组自有注册与桥：`RtsBlocks`/`RtsItems`/`RtsEntities`/`RtsCreativeTabs`（注册表）、`item/RtsTerminalItem`（终端物品，右键切换 RTS 模式 + 能量条）、`entity/RtsDroneEntity`（服务端权威无人机）、`RtsTerminalEnergy`（**终端能量桥**：静态 `AtomicReference<Provider>`，供能量插件注入）、`geometry/RtsModelShapeParser`（模型 JSON→碰撞箱） |
+| `client.model` | **Java 模型 ↔ 碰撞箱互转工具** `JavaModelShapeUtil`：`toCubeListBuilder(RtsJavaModelShape, origin)`（纯几何数据 → 渲染 CubeListBuilder）、`fromModelPart(ModelPart, ignoreParts)`（已烘焙 ModelPart 8 角点矩阵变换 → VoxelShape，client-only）。**所有使用 Java 模型（ModelPart）的方块**：碰撞箱用 `RtsJavaModelShape.buildShape()`（服务端安全），渲染用 `toCubeListBuilder` 同源生成，禁止手写 `Shapes.or(Block.box(...))` |
+| `common` | 主模组自有注册与桥：`RtsBlocks`/`RtsItems`/`RtsEntities`/`RtsCreativeTabs`（注册表）、`item/RtsTerminalItem`（终端物品，右键切换 RTS 模式 + 能量条）、`entity/RtsDroneEntity`（服务端权威无人机）、`RtsTerminalEnergy`（**终端能量桥**：静态 `AtomicReference<Provider>`，供能量插件注入）、`geometry/`：`RtsModelShapeParser`（模型 JSON→碰撞箱）、`RtsVoxelShapeUtils`（VoxelShape 组合/旋转/裁剪）、`RtsJavaModelShape`（**Java 模型纯几何盒数据**：方块像素坐标 addBox + `buildShape()` 生成碰撞箱，与渲染模型同源） |
 | `compat` | `jei/`（RtsJeiPlugin + 全局 GUI 处理器）、`remote/RtsRemoteMenuCompat`（原版箱子/铁炉/GeneratorGalore/Sophisticated 远程菜单检测）、`RemoteMenuTracker` |
 | `mixin` | 16 个 mixin（`rtsbuilding.mixins.json`）：`KeyboardInputMixin`（RTS 下完全接管键盘）、`MouseInputMixin`（阻断侧键）、`MinecraftSetScreenMixin`（容器屏幕嵌入 BuilderScreen 而非替换）、`LocalPlayerMixin`（强制 isControlledCamera）、`ChestMenuMixin`/`ModdedRemoteStillValidMixin`（远程 stillValid 强制通过，@Pseudo）、`ClientPacketListenerMixin`（吞 2001 破坏事件）、`ClientLevelMixin`（抑制粒子）、`ScreenRenderBgMixin`、`RtsGuiOverlayMixin`/`RtsChatComponentMixin`（暴露原版 actionbar/聊天消息，供 RTS 覆盖式 Screen 在下面板之上补渲染）、`RtsChatScreenMixin`（RTS 下打开原版 ChatScreen 关闭时恢复 BuilderScreen，聊天不退出 RTS）、`MinecraftTickMixin`、`LocalPlayerStepAiMixin` 等 |
 | `network` | `RtsPayloadRegistrar`（统一 payload 注册入口）、`ClientPayloadDispatcher`（S2C 分发桥，IS_CLIENT 守卫）、`NetworkConstants`、`message/C2SAction`（统一 C2S 动作：ActionType + NBT 参数，未知 id 返回 null 防恶意包）、`message/C2SCameraPosePayload`（高频姿态）、`handler/ServerActionHandler`（服务端统一分发约 40 种动作）、`{camera,storage,builder,feedback,blueprint,resume}/` 各领域 payload |
@@ -103,14 +104,16 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 
 ### 3.5 rtsbuilding-planetrise — 内置能量插件（modId `rtsbuilding_planetrise`，包 `com.rtsbuilding.rtsbuilding.planetrise`）
 
-"Planet Rise（星球崛起）"：热能发电机产能 + 无线输电塔传输 + 储能单元 + 终端用电。可被 `Config.enableTechnologized` 整体禁用。**方块共三个：热能发电机 + 无线输电塔 + 储能单元**（无线节点/无线充电站/玩家能量网格等机制已移除）。
+"Planet Rise（星球崛起）"：热能动能机产能 + **电网输电塔广播供电** + 储能单元 + 终端用电。电力系统参照 `docs/../power_system_design.md` 设计：只存在两种半径（链路范围 LinkRange、供电范围 PowerRange），三分类建筑（发电机器 / 输电塔 / 用电机器）。旧「戴森球式无线输电（塔范围内吸取+分发）」逻辑已**整体弃用**。可被 `Config.enableTechnologized` 整体禁用。**方块四个：热能发电机 + 风力发电机（发电机器）、无线输电塔（唯一供电建筑）+ 储能单元（用电/存储节点）**。
 
 | 包 | 内容与职责 |
 |---|---|
 | 根 | `EnergyMod`（@Mod 入口，commonSetup 注入终端能量 Provider）、`EnergyBlocks`/`EnergyBlockEntities`/`EnergyItems`/`EnergyCreativeTabs`/`EnergyCapabilities`（方块/方块实体/物品/创造栏/能力注册）、`TerminalEnergyImpl`（终端用电：`terminal_energy` 数据组件 + 物品 IEnergyStorage + `RtsTerminalEnergy.Provider` 实现，开启 RTS 扣 500 FE，亮绿能量条） |
-| `block` | `EnergyBlock`（基类：RtsModelShapeParser 碰撞箱）、`ThermalGeneratorBlock`（热能发电机：LIT/FACING 状态，岩浆燃烧产能）、`PowerTowerBlock`（**无线输电塔**：戴森球式能量传输核心设施）、`EnergyCellBlock`（储能单元：右键查看电量） |
-| `block.entity` | `ThermalGeneratorBlockEntity`（2 万 FE 缓冲 + 8000mB 岩浆罐，tick 产 60 FE，缓冲暴露 extract-only IEnergyStorage）、`PowerTowerBlockEntity`（**无线输电塔**：自带 FE 缓冲（Config 容量），在覆盖范围（水平+垂直半径可配，默认 33×17×33）内分片扫描吸取能量源 + 分发给用电目标；搬运用**公平按需调度**：按需求/存量比例配额 + 欠账 credit 补偿（不饿死不硬塞、均衡抽取），塔间可互为源/目标接力）、`EnergyCellBlockEntity`（储能单元：Config 容量缓冲，双向 IEnergyStorage，无 tick）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
-| `client` | `EnergyClient`/`BlockRenderProperties`（破坏粒子聚合器，参考 Mekanism） |
+| `power` | **电网核心逻辑**（参照 power_system_design.md）：`PowerRole`（GENERATOR/TOWER 节点角色）、`GridNode`（调度输入快照，坐标用 long 解耦 MC）、`PowerScheduler`（纯算法：union-find 组网「发电-发电不直连」→ 电网聚合发电量与需求 → 按需求占比分配、吞吐封顶、转发不衰减）、`IPowerGridNode`（方块实体实现的节点接口：role/linkRange/powerRange/throughput/generation/demand/acceptQuota）、`PowerGridManager`（服务端每维度调度器：拦截注册节点，每 tick 惰性聚合+写回各塔配额） |
+| `block` | `EnergyBlock`（基类：RtsModelShapeParser 碰撞箱）、`ThermalGeneratorBlock`（热能发电机：LIT/FACING 状态，岩浆燃烧产能）、`PowerTowerBlock`（**无线输电塔**：电网唯一广播供电建筑，1 主方块 + 上方 4 占位，塔身 5 格高，`MODEL`（`RtsJavaModelShape` 纯几何，与 Blockbench `Wireless_Energy_Transmission_Tower` 塔身同源）→ `SHAPE`）、`EnergyCellBlock`（储能单元：右键查看电量）、`WindGeneratorBlock`（**风力发电机**：1 主方块 + 上方 2 占位，塔身 3 格高，`MODEL`（`RtsJavaModelShape` 纯几何，与 Blockbench `Wind_Turbine` 塔身同源）→ `SHAPE`）、`BoundingBlock`（多占位代理方块：形状/交互/破坏/能力代理主方块，`dynamicShape()`） |
+| `block.entity` | **`AbstractEnergyMachineBlockEntity`（所有 RTS 能量机器抽象基类：统一能量缓冲（BasicEnergyContainer）/`createEnergyStorage` 能力工厂/`addEnergy`+`consumeEnergy` 内部充放电/tick 模板（`tickServer`+`tickClient` 含 level、客户端、`Config.isTechnologizedEnabled` 守卫 + 首次占位同步）/energy NBT 持久化 + `saveEnergyAdditional`/`loadEnergyAdditional` 扩展钩子，后续新机器直接继承，子类只需覆写 `onServerTick`/`onClientTick`；另统一处理 `onLoad`/`setRemoved` 的电网注册与注销）**、`ThermalGeneratorBlockEntity`（2 万 FE 缓冲 + 8000mB 岩浆罐，tick 产 60 FE，实现 `IPowerGridNode` 发电机器，`generation()` 上报产电速率）、`PowerTowerBlockEntity`（**无线输电塔/电网节点**：链路范围 + 供电范围，分片扫描供电范围发现用电器统计 `demand()`→ `PowerGridManager` 调度分得配额 → `acceptQuota()` 后 `broadcast()` 把配额注入供电器；实现 `IBoundingBlock`（4 占位，占位格子可暴露缓冲）、`EnergyCellBlockEntity`（储能单元：Config 容量缓冲，双向 IEnergyStorage，无 tick）、`WindGeneratorBlockEntity`（按塔顶高度比例产电 + canSeeSky，实现 `IPowerGridNode` 发电机器）、`BoundingBlockEntity`（占位实体：仅存 mainPos NBT，`getUpdateTag`/`handleUpdateTag` 显式同步）、`IBoundingBlock`（多占位接口：创建/清除/形状/交互转发/能量代理/`syncBoundingBlocks`）、`ContainerEnergyStorage`（IEnergyContainer→IEnergyStorage 适配器） |
+| `client.power` | **范围圈视觉反馈**（参照 power_system_design.md 第六节）：`PowerRangeVisualStore`（客户端单例，能量节点 `onLoad`/移除时注册/注销）、`PowerRangeOverlayRenderer`（挂 `RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS`，画水平圆环：链路蓝圈 + 供电黄圈）、`EnergyClient` 注册快捷键「显示电力范围圈（按住，默认 P）」 |
+| `client` | `EnergyClient`/`BlockRenderProperties`（破坏粒子聚合器，参考 Mekanism）、`model/ModelWindGenerator`（Blockbench `Wind_Turbine` 导出的实体模型几何，纹理 128×128；渲染时 `scale(-1,-1,1)` 翻转实体坐标 + `translate(0,1.5,0)` 地面落位，风叶 `bone` 组绕 y 轴旋转动画）、`model/ModelPowerTower`（Blockbench `Wireless_Energy_Transmission_Tower` 导出的实体模型几何，纹理 128×128；`body` 塔身 + `rotate` 顶部天线组，天线按 Blockbench 动画 3 秒绕 y 轴一圈 + 1.0→0.8→1.0 缩放脉冲，同样 translate+scale 落位）、`render/RenderWindGenerator(Item)`、`render/RenderPowerTower(Item)`（BEWLR：translate(0.5,0,0.5) 跨格绘制整塔） |
 
 ### 3.6 rtsaddon-* — 内置宿主集成插件（仓库根目录独立项目）
 
@@ -128,7 +131,7 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 - **进入 RTS 模式**：手持 `rts_terminal` 右键 → 客户端 `RtsClientPacketGateway.sendToggleCamera` → `C2SAction(TOGGLE_CAMERA)` → `ServerActionHandler`（校验终端能量 `RtsTerminalEnergy`）→ `RtsCameraManager.toggle`（创建相机+无人机实体、建会话）→ S2C 相机回包 → `RtsClientKernel.dispatch` → 打开 `BuilderScreen`。
 - **远程建造**：BuilderScreen 捕获鼠标 → 形状计算（`BuildShape`/`LineBrushSelector`）→ `sendPlace/sendLinePlace/sendAreaBoxPlace` → `C2SAction(PLACE_BLOCK/PLACE_BATCH)` → `ServerActionHandler` → `RtsPlacementServiceImpl` → `PipelineRegistry.execute` 工作流（校验→工具借用→放置→同步）→ 放置批处理逐 tick 落位 → 动画/音效回客户端。
 - **相机权威边界**：相机移动/旋转是纯客户端计算，客户端 10Hz + 变化检测上报姿态（专用 `C2SCameraPosePayload`），服务端 `RtsCameraManager` 钳位校验后作为权威位置（动作范围 AABB 判定、无人机跟随）。
-- **能量链路（戴森球式无线输电）**：发电机 tick 产 60 FE → 入自身缓冲（`BasicEnergyContainer`）→ 无线输电塔在覆盖范围内吸取可提取的 FE 源（含发电机 extract-only 缓冲）进塔自带缓冲 → 再把 FE 无线分发给范围内需要能量的机器（模拟注入探测真实可接收量）。塔与塔互为源/目标可接力中继；能量只搬运、不凭空产生。外部模组经方块 `IEnergyStorage` capability ↔ `ContainerEnergyStorage` 适配器互动。建造操作不耗能。
+- **电网供电链路（参照 power_system_design.md）**：发电机器（发电机/风电机）`tickServer` 上报本 tick 产电速率 `generation()` → 输电塔 `tickServer` 分片扫描其<b>供电范围</b>、用 `demand()` 上报范围内用电器需求 → 二者向 `PowerGridManager` 注册；`PowerGridManager.tick` 每 tick 用 `PowerScheduler` 按<b>链路范围</b> union-find 组网（发电-发电**不**直连，电力必须经输电塔中转）→ 每电网聚合发电量与需求 → 按需求占比+吞吐封顶给各塔分配<b>配额</b> → `acceptQuota` 写回 → 塔 `broadcast()` 把配额注入供电范围内用电器（任何可注入 `IEnergyStorage` 方块，含储能单元/外部机器）；转发**不衰减**。外部模组经方块 `IEnergyStorage` capability ↔ `ContainerEnergyStorage` 适配器互动；塔/发电机自带的 `BasicEnergyContainer` 仅作外部接口查看、不参与电网能量搬运。建造操作不耗能。
 - **AE2 作为链接存储**：面板对准 ME 节点方块链接 → `RtsLinkedCapabilities.findLinkedItemHandler` 遍历 `RtsCompatRegistry.getStorageProviders()` → `Ae2StorageProvider.createItemHandler`（反射：GridHelper→Grid→StorageService）→ 注册进存储缓存，`RtsPageCore` 构建页面 S2C 推送；下线时 `releaseItemHandler` 释放网络句柄。
 
 ## 五、扩展点与打包机制（新增内置插件必读）
@@ -147,6 +150,12 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
 - **面板生成位置统一**：所有浮窗面板（`UiPanel` 子类）的 `computeDefaultPosition()` 一律使用统一基准——尺寸自适应（`w=min(getDefaultWidth(), 屏幕宽-16)`、`h` 类似，留 8px 边距）+ `positionCentered(TOP_H + 6, 8)`（水平居中 + 垂直居中，顶部避开顶栏、底部留 8px 边距）。参考 `GearMenuPanel`/`ResumeWorkflowPanel`/`InteractionPanel`/蓝图系面板实现。**禁止**自定义锚定（如固定右侧/左上），除非有强交互理由并注释说明。
 - **大尺寸贴图必须模糊化（mipmap）**：凡源图 ≥256px、实际绘制到 ≤24px（约 20 倍以上缩小）的 GUI 贴图，一律用 mipmap 平滑方案，禁止像素风采样。三要素缺一不可：① `TextureInfo.FilterMode` 用 `HQ`（linear+mipmap=true，绘制由 `TextureStateShard` 强制 `setFilter(true,true)`）；② 启动/资源重载时注册进 `RtsMipmapTextures.registerAll()`（用 `MipmapTexture` 加载生成完整 mip 链）；③ 贴图尺寸必须为 2 的幂。**不要**给这类贴图写 `blur:true` 的 `.mcmeta`（无效且误导，vanilla `SimpleTexture` 永不生成 mipmap）。已迁移：`textures/gui/left/right_button`、`textures/gui/left/button`、`textures/gui/top` 全部图标。
 - **多元素模型破坏粒子必须聚合**：凡碰撞箱由多个元素合并（`RtsModelShapeParser` 组合 / `VoxelShape` 含多个 AABB）的方块，破坏/挖掘时必须覆写 `IClientBlockExtensions.addDestroyEffects` 用整体包围盒聚合生成一组粒子（参考 `rtsbuilding-planetrise` 的 `BlockRenderProperties`，仿照 Mekanism：按 0.25 间隔在 shape 包围盒内散布 `TerrainParticle`），**禁止**用原版按碰撞箱每个 AABB 逐段生成粒子的默认行为（会造成粒子爆炸）。挂载方式：在客户端扩展注册事件（`RegisterClientExtensionsEvent`）中 `event.registerBlock(BlockRenderProperties.INSTANCE, <block>)`。已挂载：`thermal_generator`/`power_tower`/`energy_cell`。新增多元素模型方块时必须同步挂载。
+- **Blockbench Java 模型方块（`LayerDefinition`）建模规范**：使用 Blockbench 导出的 `modded_entity`（`flip_y=True`，实体坐标 **Y 向下为正**）时，按以下流程接入（参考 `rtsbuilding-planetrise` 的 `ModelWindGenerator`/`WindGeneratorBlock`，对照 Mekanism `ModelWindGenerator`/`RenderWindGenerator`）：
+  1. **渲染模型**：把导出的 `createBodyLayer()` 几何照搬为 `LayerDefinition`（`MeshDefinition` + `PartDefinition.addOrReplaceChild`），纹理分辨率（`LayerDefinition.create(mesh, w, h)`）必须与贴图尺寸一致；贴图放到 `assets/<modid>/textures/block/<name>/` 并**确保 PNG 分辨率与 UV 坐标系匹配**（Blockbench 按 128 坐标系导出时，若源 PNG 为 256 需先缩放到 128，否则 UV 采样错位）。
+  2. **坐标落位（BEWLR 内）**：实体坐标 → 方块世界坐标必须做 `poseStack.translate(0, 1.5, 0)` **再** `poseStack.scale(-1, -1, 1)`，顺序不可颠倒——`PoseStack` 是右乘矩阵，后调用的变换先作用于顶点，先 `scale` 后 `translate` 会把整塔翻到地下（等价 Mek 的 `translate → mulPose(Axis.ZP.rotationDegrees(180))`）。`scale(-1,-1,1)` 等价绕 Z 轴 180°，必须 X/Y **同时**翻转；仅翻 Y（`scale(1,-1,1)`）是镜像，会致贴图/模型反的。
+  3. **旋转部件**：风叶等绕竖直方向旋转的部件直接设 `bone.yRot = angle`（动画角度由方块实体客户端 tick 累积，`getClientAngle(partialTick)` 插值）；旋转部件**不参与碰撞**。
+  4. **碰撞箱（服务端安全）**：方块 `getShape`/`getCollisionShape` 在服务端也会被查询（寻路/交互/放置校验），**禁止**在方块静态初始化里调用 client-only 的 `JavaModelShapeUtil.fromModelPart`（依赖 `ModelPart`，dedicated server 崩溃）。碰撞箱必须来自纯数据 `RtsJavaModelShape`（方块像素坐标，模型原点对准方块底部中心 `(8,0,8)`，可跨格）→ `buildShape()` 自动生成 `VoxelShape`，逐盒对应模型塔身各段（底座/收窄/塔杆/装饰/塔顶）保证贴合。`fromModelPart` 仅用于客户端建模/诊断与一致性校验。
+  5. **占位高度**：塔形多占位方块（`IBoundingBlock`）的 `BOUNDING_HEIGHT`/`BOUNDING_OFFSETS`/渲染器包围盒（`getRenderBoundingBox`）必须与模型格高一致（如 3 格高 → 主方块 + 上方 2 占位）。
 
 ## 七、语言文件（lang）约定
 
@@ -176,29 +185,3 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
    - **断点**：链路断裂——调用缺失、包未注册、mixin 未生效、返回路径提前 return 不通知客户端。
 3. **修复**：先向用户报告问题清单再动手；修复后必须 `.\gradlew.bat :rtsbuilding-main:compileJava --no-daemon --no-configuration-cache` 编译 + `:rtsbuilding-main:test` 测试通过。
 4. **产出 JSON 报告**：按 `docs/schemas/logic-review.schema.json` 的结构写 `<链路名>.json` 存入 `docs/reports/`（如 `docs/reports/sound-architecture.json`）。报告数据由 `docs/app`（Vue3 SPA）统一渲染，无需手写 HTML。可选：修改 JSON 后运行 `npm run build`（在 `docs/app/`）刷新 `docs/dist/` 静态站点。
-
-### JSON 报告格式规范（统一）
-
-- 遵循 `docs/schemas/logic-review.schema.json`：必填字段 `id / title / subtitle / tags / classes / sections / issues / boundaries`。
-- `classes`：核心类职责，对象数组 `{ name, path, desc }`。
-- `sections`：链路小节，`type` 取值 `table`（`headers`+`rows`）/ `flow`（`nodes`，`side`=`srv`|`cli`）/ `note` / `cards`。
-- `issues`：问题卡片，`status` 取值 `fixed`（前端渲染为「已修复」绿徽章）/ `kept`（「保留」黄徽章）。
-- `boundaries`：边界与设计说明字符串数组。
-- 富文本字段（`desc` / `why` / `note` / 表格单元格 / 节点 `text`）可直接内联 `<code>`、`<b>`、`<strong>`，前端 `v-html` 渲染；禁止脚本。
-- 语言：简体中文。
-
-### 前端预览
-
-- 开发：`cd docs/app && npm install && npm run dev`（http://localhost:5173）。
-- 构建：`cd docs/app && npm run build`（产物到 `docs/dist/`，file:// 直接打开 `docs/dist/index.html` 即可）。
-- 功能：报告列表 → 搜索（标题/类/路径/问题）→ 状态筛选（含已修复/保留）→ 详情页（类职责表 / 链路小节 / 问题卡片 / 边界说明）。
-
-## 十、每日修改总结（记忆）
-
-每次问答结束时，若本次会话有代码修改，**追加**一条总结到当天日期的文件 `docs/change-log/YYYY-MM-DD.md`（日期取当天，按 `2026-08-19` 格式）。
-
-- **追加而非覆盖**：当天多次修改在同一文件内逐条追加；跨天则新建当天文件。
-- **精简**：每条只写 1~3 行，格式为 `- [HH:MM] 主题：做了什么（涉及的关键文件/类，一句话）`。不做长篇描述，不列详细代码。
-- **必须覆盖**：实际改动了哪些代码、新增/删除的文件、行为变更。纯对话/查询（无代码改动）不写。
-- 若文件或 `docs/change-log/` 目录不存在，先创建。
-- 不要在总结中写入 secrets、账号等信息。

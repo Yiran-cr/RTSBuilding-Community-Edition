@@ -10,5 +10,11 @@
   "item.rtsbuilding_planetrise.energy_cell": "Energy Cell",
   "block.rtsbuilding_planetrise.energy_cell": "Energy Cell",
 
+  "item.rtsbuilding_planetrise.wind_generator": "Wind Generator",
+  "block.rtsbuilding_planetrise.wind_generator": "Wind Generator",
+
+  "key.categories.rtsbuilding_planetrise": "Planet Rise Power",
+  "key.rtsbuilding_planetrise.power_range": "Show Power Ranges (hold)",
+
   "message.rtsbuilding_planetrise.energy_cell_info": "Energy Cell: %s / %s FE"
 }
