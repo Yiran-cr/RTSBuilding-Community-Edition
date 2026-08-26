@@ -2,6 +2,8 @@ package com.rtsbuilding.rtsbuilding.planetrise.power;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.util.UUID;
+
 /**
  * 电网节点接口——由「可组网节点」的方块实体（发电机器 / 输电塔）实现。
  * <p>
@@ -16,7 +18,7 @@ public interface IPowerGridNode {
     /** 本节点的角色（发电 / 输电）。 */
     PowerRole role();
 
-    /** 本节点的链路范围（格）。两个节点取较大值作为组网判定阈值；发电机与塔均需此值。 */
+    /** 本节点的链路范围（格）。仅用于范围圈展示，电网组内节点互通不参与分图。 */
     long linkRange();
 
     /** 本节点的供电范围（格）。仅输电塔有意义，发电机返回 0。 */
@@ -30,6 +32,19 @@ public interface IPowerGridNode {
 
     /** 输电塔本 tick 供电范围内用电器需求速率（FE/t）；发电机恒为 0。 */
     long demand();
+
+    /**
+     * 输电塔最近一次广播<b>实际注入</b>供电范围内用电器总电量（FE/t）——真实耗电；
+     * 发电机恒为 0。与 {@link #demand()}（调度用缺口）语义不同：前者是已发生的实际耗电，
+     * 后者是参与电网占比分配的潜在需求。默认返回 0（发电机不注入）。
+     */
+    default long injectedRate() {
+        return 0L;
+    }
+
+    /** 本节点归属的电网所有者（放置者玩家 UUID）。null 表示尚未归属、不参与调度。 */
+    @Nullable
+    UUID gridOwner();
 
     /**
      * 输电塔接受 manager 计算的<b>本 tick 供电配额</b>（FE/t）。发电机忽略。

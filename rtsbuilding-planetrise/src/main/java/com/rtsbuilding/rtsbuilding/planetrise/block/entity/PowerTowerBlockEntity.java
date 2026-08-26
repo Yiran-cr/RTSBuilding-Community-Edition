@@ -85,6 +85,18 @@ public class PowerTowerBlockEntity extends AbstractEnergyMachineBlockEntity impl
     /** 电网调度器分给本塔的<b>上 tick 供电配额</b>（FE/t）。 */
     private long lastQuota;
 
+    /** 最近一次电网分配的配额（供快照展示；广播用后不会清零）。 */
+    private long lastAssignedQuota;
+
+    /** 最近一次广播实际注入用电器的<b>总电量</b>（FE/t）——「真实耗电」，供快照展示。 */
+    private long lastInjected;
+
+    /** 最近一次广播中各用电器实际注入量（FE/t），{@code pos -> 注入量}，供设备列表展示。 */
+    private final Map<BlockPos, Long> injectedByConsumer = new HashMap<>();
+
+    /** 上一轮清理用电器列表的游戏时刻（节流用）。 */
+    private long lastPruneGameTime = Long.MIN_VALUE;
+
     public PowerTowerBlockEntity(BlockPos pos, BlockState state) {
         super(EnergyBlockEntities.POWER_TOWER.get(), pos, state, Config.powerTowerCapacity());
         long powerRange = Config.powerTowerPowerRange();
@@ -120,6 +132,14 @@ public class PowerTowerBlockEntity extends AbstractEnergyMachineBlockEntity impl
     /** 服务端每 tick：扫描供电范围内用电器 → 上报需求 → 驱动电网调度 → 广播上 quota。 */
     @Override
     protected void onServerTick() {
+        if (level instanceof ServerLevel serverLevel) {
+            // 定期清理已被移除的用电器坐标（防残留在列表中 → 快照显示「空气」），节流降低能力查询开销。
+            long now = serverLevel.getGameTime();
+            if (now - lastPruneGameTime >= SCAN_INTERVAL) {
+                lastPruneGameTime = now;
+                pruneConsumers();
+            }
+        }
         scanRange();
         if (level instanceof ServerLevel serverLevel) {
             PowerGridManager mgr = PowerGridManager.get(serverLevel);
@@ -132,46 +152,83 @@ public class PowerTowerBlockEntity extends AbstractEnergyMachineBlockEntity impl
 
     /** 用上一 tick 分得的配额向供电范围内用电方块广播注能。 */
     private void broadcast() {
+        // 记录本 tick 实际注入量（真实耗电：电网每 tick 实际输入设备的电量），供快照展示。
+        injectedByConsumer.clear();
+        long injectedTotal = 0L;
         if (lastQuota <= 0L || level == null || consumers.isEmpty()) {
+            lastInjected = 0L;
             return;
         }
-        long remaining = lastQuota;
-        int processed = 0;
-        while (remaining > 0 && processed < MAX_CONSUMERS && !consumers.isEmpty()) {
-            int best = pickBestRoom();          // 选取「最需要」的用电方块（剩余空间最大）。
-            if (best < 0) {
-                break;
-            }
-            BlockPos pos = consumers.get(best);
+        // 遍历过程中顺手清理已被移除（能量能力彻底失效）的设备坐标，避免列表残留。
+        java.util.Iterator<BlockPos> it = consumers.iterator();
+        List<BlockPos> alive = new ArrayList<>();
+        Map<BlockPos, IEnergyStorage> usable = new HashMap<>();
+        long totalCap = 0L;
+        while (it.hasNext()) {
+            BlockPos pos = it.next();
             IEnergyStorage storage = findUsableStorage(pos, false);
-            long room = storage == null ? 0L
-                    : (long) storage.getMaxEnergyStored() - storage.getEnergyStored();
-            if (storage == null || room <= 0L) {
-                consumers.remove(best);
+            if (storage == null) {
+                // 已移除：仅在能力彻底失效时清理；满电设备（能力仍在）保留展示。
+                if (!hasEnergyCapability(pos)) {
+                    it.remove();
+                }
                 continue;
             }
-            long toMove = Math.min(room, remaining);
+            long cap = storage.getMaxEnergyStored();
+            if (cap <= 0L) {
+                continue;
+            }
+            alive.add(pos);
+            usable.put(pos, storage);
+            totalCap = saturatingAdd(totalCap, cap);
+        }
+        if (alive.isEmpty() || totalCap <= 0L) {
+            lastInjected = 0L;
+            return;
+        }
+        // 按<b>设备最大容量占比</b>比例分发本 tick 配额：每台份额 = 配额 × (本台容量 / 总容量)，
+        // 再受各自可注入缺口（room）限制——不再依次填满单台，而是按容量比值平均分摊。
+        long remaining = lastQuota;
+        for (BlockPos pos : alive) {
+            IEnergyStorage storage = usable.get(pos);
+            long share = (long) ((double) lastQuota * storage.getMaxEnergyStored() / totalCap);
+            if (share <= 0L) {
+                continue;
+            }
+            long room = (long) storage.getMaxEnergyStored() - storage.getEnergyStored();
+            if (room <= 0L) {
+                continue;                        // 已满：本轮跳过，保留在列表中展示（真实耗电 0）。
+            }
+            long toMove = Math.min(share, room);
             int accepted = storage.receiveEnergy((int) Math.min(toMove, Integer.MAX_VALUE), false);
             if (accepted > 0) {
                 remaining -= accepted;
-            }
-            processed++;
-        }
-        lastQuota = 0L;                    // 本 tick 配额已用尽。
-    }
-
-    /** 返回「剩余可注入空间最大」的用电方块下标；无满足条件的返回 -1。 */
-    private int pickBestRoom() {
-        int bestIdx = -1;
-        long bestRoom = 0L;
-        for (int i = 0; i < consumers.size(); i++) {
-            long room = roomOf(consumers.get(i));
-            if (room > bestRoom) {
-                bestRoom = room;
-                bestIdx = i;
+                injectedTotal += accepted;
+                injectedByConsumer.merge(pos, (long) accepted, Long::sum);
             }
         }
-        return bestIdx;
+        // 比例分摊的整数尾差（向下取整损失的残余配额）：按原比例再补一轮，避免浪费。
+        if (remaining > 0L && !alive.isEmpty()) {
+            for (BlockPos pos : alive) {
+                if (remaining <= 0L) {
+                    break;
+                }
+                IEnergyStorage storage = usable.get(pos);
+                long room = (long) storage.getMaxEnergyStored() - storage.getEnergyStored();
+                if (room <= 0L) {
+                    continue;
+                }
+                long toMove = Math.min(room, remaining);
+                int accepted = storage.receiveEnergy((int) Math.min(toMove, Integer.MAX_VALUE), false);
+                if (accepted > 0) {
+                    remaining -= accepted;
+                    injectedTotal += accepted;
+                    injectedByConsumer.merge(pos, (long) accepted, Long::sum);
+                }
+            }
+        }
+        lastInjected = injectedTotal;            // 本 tick 实际注入总量。
+        lastQuota = 0L;                          // 本 tick 配额已用尽。
     }
 
     /** 查询某用电方块的可注入空间（0 表示已满/不可注入）。 */
@@ -271,6 +328,38 @@ public class PowerTowerBlockEntity extends AbstractEnergyMachineBlockEntity impl
         return level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, side);
     }
 
+    /**
+     * 该位置是否仍存在<b>任何</b>能量能力方块（不要求可注入）。
+     * <p>用于区分「用电方块仍在但已充满电」与「方块已被移除」：前者应保留在
+     * {@link #consumers} 列表中供设备列表展示，后者应清理。
+     */
+    private boolean hasEnergyCapability(BlockPos pos) {
+        for (Direction side : PROBE_SIDES) {
+            if (queryStorage(pos, side) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 清理 {@link #consumers} 中<b>已被移除</b>（能量能力彻底失效）的用电器坐标。
+     * <p>仅移除「方块不存在」的条目；仍在但满电的保留（满电设备仍需在列表中展示，
+     * 其能力对象仍在，只为使其不被误删）。被挖掉的方块因能力彻底失效而被清理，
+     * 从而避免设备列表残留坐标导致快照渲染出「空气」。
+     */
+    private void pruneConsumers() {
+        if (level == null || consumers.isEmpty()) {
+            return;
+        }
+        consumers.removeIf(pos -> !hasEnergyCapability(pos));
+    }
+
+    /** 该坐标是否仍是一个有效的用电器（能量能力仍在），供服务端快照/设备列表过滤用。 */
+    public boolean isConsumerAlive(BlockPos pos) {
+        return hasEnergyCapability(pos);
+    }
+
     /** 缓存的能力对象及其来源方块实体：位置指向同一实体时才视为有效。 */
     private static final class CachedStorage {
         @Nullable
@@ -337,7 +426,34 @@ public class PowerTowerBlockEntity extends AbstractEnergyMachineBlockEntity impl
     /** 电网调度器分给本塔的供电配额。 */
     @Override
     public void acceptQuota(long quota) {
+        this.lastAssignedQuota = quota;
         this.lastQuota = quota;
+    }
+
+    /** 本 tick 待广播配额（广播后清零）。 */
+    public long lastQuota() {
+        return lastQuota;
+    }
+
+    /** 最近一次电网分配的配额（供快照展示，广播后不清零）。 */
+    public long lastAssignedQuota() {
+        return lastAssignedQuota;
+    }
+
+    /** 某用电器最近一次广播<b>实际注入</b>的电量（FE/t）——该设备的真实耗电，供快照展示。 */
+    public long consumerInjectedRate(BlockPos pos) {
+        return injectedByConsumer.getOrDefault(pos, 0L);
+    }
+
+    /** 本塔最近一次广播实际注入供电范围内用电器的<b>总电量</b>（FE/t）——真实耗电，供快照展示。 */
+    @Override
+    public long injectedRate() {
+        return lastInjected;
+    }
+
+    /** 供电范围内已发现的用电器坐标（财务快照/设备列表用）。 */
+    public java.util.List<BlockPos> consumers() {
+        return java.util.Collections.unmodifiableList(consumers);
     }
 
     /** 饱和加法。 */

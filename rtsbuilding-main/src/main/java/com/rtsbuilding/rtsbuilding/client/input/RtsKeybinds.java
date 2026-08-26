@@ -65,6 +65,7 @@ public final class RtsKeybinds {
         add("blueprint_move_down", RtsKeyMappings.BLUEPRINT_MOVE_DOWN_KEY);
         add("blueprint_move_left", RtsKeyMappings.BLUEPRINT_MOVE_LEFT_KEY);
         add("blueprint_move_right", RtsKeyMappings.BLUEPRINT_MOVE_RIGHT_KEY);
+        add("power_grid_menu", RtsKeyMappings.POWER_GRID_MENU_KEY);
     }
 
     public static List<Entry> entries() {

@@ -2,6 +2,10 @@ package com.rtsbuilding.rtsbuilding.planetrise;
 
 import com.mojang.logging.LogUtils;
 import com.rtsbuilding.rtsbuilding.Config;
+import com.rtsbuilding.rtsbuilding.common.RtsGridOwnerBinding;
+import com.rtsbuilding.rtsbuilding.planetrise.block.entity.AbstractEnergyMachineBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -11,6 +15,7 @@ import org.slf4j.Logger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 
 /**
  * Entry point of the built-in addon mod {@code rtsbuilding_planetrise} —
@@ -87,6 +92,12 @@ public final class EnergyMod {
             }
             // Make the main mod's terminal energy-powered again.
             TerminalEnergyImpl.installProvider();
+            // 电网节点归属桥：主模组放置方块后，若该位置是能量节点则绑定到放置者电网组。
+            RtsGridOwnerBinding.install((ServerLevel level, BlockPos pos, UUID playerUuid) -> {
+                if (level.getBlockEntity(pos) instanceof AbstractEnergyMachineBlockEntity be) {
+                    be.setGridOwner(playerUuid);
+                }
+            });
         });
     }
 }

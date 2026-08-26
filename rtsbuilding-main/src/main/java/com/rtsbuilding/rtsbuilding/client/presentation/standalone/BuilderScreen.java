@@ -1592,6 +1592,10 @@ public class BuilderScreen extends Screen implements UiPanelHost {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (com.rtsbuilding.rtsbuilding.client.presentation.panel.powergrid.PowerGridManagerPanel
+                .handleGlobalKey(keyCode, scanCode, this)) {
+            return true;
+        }
         return eventDispatcher.dispatch(new KeyPressEvent(keyCode, scanCode, modifiers));
     }
 

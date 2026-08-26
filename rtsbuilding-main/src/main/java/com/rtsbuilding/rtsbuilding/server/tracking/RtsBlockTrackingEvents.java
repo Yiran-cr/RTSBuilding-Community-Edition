@@ -52,6 +52,8 @@ public final class RtsBlockTrackingEvents {
         }
         PlacedBlockTrackerData.get(serverLevel).mark(event.getPos());
         serverLevel.getServer().execute(() -> RtsLinkedStorageBlockEventHandler.onLinkedStorageBlockPlaced(serverLevel, event.getPos()));
+        // 电网节点归属：手动放置的能量节点绑定到放置者（插件注入实现，非能量节点为空操作）。
+        com.rtsbuilding.rtsbuilding.common.RtsGridOwnerBinding.onPlaced(serverLevel, event.getPos(), player.getUUID());
         // 手动放置方块后刷新放置工作流进度（更新进度条和重启所需方块数）
         RtsStorageSession session = RtsServer.get().session().getIfPresent(player);
         if (session != null) {
@@ -85,6 +87,7 @@ public final class RtsBlockTrackingEvents {
         for (BlockSnapshot snapshot : event.getReplacedBlockSnapshots()) {
             tracker.mark(snapshot.getPos());
             serverLevel.getServer().execute(() -> RtsLinkedStorageBlockEventHandler.onLinkedStorageBlockPlaced(serverLevel, snapshot.getPos()));
+            com.rtsbuilding.rtsbuilding.common.RtsGridOwnerBinding.onPlaced(serverLevel, snapshot.getPos(), player.getUUID());
         }
         // 多方块放置后刷新放置工作流进度
         RtsStorageSession session = RtsServer.get().session().getIfPresent(player);

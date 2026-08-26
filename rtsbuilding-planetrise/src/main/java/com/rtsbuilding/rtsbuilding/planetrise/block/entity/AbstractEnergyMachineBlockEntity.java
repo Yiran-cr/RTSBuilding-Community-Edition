@@ -13,6 +13,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.UUID;
 
 /**
  * 所有 RTS 能量机器（戴森球计划风格的能量节点）的抽象基类。
@@ -37,9 +40,14 @@ import net.minecraft.world.level.block.state.BlockState;
 public abstract class AbstractEnergyMachineBlockEntity extends BlockEntity {
 
     private static final String NBT_ENERGY = "energy";
+    private static final String NBT_GRID_OWNER = "gridOwner";
 
     /** 本机器的能量缓冲（FE 存储）。 */
     private final BasicEnergyContainer buffer;
+
+    /** 本节点归属的电网所有者（放置者玩家 UUID）；null 表示尚未归属。 */
+    @Nullable
+    private UUID gridOwnerId;
 
     /** 多占位机器：服务端首次 tick 是否需要对占位方块强制重发 mainPos（参照 Mekanism syncMasterToBounding）。 */
     private boolean syncMasterToBounding = true;
@@ -63,6 +71,20 @@ public abstract class AbstractEnergyMachineBlockEntity extends BlockEntity {
     /** @return 本机器的能量缓冲，供方块能力注册 / 业务逻辑读取。 */
     public BasicEnergyContainer getBuffer() {
         return buffer;
+    }
+
+    /** 本节点归属的电网所有者玩家 UUID；未归属时返回 null。 */
+    @Nullable
+    public UUID gridOwner() {
+        return gridOwnerId;
+    }
+
+    /** 设置本节点归属的电网所有者玩家 UUID（null 表示解除归属）。 */
+    public void setGridOwner(@Nullable UUID ownerId) {
+        if (!java.util.Objects.equals(this.gridOwnerId, ownerId)) {
+            this.gridOwnerId = ownerId;
+            setChanged();
+        }
     }
 
     /**
@@ -130,6 +152,9 @@ public abstract class AbstractEnergyMachineBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider provider) {
         super.saveAdditional(tag, provider);
         tag.put(NBT_ENERGY, buffer.serializeNBT(provider));
+        if (gridOwnerId != null) {
+            tag.putUUID(NBT_GRID_OWNER, gridOwnerId);
+        }
         saveEnergyAdditional(tag, provider);
     }
 
@@ -138,6 +163,9 @@ public abstract class AbstractEnergyMachineBlockEntity extends BlockEntity {
         super.loadAdditional(tag, provider);
         if (tag.contains(NBT_ENERGY, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             buffer.deserializeNBT(provider, tag.getCompound(NBT_ENERGY));
+        }
+        if (tag.contains(NBT_GRID_OWNER)) {
+            gridOwnerId = tag.getUUID(NBT_GRID_OWNER);
         }
         loadEnergyAdditional(tag, provider);
     }

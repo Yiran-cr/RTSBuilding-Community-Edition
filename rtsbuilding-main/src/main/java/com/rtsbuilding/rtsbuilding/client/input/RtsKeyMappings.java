@@ -261,6 +261,17 @@ public final class RtsKeyMappings {
     );
 
     /**
+     * 电网多人管理面板开关（默认 K）。RTS 模式内打开/关闭电网信息、成员管理、设备定位与外部机器配置。
+     */
+    public static final KeyMapping POWER_GRID_MENU_KEY = new KeyMapping(
+            "key.rtsbuilding.power_grid_menu",
+            KeyConflictContext.GUI,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_K,
+            CATEGORY_FUNCTION
+    );
+
+    /**
      * 检查 {@link #LINE_FLAT_KEY} 绑定的按键当前是否按下。
      * <p>直接读取绑定键的 GLFW 状态（键盘或鼠标），不依赖每 tick 的
      * {@code KeyMappingState} 更新（后者在自定义 Screen 中不可靠），

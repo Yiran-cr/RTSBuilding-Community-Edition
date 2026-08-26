@@ -299,6 +299,10 @@ public final class RtsPlacementQuickBuild {
             BlockPlacer.applyQuickBuildBlockEntity(level, targetPos, placementStack, placedState, player);
         }
         BlockPlacer.trackPlaced(level, targetPos);
+        // 电网节点归属：RTS 远程放置的能量节点绑定到放置者电网组（插件注入实现，非能量节点为空操作）。
+        if (player != null) {
+            com.rtsbuilding.rtsbuilding.common.RtsGridOwnerBinding.onPlaced(level, targetPos, player.getUUID());
+        }
         // 落位成功：通知调用方（无论玩家在线与否，方块已真实出现）
         if (onCommitFinished != null) onCommitFinished.accept(true);
         // 玩家相关的后置逻辑（声音/页面/续货）仅在玩家仍在线时执行

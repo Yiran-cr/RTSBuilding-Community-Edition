@@ -14,6 +14,9 @@ import com.rtsbuilding.rtsbuilding.planetrise.client.render.RenderPowerTower;
 import com.rtsbuilding.rtsbuilding.planetrise.client.render.RenderPowerTowerItem;
 import com.rtsbuilding.rtsbuilding.planetrise.client.render.RenderWindGenerator;
 import com.rtsbuilding.rtsbuilding.planetrise.client.render.RenderWindGeneratorItem;
+import com.rtsbuilding.rtsbuilding.api.powergrid.RtsPowerGrid;
+import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridApiImpl;
+import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets;
 import net.minecraft.client.KeyMapping;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -25,6 +28,9 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import org.lwjgl.glfw.GLFW;
 
@@ -113,6 +119,24 @@ public final class EnergyClient {
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(POWER_RANGE_OVERLAY_KEY);
+    }
+
+    /** 客户端构造完成：注入电网多人系统 API 实现（纯内存赋值，无网络）。 */
+    @SubscribeEvent
+    public static void onClientSetup(FMLClientSetupEvent event) {
+        if (!Config.isTechnologizedEnabled()) {
+            return;
+        }
+        RtsPowerGrid.setImplementation(PowerGridApiImpl.INSTANCE);
+    }
+
+    /** 客户端加入服务器后：请求一次电网信息刷新（此时网络连接已就绪，可安全发 C2S）。 */
+    @SubscribeEvent
+    public static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+        if (!Config.isTechnologizedEnabled()) {
+            return;
+        }
+        PacketDistributor.sendToServer(new PowerGridPackets.C2SPowerGridRefresh());
     }
 
     /**

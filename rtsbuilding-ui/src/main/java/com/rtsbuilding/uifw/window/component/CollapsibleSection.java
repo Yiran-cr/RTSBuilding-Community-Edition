@@ -24,7 +24,10 @@ public class CollapsibleSection {
 
     private boolean expanded;
     private final String titleKey;
-    
+
+    /** 可选自定义标题文本（优先于 {@link #titleKey} 的翻译；供宿主用动态标题如「风力发电机 ×4」）。 */
+    private String customTitle;
+
     private String cachedTitle;
 
     
@@ -58,6 +61,12 @@ public class CollapsibleSection {
         this.expanded = !this.expanded;
         this.arrowAnim.target(this.expanded ? 1.0f : 0.0f);
         this.contentAnim.target(this.expanded ? 1.0f : 0.0f);
+    }
+
+    /** 设置自定义标题文本（动态标题优先于 titleKey 翻译）。 */
+    public void setTitleText(String text) {
+        this.customTitle = text;
+        this.cachedTitle = null;
     }
 
     
@@ -121,7 +130,8 @@ public class CollapsibleSection {
     
     private void renderTitle(GuiGraphics g, int x, int y, int sectionWidth) {
         if (cachedTitle == null) {
-            cachedTitle = Component.translatable(this.titleKey).getString();
+            cachedTitle = customTitle != null ? customTitle
+                    : Component.translatable(this.titleKey).getString();
         }
         int maxTitleWidth = Math.max(8, sectionWidth - TITLE_WIDTH_SUB);
         TextRenderer.draw(g, TextRenderer.trimToWidth(Minecraft.getInstance().font, cachedTitle, maxTitleWidth),
