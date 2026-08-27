@@ -1,0 +1,11 @@
+{
+  "type": "rtsbuilding_planetrise:phobos",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "rtsbuilding_planetrise:phobos",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "rtsbuilding_planetrise:phobos"
+    }
+  }
+}
