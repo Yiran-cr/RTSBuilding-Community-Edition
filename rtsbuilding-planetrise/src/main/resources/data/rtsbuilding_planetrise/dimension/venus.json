@@ -1,0 +1,11 @@
+{
+  "type": "rtsbuilding_planetrise:venus",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "rtsbuilding_planetrise:venus",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "rtsbuilding_planetrise:venus"
+    }
+  }
+}

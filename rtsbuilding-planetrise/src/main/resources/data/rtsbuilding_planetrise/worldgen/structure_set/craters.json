@@ -1,0 +1,23 @@
+{
+  "structures": [
+    {
+      "structure": "rtsbuilding_planetrise:huge_crater",
+      "weight": 100
+    },
+    {
+      "structure": "rtsbuilding_planetrise:medium_crater",
+      "weight": 2
+    },
+    {
+      "structure": "rtsbuilding_planetrise:small_crater",
+      "weight": 5
+    }
+  ],
+  "placement": {
+    "type": "minecraft:random_spread",
+    "spacing": 32,
+    "separation": 16,
+    "salt": 114514,
+    "frequency": 0.6
+  }
+}

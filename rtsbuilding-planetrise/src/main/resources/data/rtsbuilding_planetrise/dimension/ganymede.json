@@ -1,0 +1,11 @@
+{
+  "type": "rtsbuilding_planetrise:ganymede",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "rtsbuilding_planetrise:ganymede",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "rtsbuilding_planetrise:ganymede"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "type": "rtsbuilding_planetrise:mercury",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "rtsbuilding_planetrise:mercury",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "rtsbuilding_planetrise:mercury"
+    }
+  }
+}

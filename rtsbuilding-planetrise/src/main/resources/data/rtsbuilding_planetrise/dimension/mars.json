@@ -1,0 +1,11 @@
+{
+  "type": "rtsbuilding_planetrise:mars",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "rtsbuilding_planetrise:mars",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "rtsbuilding_planetrise:mars"
+    }
+  }
+}
