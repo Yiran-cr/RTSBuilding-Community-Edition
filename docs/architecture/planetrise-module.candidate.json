@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "rtsbuilding-planetrise 电网插件专项架构（内置能量插件）",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "supply-path",
+        "label": "电网供电主链路",
+        "focus": ["main-bridge", "pr-node-interface", "pr-power", "pr-machines"],
+        "note": "终端能量接入电网节点，进入调度广播，向发电/用电器注入。"
+      },
+      {
+        "id": "multiplayer-path",
+        "label": "多人电网链路",
+        "focus": ["pr-power", "pr-network", "pr-client"],
+        "note": "电网调度同步到组共识与快照，回推客户端范围圈。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "main-bridge",     "type": "backend", "label": "Main · 终端能量桥", "sublabel": "RtsTerminalEnergy / RtsPowerGrid", "pos": [140, 262], "size": [210, 78], "tag": "AtomicReference 注入" },
+    { "id": "pr-node-interface","type": "backend", "label": "节点方块实体", "sublabel": "IPowerGridNode 接口", "pos": [560, 262], "size": [210, 78], "tag": "generation / demand / injectTo" },
+    { "id": "pr-power",        "type": "backend", "label": "电网核心", "sublabel": "PowerGridManager / PowerScheduler", "pos": [1000, 262], "size": [210, 78], "tag": "归属组 + 覆盖融合" },
+
+    { "id": "pr-machines",  "type": "backend",    "label": "机器方块", "sublabel": "热/风发电 · 储能 · 输电塔", "pos": [1000, 120], "size": [210, 78], "tag": "BoundingBlock 多占位" },
+    { "id": "pr-network",   "type": "messagebus", "label": "电网多人", "sublabel": "PowerGridOwnership · 网络包", "pos": [1000, 404], "size": [210, 78], "tag": "S2CPowerGridSnapshot" },
+    { "id": "pr-client",    "type": "frontend",   "label": "客户端", "sublabel": "范围圈 · 缓存 · 模型渲染", "pos": [1000, 546], "size": [210, 78], "tag": "PowerRangeOverlayRenderer" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "宿主（main 横切）", "wraps": ["main-bridge"] },
+    { "kind": "region", "label": "电网核心调度（星球崛起插件）", "wraps": ["pr-node-interface", "pr-power", "pr-machines", "pr-network", "pr-client"] }
+  ],
+  "connections": [
+    { "id": "bridge-to-node",   "from": "main-bridge", "to": "pr-node-interface", "label": "终端能量接入", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [455, 301] },
+    { "id": "node-to-power",    "from": "pr-node-interface", "to": "pr-power", "label": "注册 / 上报调度", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [885, 301] },
+    { "id": "power-to-machines","from": "pr-power", "to": "pr-machines", "label": "按需求占比注入", "fromSide": "top", "toSide": "bottom", "labelAt": [1105, 232] },
+    { "id": "power-to-network", "from": "pr-power", "to": "pr-network", "label": "组分配 / 成员共识", "fromSide": "bottom", "toSide": "top", "labelAt": [1105, 372] },
+    { "id": "network-to-client","from": "pr-network", "to": "pr-client", "label": "快照 / 范围圈同步", "fromSide": "bottom", "toSide": "top", "labelAt": [1105, 514] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "电网 = 物理链路连通图", "items": ["按归属组管辖，组内再按「链路连接 + 塔覆盖接入」物理分区", "链路阈值=两端 linkRange 取最大值，发电-发电不直连"] },
+    { "dot": "emerald", "title": "覆盖融合统一供电", "items": ["电网内所有塔的供电范围融合成联合覆盖区", "按各用电器需求占比统一注入，转发不衰减"] },
+    { "dot": "violet", "title": "电网多人系统", "items": ["全局电网所有权 + 阶梯权限（OWNER / ADMIN / USER）", "组快照 S2C 回推客户端供范围圈与 UI 读取"] }
+  ]
+}

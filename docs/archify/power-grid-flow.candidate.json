@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "电网供电链路（星球崛起电力系统）",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1070, 620],
+    "views": [
+      {
+        "id": "supply-pipeline",
+        "label": "电网供电任务管线",
+        "focus": ["generators", "towers", "manager", "scheduler", "broadcast", "consumers"],
+        "note": "从发电上报到覆盖广播注入用电器的完整任务管线。"
+      },
+      {
+        "id": "snapshot-feedback",
+        "label": "快照回传",
+        "focus": ["broadcast", "snapshot", "consumers"],
+        "note": "调度结果经 S2C 快照回推客户端供 UI 读取。"
+      }
+    ]
+  },
+  "stages": [
+    { "label": "数据上报" },
+    { "label": "电网聚合" },
+    { "label": "电网划分" },
+    { "label": "覆盖广播" },
+    { "label": "消费与回传" }
+  ],
+  "nodes": [
+    { "id": "generators", "type": "backend",    "label": "发电机器", "sublabel": "热/风发电机", "stage": 0, "row": 0, "width": 150, "height": 58, "tag": "generation()" },
+    { "id": "towers",     "type": "backend",    "label": "输电塔", "sublabel": "无线供电", "stage": 0, "row": 1, "width": 150, "height": 58, "tag": "externalGeneration()" },
+
+    { "id": "manager",    "type": "backend",    "label": "PowerGridManager", "sublabel": "聚合发电", "stage": 1, "row": 1, "width": 150, "height": 58, "tag": "注册节点" },
+    { "id": "scheduler",  "type": "backend",    "label": "PowerScheduler", "sublabel": "划物理电网", "stage": 2, "row": 1, "width": 150, "height": 58, "tag": "union-find" },
+    { "id": "broadcast",  "type": "backend",    "label": "broadcastToGrid", "sublabel": "覆盖融合广播", "stage": 3, "row": 1, "width": 150, "height": 58, "tag": "需求占比注入" },
+
+    { "id": "consumers",  "type": "backend",    "label": "用电器", "sublabel": "injectTo", "stage": 4, "row": 1, "width": 150, "height": 58, "tag": "IEnergyStorage / 终端" },
+    { "id": "snapshot",   "type": "messagebus", "label": "S2C 快照", "sublabel": "组信息回推", "stage": 4, "row": 0, "width": 150, "height": 58, "tag": "PowerGridClientCache" }
+  ],
+  "flows": [
+    { "id": "generators-to-manager","from": "generators", "to": "manager", "label": "generation() 上报", "labelAt": [208, 200] },
+    { "id": "towers-to-manager",    "from": "towers",     "to": "manager", "label": "塔覆盖 / external", "fromSide": "right", "toSide": "left", "labelAt": [207, 312] },
+    { "id": "manager-to-scheduler", "from": "manager",    "to": "scheduler", "label": "GridAllocation 分组", "labelDy": 56 },
+    { "id": "scheduler-to-broadcast","from": "scheduler", "to": "broadcast", "label": "分组结果", "labelDy": 56 },
+    { "id": "broadcast-to-consumers","from": "broadcast", "to": "consumers", "label": "injectTo 按需求占比", "variant": "emphasis", "labelDy": 56 },
+    { "id": "broadcast-to-snapshot","from": "broadcast", "to": "snapshot", "label": "S2CPowerGridSnapshot", "variant": "dashed", "labelAt": [853, 206] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "电网 = 物理链路连通图", "items": ["先按归属组管辖，组内再按链路连接 + 塔覆盖接入物理分区", "链路阈值=两端 linkRange 取最大值，发电-发电不直连"] },
+    { "dot": "emerald", "title": "覆盖融合统一供电", "items": ["所有塔的供电范围融合成联合覆盖区", "按各用电器需求占比统一注入，转发不衰减；终端开启扣 500 FE"] },
+    { "dot": "violet", "title": "多人快照", "items": ["电网调度结果经 S2C 快照回推客户端", "客户端缓存供范围圈与 UI 读取"] }
+  ]
+}

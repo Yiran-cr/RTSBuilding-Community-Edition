@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "rtsbuilding-main 模块架构",
+    "output": "rtsbuilding-main-rendered.html",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Yiran-cr/RTSBuilding-Community-Edition",
+      "revision": "0c795052f3f52cad935b19d69c991ec20ffa5692"
+    }
+  },
+  "components": [
+    { "id": "builderscreen", "type": "frontend", "label": "BuilderScreen", "sublabel": "UI 表现层 · 全部面板", "pos": [244, 150], "size": [230, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/client/presentation/standalone/BuilderScreen.java", "line": 1 }] },
+    { "id": "clientkernel", "type": "backend", "label": "RtsClientKernel", "sublabel": "客户端内核 · 8 模块", "pos": [244, 292], "size": [230, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/client/kernel/RtsClientKernel.java", "line": 1 }] },
+    { "id": "gateway", "type": "frontend", "label": "RtsClientPacketGateway", "sublabel": "C2S 发包 · S2C 收包", "pos": [244, 434], "size": [230, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/client/network/RtsClientPacketGateway.java", "line": 1 }] },
+    { "id": "render", "type": "frontend", "label": "client.render / scene", "sublabel": "RenderPipeline · 预览", "pos": [500, 292], "size": [170, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/client/render/RenderPipeline.java", "line": 1 }] },
+    { "id": "protocol", "type": "messagebus", "label": "RtsPayloadRegistrar", "sublabel": "C2SAction / S2C payload", "pos": [700, 292], "size": [180, 64], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/network/RtsPayloadRegistrar.java", "line": 1 }] },
+    { "id": "actorhandler", "type": "backend", "label": "ServerActionHandler", "sublabel": "C2S 分发 ~40 动作", "pos": [700, 434], "size": [180, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/network/handler/ServerActionHandler.java", "line": 1 }] },
+    { "id": "servercore", "type": "backend", "label": "RtsServer 服务注册表", "sublabel": "ServiceLoader · 10 服务", "pos": [910, 150], "size": [230, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/server/RtsServer.java", "line": 1 }] },
+    { "id": "services", "type": "backend", "label": "服务实现", "sublabel": "Placement / Mining 等", "pos": [910, 292], "size": [230, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/server/service/impl/RtsPlacementServiceImpl.java", "line": 1 }] },
+    { "id": "pipeline", "type": "backend", "label": "WorkflowPipeline 管道", "sublabel": "校验→工具→执行→同步", "pos": [910, 434], "size": [230, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/server/pipeline/core/WorkflowPipeline.java", "line": 1 }] },
+    { "id": "persisted", "type": "database", "label": "server.data / storage", "sublabel": "持久化 · 引擎 · 会话", "pos": [910, 576], "size": [230, 56], "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/server/data/SaveScheduler.java", "line": 1 }] },
+    { "id": "minecraft", "type": "external", "label": "Minecraft · NeoForge", "sublabel": "玩家 / 世界运行时", "pos": [244, 30], "size": [230, 52] },
+    { "id": "planetrise", "type": "external", "label": "rtsbuilding-planetrise", "sublabel": "能量 / 电网插件", "pos": [910, 30], "size": [230, 52] },
+    { "id": "rtsui", "type": "external", "label": "rtsbuilding-ui (uifw)", "sublabel": "独立 UI 框架", "pos": [24, 150], "size": [180, 56] },
+    { "id": "rtsapi", "type": "external", "label": "rtsbuilding-api", "sublabel": "RtsAPI 门面", "pos": [1170, 60], "size": [180, 56] },
+    { "id": "rtscommon", "type": "external", "label": "rtsbuilding-common", "sublabel": "蓝图逻辑", "pos": [1200, 434], "size": [150, 56] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "客户端 Client · NeoForge", "wraps": ["builderscreen", "clientkernel", "gateway", "render"] },
+    { "kind": "region", "label": "服务端 Server · NeoForge", "wraps": ["servercore", "services", "pipeline", "persisted"] }
+  ],
+  "connections": [
+    { "id": "enter-rts", "from": "minecraft", "to": "builderscreen", "label": "右键 rts_terminal", "variant": "emphasis", "labelAt": [359, 116] },
+    { "id": "ui-to-kernel", "from": "builderscreen", "to": "clientkernel", "label": "UI 事件 / 状态", "labelAt": [359, 249] },
+    { "id": "kernel-render", "from": "clientkernel", "to": "render", "label": "驱动渲染", "variant": "dashed", "fromSide": "right", "toSide": "left", "labelAt": [521, 405] },
+    { "id": "kernel-gateway", "from": "clientkernel", "to": "gateway", "label": "C2S 命令", "labelAt": [359, 391] },
+    { "id": "gateway-to-protocol", "from": "gateway", "to": "protocol", "label": "C2S 上行", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [590, 460] },
+    { "id": "protocol-to-handler", "from": "protocol", "to": "actorhandler", "label": "C2SAction 路由", "labelAt": [790, 395] },
+    { "id": "handler-to-server", "from": "actorhandler", "to": "servercore", "label": "服务分发", "variant": "emphasis", "labelAt": [995, 228] },
+    { "id": "server-to-services", "from": "servercore", "to": "services", "label": "调用服务实现", "labelAt": [1090, 249] },
+    { "id": "services-to-pipeline", "from": "services", "to": "pipeline", "label": "执行工作流", "labelAt": [1025, 391] },
+    { "id": "pipeline-to-persisted", "from": "pipeline", "to": "persisted", "label": "存档 / 存储", "labelAt": [1025, 533] },
+    { "id": "persisted-to-actor", "from": "persisted", "to": "actorhandler", "label": "S2C 回包", "variant": "dashed", "fromSide": "bottom", "toSide": "right", "via": [[1025, 700], [900, 700], [900, 462]], "labelAt": [990, 640] },
+    { "id": "grid-bridge", "from": "planetrise", "to": "servercore", "label": "RtsTerminalEnergy 桥", "variant": "security", "labelAt": [1025, 116] },
+    { "id": "ui-to-host", "from": "rtsui", "to": "builderscreen", "label": "UiPanelHost 解耦", "variant": "dashed", "fromSide": "right", "toSide": "left", "labelAt": [170, 244] },
+    { "id": "api-to-server", "from": "rtsapi", "to": "servercore", "label": "RtsAPI 门面注入", "variant": "dashed", "fromSide": "bottom", "toSide": "right", "via": [[1260, 178]], "labelAt": [1220, 205] },
+    { "id": "common-to-pipeline", "from": "rtscommon", "to": "pipeline", "label": "状态机 / 蓝图", "variant": "dashed", "fromSide": "left", "toSide": "right", "labelAt": [1168, 512] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "客户端", "items": ["BuilderScreen 组合全部浮窗面板；RtsClientKernel 驱动 8 个功能模块", "RenderPipeline 渲染 18 个 pass；client.scene 结构预览"] },
+    { "dot": "emerald", "title": "服务端", "items": ["RtsServer 按依赖拓扑装配 10 个 RtsService", "WorkflowPipeline 校验 → 工具 → 执行 → 同步；server.data 每 200 tick 刷盘"] },
+    { "dot": "amber", "title": "网络", "items": ["C2SAction 统一动作协议，fromId 越界返回 null 防恶意包", "S2C 各域 payload 经 ClientPayloadDispatcher 分发"] },
+    { "dot": "slate", "title": "依赖与桥", "items": ["api / common / ui 为 compileOnly，最终合并进主 JAR", "电网插件经 RtsTerminalEnergy 桥接入主模组"] }
+  ]
+}

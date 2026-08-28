@@ -1,13 +1,12 @@
 <script setup>
 import { ref, computed } from 'vue'
 
-// 文档清单：当前含模块架构图，后续逻辑链路报告可在此追加
+// 文档清单：多张架构图可切换查看，后续逻辑链路报告可在此追加
 const docs = [
-  {
-    id: 'architecture',
-    title: '模块架构',
-    src: '/architecture/rtsbuilding-architecture.html'
-  }
+  { id: 'architecture',   title: '模块架构',    src: '/architecture/rtsbuilding-architecture.html' },
+  { id: 'main-module',    title: '主模组 main', src: '/architecture/rtsbuilding-main.html' },
+  { id: 'planetrise',     title: '电网插件',    src: '/architecture/planetrise-module.html' },
+  { id: 'power-grid',     title: '电网链路',    src: '/architecture/power-grid-flow.html' }
 ]
 const active = ref(docs[0].id)
 const activeDoc = computed(() => docs.find((d) => d.id === active.value))

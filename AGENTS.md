@@ -189,3 +189,24 @@ rtsaddon-ae2 / refinedstorage / beyonddimensions / sophisticatedbackpacks
    - **断点**：链路断裂——调用缺失、包未注册、mixin 未生效、返回路径提前 return 不通知客户端。
 3. **修复**：先向用户报告问题清单再动手；修复后必须 `.\gradlew.bat :rtsbuilding-main:compileJava --no-daemon --no-configuration-cache` 编译 + `:rtsbuilding-main:test` 测试通过。
 4. **产出 JSON 报告**：按 `docs/schemas/logic-review.schema.json` 的结构写 `<链路名>.json` 存入 `docs/reports/`（如 `docs/reports/sound-architecture.json`）。报告数据由 `docs/app`（Vue3 SPA）统一渲染，无需手写 HTML。可选：修改 JSON 后运行 `npm run build`（在 `docs/app/`）刷新 `docs/dist/` 静态站点。
+
+## 十、Archify 架构图工作流（"/archify" 生成图必读）
+
+当用户说「生成架构图」、「archify」、「画架构图」或引用 `/archify` 时，使用本仓库外的 archify 技能（`C:\Users\28178\.agents\skills\archify\SKILL.md`）。**生成完成后必须接入 Vue 前端文档站**，具体固定流程：
+
+1. **读取 archify 规范**：先 `node bin/archify.mjs doctor` 确认环境，再按需读取 `schemas/<type>.schema.json`、`schemas/common.schema.json` 与匹配 `examples/*.json`（仅作字段形状参考，不套用其事实）。
+2. **撰写候选**：图类型 `/archify` 场景通常为 `architecture`；候选 JSON 写到 `docs/archify/<名>.candidate.json`（**产品名/类名/代码标识符保留英文**，描述性文案用简体中文，`meta.locale` 用 `"zh-CN"`）。
+3. **校验**：`node bin/archify.mjs validate architecture <candidate.json> --quality showcase --json`。必须全部 9 项 artifact 检查通过且 0 error / 0 warning；失败时按诊断的 subject/evidence/supportedFixes 逐项修复，修复后必须复跑。
+4. **交付**：`node bin/archify.mjs deliver architecture <candidate.json> <output.html> --quality showcase --json`（交付会冻结规范字节）。
+5. **视觉检查**：`node bin/archify.mjs visual-check <output.html> --json`。本机无 Chrome，先 `$env:ARCHIFY_CHROME = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"` 再跑（Edge 是 Chromium 内核可用）。要求在 1440×900 / 1600×1000 / 1920×1080 / 2048×1320 四档无溢出、可读性达标。
+
+**接入 Vue 前端（必做，紧接第 4 步之后）**：
+
+- 主产物 `<名>.html` 保留在 `docs/archify/`。
+- **覆盖** `docs/app/public/architecture/<名>.html`（这是 `App.vue` 里 `<iframe :src="'/architecture/<名>.html'">` 加载的静态资源源）。
+- **同步分发备份**到 `docs/architecture/`（同目录的 `<名>.html`、`<名>.json`、`*.visual-check.*`）。
+- 若图未出现在文档站顶部导航，需在 `docs/app/src/App.vue` 的 `docs` 数组追加条目（`{ id, title, src: '/architecture/<名>.html' }`；仅当新增页面时才改，已有 `architecture` 条目无需重复加）。
+- 最后 `cd docs/app; npm run build` 刷新 `docs/app/dist/`（Vite 打包产物，禁止手改）。
+- 未执行上述接入步骤即视为 /archify 任务未完成。
+
+**注意事项**：架构图 HTML 是自包含的（含主题切换/平移缩放/搜索/语义视图/导出），无需再手写组件；`docs/architecture/` 与 `docs/app/dist/architecture/` 只是分发/构建镜像，勿在两者上面直接改源码。构建产物目录 `docs/app/dist/` 属「八、禁止改动」的生成产物，重建命令允许，手动编辑禁止。

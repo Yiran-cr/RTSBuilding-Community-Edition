@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "rtsbuilding-main 主模组专项架构（NeoForge 平台层）",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "client-path",
+        "label": "客户端主链路",
+        "focus": ["client-kernel", "client-ui", "network", "client-render"],
+        "note": "客户端内核装配界面，操作经网络发包，回包由渲染层订阅。"
+      },
+      {
+        "id": "server-path",
+        "label": "服务端主链路",
+        "focus": ["network", "server-core", "server-pipeline", "server-storage", "server-workflow"],
+        "note": "动作经分发到服务核心，进入工作流管道与存储/工作流引擎。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "client-kernel", "type": "frontend", "label": "Client · 内核", "sublabel": "RtsClientKernel + 7 功能模块", "pos": [140, 120], "size": [210, 78], "tag": "StateEvent / 重放缓冲" },
+    { "id": "client-ui",     "type": "frontend", "label": "Client · 界面", "sublabel": "BuilderScreen / panel 面板组", "pos": [140, 262], "size": [210, 78], "tag": "uifw 组件" },
+    { "id": "client-render", "type": "frontend", "label": "Client · 渲染", "sublabel": "RenderPipeline / 结构预览", "pos": [140, 404], "size": [210, 78], "tag": "RtsSceneRenderer" },
+
+    { "id": "ext-shared", "type": "backend", "label": "宿主依赖层", "sublabel": "api / common / ui", "pos": [560, 120], "size": [210, 78], "tag": "RtsAPI / 共享逻辑" },
+    { "id": "network",    "type": "messagebus", "label": "Network", "sublabel": "Payload 注册 / ServerActionHandler", "pos": [560, 262], "size": [210, 78], "tag": "ActionType 显式 id" },
+
+    { "id": "server-workflow", "type": "backend", "label": "Server · 工作流引擎", "sublabel": "WorkflowEngine / 每玩家槽位", "pos": [1000, 120], "size": [210, 78], "tag": "脏标记合并发包" },
+    { "id": "server-core",     "type": "backend", "label": "Server · 核心", "sublabel": "RtsServer / RtsService / RtsAPIImpl", "pos": [1000, 262], "size": [210, 78], "tag": "10 个 RtsService" },
+    { "id": "server-pipeline", "type": "backend", "label": "Server · 管道", "sublabel": "PipelineRegistry / WorkflowPipeline", "pos": [1000, 404], "size": [210, 78], "tag": "校验/放置/挖掘/蓝图" },
+    { "id": "server-storage",  "type": "database", "label": "Server · 存储", "sublabel": "StorageSession / 绑定 / 页面", "pos": [1000, 546], "size": [210, 78], "tag": "RtsStorageSession" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "客户端运行时（NeoForge client）", "wraps": ["client-kernel", "client-ui", "client-render"] },
+    { "kind": "region", "label": "网络与平台横切", "wraps": ["ext-shared", "network"] },
+    { "kind": "region", "label": "服务端运行时（NeoForge server）", "wraps": ["server-workflow", "server-core", "server-pipeline", "server-storage"] }
+  ],
+  "connections": [
+    { "id": "kernel-to-ui",     "from": "client-kernel", "to": "client-ui",     "label": "装配 BuilderScreen / 模块", "fromSide": "bottom", "toSide": "top", "labelAt": [245, 230] },
+    { "id": "ui-to-network",    "from": "client-ui",     "to": "network",       "label": "C2S 动作 / 鼠标捕获", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [455, 290] },
+    { "id": "network-to-server", "from": "network",      "to": "server-core",   "label": "动作分发", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [885, 290] },
+    { "id": "network-to-render", "from": "network",      "to": "client-render","label": "S2C 回包 / 快照订阅", "fromSide": "bottom", "toSide": "top", "labelAt": [360, 372] },
+    { "id": "core-to-pipeline",  "from": "server-core",  "to": "server-pipeline", "label": "工作流管道 execute", "fromSide": "bottom", "toSide": "top", "labelAt": [965, 372] },
+    { "id": "pipeline-to-storage","from": "server-pipeline", "to": "server-storage", "label": "存储会话 / 绑定", "fromSide": "bottom", "toSide": "top", "labelAt": [965, 514] },
+    { "id": "core-to-workflow",  "from": "server-core",  "to": "server-workflow", "label": "工作流引擎槽位", "fromSide": "top", "toSide": "bottom", "labelAt": [965, 230] },
+    { "id": "ext-to-kernel",     "from": "ext-shared",   "to": "client-kernel","label": "uifw / api 提供", "labelAt": [455, 157] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "客户端运行时", "items": ["RtsClientKernel 装配 7 个功能模块", "BuilderScreen 组合全部面板，uifw 提供组件"] },
+    { "dot": "emerald", "title": "服务端运行时", "items": ["RtsServer 拓扑装配 10 个 RtsService", "工作流管道校验→放置→同步，存储与工作流引擎持久化"] },
+    { "dot": "violet", "title": "网络 / 平台 / 注册", "items": ["ActionType 显式 id 编解码 + 恶意包防护", "Platform 抽象与 RtsBlocks/Items/Entities + RtsTerminalEnergy 桥"] }
+  ]
+}
