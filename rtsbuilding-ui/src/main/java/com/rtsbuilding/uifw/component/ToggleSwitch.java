@@ -9,8 +9,10 @@ import java.util.function.Consumer;
 
 public class ToggleSwitch {
 
-    private static final int TRACK_W = 28;
-    private static final int TRACK_H = 14;
+    /** 轨道宽（px），公开供弹窗等行末布局复用（如 BasePopup 内容宽度计算）。 */
+    public static final int TRACK_W = 28;
+    /** 轨道高（px），公开供弹窗等行末布局复用。 */
+    public static final int TRACK_H = 14;
     private static final int THUMB_SIZE = 10;
     private static final int THUMB_OFF = 2;
 

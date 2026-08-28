@@ -19,6 +19,7 @@ import com.rtsbuilding.uifw.window.window.UiPanel;
 import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreenConstants.TOP_H;
 import com.rtsbuilding.uifw.render.UiPalette;
 import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.theme.ThemeManager;
 import com.rtsbuilding.rtsbuilding.util.RtsPinyinSearch;
@@ -493,7 +494,7 @@ public final class BlueprintLibraryPanel extends UiPanel {
         boolean hovering = hitButton(mouseX, mouseY, rect);
         float t = hoverAnims.computeIfAbsent(file, k -> AnimFloat.hover()).track(hovering);
         int bg = ColorAnimation.lerpRGB(UiPalette.get("list_btn"), UiPalette.get("list_btn_hover"), t);
-        SdfRenderer.drawRoundedRect(g, rect.x(), rect.y(), rect.w(), rect.h(), 3, bg);
+        SdfRenderer.drawRoundedRect(g, rect.x(), rect.y(), rect.w(), rect.h(), UiMetrics.RADIUS_CONTROL, bg);
         Font font = Minecraft.getInstance().font;
         String text = Component.translatable(textKey).getString();
         TextRenderer.drawCentered(g, font, text,

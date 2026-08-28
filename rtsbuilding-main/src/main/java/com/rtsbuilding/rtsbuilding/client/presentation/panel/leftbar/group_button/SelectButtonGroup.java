@@ -5,6 +5,7 @@ import com.rtsbuilding.rtsbuilding.client.input.RtsKeyMappings;
 import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.uifw.state.TooltipController;
@@ -94,7 +95,7 @@ public final class SelectButtonGroup extends AbstractButtonGroup {
     private void renderDisabledOverlay(GuiGraphics g, int originX, int originY) {
         int by = originY + buttonSize + innerGap;
         SdfRenderer.drawRoundedRect(g, originX, by, buttonSize, buttonSize,
-                4f, OVERLAY_COLOR);
+                UiMetrics.RADIUS_PANEL, OVERLAY_COLOR);
     }
 
     

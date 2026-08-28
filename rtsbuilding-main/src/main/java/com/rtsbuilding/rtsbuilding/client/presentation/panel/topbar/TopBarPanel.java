@@ -16,6 +16,7 @@ import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.UiPalette;
 import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.SpriteRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.render.model.SpriteRegion;
@@ -347,7 +348,7 @@ public final class TopBarPanel implements UiPanelApi {
     
     private void renderLogoCrossFade(GuiGraphics g) {
         int bgColor = ColorAnimation.lerpRGB(UiPalette.border(), UiPalette.accent(), logoHoverState.get());
-        SdfRenderer.drawRoundedRect(g, 0, 0, LOGO_SIZE, LOGO_SIZE, 4, bgColor);
+        SdfRenderer.drawRoundedRect(g, 0, 0, LOGO_SIZE, LOGO_SIZE, UiMetrics.RADIUS_CONTROL, bgColor);
         TextureInfo logoInfo = new TextureInfo(
                 LOGO_TEXTURE, LOGO_SHEET_WIDTH, LOGO_SHEET_HEIGHT,
                 TextureInfo.ThemeLayout.NONE,
@@ -360,7 +361,7 @@ public final class TopBarPanel implements UiPanelApi {
     private void renderFileButton(GuiGraphics g) {
         var rect = layout.fileButtonRect();
         int bgColor = ColorAnimation.lerpRGB(UiPalette.border(), UiPalette.accent(), fileHoverState.get());
-        SdfRenderer.drawRoundedRect(g, rect.x(), rect.y(), rect.width(), rect.height(), 4, bgColor);
+        SdfRenderer.drawRoundedRect(g, rect.x(), rect.y(), rect.width(), rect.height(), UiMetrics.RADIUS_CONTROL, bgColor);
 
         var font = Minecraft.getInstance().font;
         String label = "\u6587\u4EF6";

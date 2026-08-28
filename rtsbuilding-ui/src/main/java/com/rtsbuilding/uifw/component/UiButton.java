@@ -3,8 +3,10 @@ package com.rtsbuilding.uifw.component;
 import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.CrossFadeRenderer;
+import com.rtsbuilding.uifw.render.SdfRenderer;
 import com.rtsbuilding.uifw.render.SpriteRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.UiPalette;
 import com.rtsbuilding.uifw.render.model.SpriteRegion;
 import com.rtsbuilding.uifw.render.model.TextureInfo;
@@ -99,14 +101,11 @@ public class UiButton extends AbstractButton {
 
     
     private void renderWithSolidColor(GuiGraphics guiGraphics) {
-        
+        // 矢量回退：与整套按钮体系统一为 SDF 圆角 + 描边（不再使用直角硬边框凸起风）
         float t = this.hoverState.get();
         int backgroundColor = ColorAnimation.lerpRGB(UiPalette.get("button_bg"), UiPalette.get("button_hover_bg"), t);
-        guiGraphics.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, backgroundColor);
-        guiGraphics.hLine(this.getX(), this.getX() + this.width, this.getY(), UiPalette.get("button_border_light"));
-        guiGraphics.hLine(this.getX(), this.getX() + this.width, this.getY() + this.height, UiPalette.get("button_border_dark"));
-        guiGraphics.vLine(this.getX(), this.getY(), this.getY() + this.height, UiPalette.get("button_border_light"));
-        guiGraphics.vLine(this.getX() + this.width, this.getY(), this.getY() + this.height, UiPalette.get("button_border_dark"));
+        SdfRenderer.drawBorderedRoundedRect(guiGraphics, this.getX(), this.getY(), this.width, this.height,
+                UiMetrics.RADIUS_CONTROL, UiPalette.get("button_border_dark"), backgroundColor);
     }
 
     

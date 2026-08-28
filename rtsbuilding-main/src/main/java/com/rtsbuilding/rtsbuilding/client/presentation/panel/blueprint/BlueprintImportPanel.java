@@ -7,6 +7,7 @@ import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.animate.Easing;
 import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.SpriteRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.render.UiPalette;
@@ -229,7 +230,7 @@ public final class BlueprintImportPanel extends UiPanel {
         boolean hovering = isInButton(mouseX, mouseY, button);
         float t = hoverAnim.track(hovering);
         int bg = ColorAnimation.lerpRGB(UiPalette.get("list_btn"), UiPalette.get("list_btn_hover"), t);
-        SdfRenderer.drawRoundedRect(g, button.x(), button.y(), button.w(), button.h(), 3, bg);
+        SdfRenderer.drawRoundedRect(g, button.x(), button.y(), button.w(), button.h(), UiMetrics.RADIUS_CONTROL, bg);
         String text = Component.translatable(textKey).getString();
         TextRenderer.drawCentered(g, Minecraft.getInstance().font, text,
                 button.cx(), button.y() + (button.h() - Minecraft.getInstance().font.lineHeight) / 2 + 1,

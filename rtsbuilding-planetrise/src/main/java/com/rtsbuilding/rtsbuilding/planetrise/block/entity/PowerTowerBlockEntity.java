@@ -395,10 +395,16 @@ public class PowerTowerBlockEntity extends AbstractEnergyMachineBlockEntity impl
             if (override == RtsDeviceRole.GENERATOR) {
                 isExternal = true;
             } else if (override != RtsDeviceRole.CONSUMER) {
-                // 自动：仅当「不可注入」但「确实能提取」(extractEnergy 可行且有存量) 时才视为外部发电机。
-                // 原实现「不可注入但有能量能力」会把<b>缓冲已满（room=0）的用电器</b>误判为发电机，
-                // 导致它被当发电端提取、实测功耗被跳过，设备列表用电恒显示 0。
-                if (findUsableStorage(pos, false) == null && findUsableStorage(pos, true) != null) {
+                // 自动判定<b>外部发电机</b>：必须「确实能提取」且「不支持接收能量」（纯输出设备）。
+                // 判别依据：真正的外部发电机其能量槽 {@code canReceive()==false}（只出不进）；
+                // 而<b>缓冲已满（room=0）</b>的用电机器虽然当前注入失败（模拟 receiveEnergy 无效），
+                // 但仍可充电（{@code canReceive()==true}）——若仅凭「不可注入 + 可提取」判定，
+                // 会把满电用电器误判为发电机：能量被无故提取、实测功耗被跳过，设备列表「用电」恒显示 0
+                // （本模组储能单元充电满后即落入此坑）。
+                // findUsableStorage(..., true) 已剔除只读代理（Mek 对 side=null 的 canReceive 恒 true），
+                // 返回值是真实可提取面，其 canReceive 可靠反映该端口的接收方向。
+                IEnergyStorage extract = findUsableStorage(pos, true);
+                if (extract != null && !extract.canReceive()) {
                     isExternal = true;
                 }
             }

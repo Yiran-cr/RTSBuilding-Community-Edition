@@ -1,13 +1,12 @@
 package com.rtsbuilding.rtsbuilding.client.presentation.plugin.grid;
 
 import com.rtsbuilding.uifw.window.popup.BasePopup;
-import com.rtsbuilding.uifw.render.CrossFadeRenderer;
+import com.rtsbuilding.uifw.component.ToggleSwitch;
 import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.theme.ThemeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 
 public final class ContainerModePopup extends BasePopup {
 
@@ -15,6 +14,8 @@ public final class ContainerModePopup extends BasePopup {
 
     private final ContainerModeItem[] items;
     private final boolean[] states;
+    /** 行尾开关（视觉与设置面板 ToggleSwitch 一致，带滑动动画）。 */
+    private final ToggleSwitch[] switches;
 
     private boolean showBidirectional;
     private boolean showExtractOnly;
@@ -26,12 +27,6 @@ public final class ContainerModePopup extends BasePopup {
 
     private final OnFilterChangeListener listener;
 
-    private static final ResourceLocation MODE_BUTTON_TEXTURE =
-            ResourceLocation.tryParse("rtsbuilding:textures/gui/base/base_ui/base_ui_5.png");
-    private static final int MODE_BTN_TEX_W = 32;
-    private static final int MODE_BTN_TEX_H = 48;
-    private static final int MODE_BTN_SIZE = 16;
-    private static final int MODE_BTN_STATE_H = 16;
     private static final int BTN_TEXT_GAP = 4;
 
     public ContainerModePopup(boolean showBidirectional, boolean showExtractOnly, OnFilterChangeListener listener) {
@@ -49,11 +44,16 @@ public final class ContainerModePopup extends BasePopup {
         var font = Minecraft.getInstance().font;
         int[] contentWidths = new int[items.length];
         for (int i = 0; i < items.length; i++) {
-            contentWidths[i] = MODE_BTN_SIZE + BTN_TEXT_GAP + font.width(items[i].label().getString());
+            contentWidths[i] = ToggleSwitch.TRACK_W + BTN_TEXT_GAP + font.width(items[i].label().getString());
         }
         setItemContentWidths(contentWidths);
 
         initAnims(items.length);
+
+        this.switches = new ToggleSwitch[items.length];
+        for (int i = 0; i < items.length; i++) {
+            this.switches[i] = new ToggleSwitch(states[i], null);
+        }
     }
 
     public void setShowBidirectional(boolean show) {
@@ -104,25 +104,10 @@ public final class ContainerModePopup extends BasePopup {
         int textY = itemY + (getItemHeight() - font.lineHeight) / 2 + 1;
         TextRenderer.draw(g, label, textX, textY, textColor);
 
-        int btnX = x + getPopupWidth() - getPadH() - MODE_BTN_SIZE;
-        int btnY = itemY + (getItemHeight() - MODE_BTN_SIZE) / 2;
+        int btnX = x + getPopupWidth() - getPadH() - ToggleSwitch.TRACK_W;
+        int btnY = itemY + (getItemHeight() - ToggleSwitch.TRACK_H) / 2;
 
-        boolean sel = states[index];
-        boolean lightMode = ThemeManager.getInstance().isLightMode();
-        if (sel) {
-            g.blit(MODE_BUTTON_TEXTURE, btnX, btnY, MODE_BTN_SIZE, MODE_BTN_SIZE,
-                    lightMode ? 16 : 0, 32, MODE_BTN_TEX_W / 2, MODE_BTN_STATE_H,
-                    MODE_BTN_TEX_W, MODE_BTN_TEX_H);
-        } else {
-            int u = lightMode ? 16 : 0;
-            CrossFadeRenderer.render(g, hoverT,
-                    () -> g.blit(MODE_BUTTON_TEXTURE, btnX, btnY, MODE_BTN_SIZE, MODE_BTN_SIZE,
-                            u, 0, MODE_BTN_TEX_W / 2, MODE_BTN_STATE_H,
-                            MODE_BTN_TEX_W, MODE_BTN_TEX_H),
-                    () -> g.blit(MODE_BUTTON_TEXTURE, btnX, btnY, MODE_BTN_SIZE, MODE_BTN_SIZE,
-                            u, 16, MODE_BTN_TEX_W / 2, MODE_BTN_STATE_H,
-                            MODE_BTN_TEX_W, MODE_BTN_TEX_H));
-        }
+        switches[index].render(g, btnX, btnY, states[index]);
     }
 
     @Override

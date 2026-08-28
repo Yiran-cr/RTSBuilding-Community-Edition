@@ -4,6 +4,7 @@ import com.mojang.math.Axis;
 import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.UiPalette;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -15,7 +16,6 @@ public final class CloseButton {
     public static final int SIZE = 14;
     private static final int ICON_INSET = 4;
     private static final int ICON_THICK = 2;
-    private static final int RADIUS = 3;
 
     private int x;
     private int y;
@@ -34,7 +34,7 @@ public final class CloseButton {
         float t = this.hoverState.track(hovering);
 
         int bg = ColorAnimation.lerpRGB(UiPalette.get("button_bg"), UiPalette.get("button_hover_bg"), t);
-        SdfRenderer.drawRoundedRect(g, x, y, SIZE, SIZE, RADIUS, bg);
+        SdfRenderer.drawRoundedRect(g, x, y, SIZE, SIZE, UiMetrics.RADIUS_CONTROL, bg);
 
         int color = UiPalette.get("icon_close");
         int halfLen = (SIZE - ICON_INSET * 2) / 2;

@@ -68,6 +68,7 @@ public final class UiPalette {
             Map.entry("window_shadow_soft", 0x20000000),
             // 按钮
             Map.entry("button_bg", 0xDD1A232E), Map.entry("button_hover_bg", 0xDD2A3442),
+            Map.entry("button_selected_bg", 0xFF7BC58A),
             Map.entry("button_border_light", 0xFF647B92), Map.entry("button_border_dark", 0xFF0D1117),
             Map.entry("button_text", 0xFFD8E3EE), Map.entry("button_text_hover", 0xFFE8F0FA),
             Map.entry("button_text_disabled", 0xFF556677),

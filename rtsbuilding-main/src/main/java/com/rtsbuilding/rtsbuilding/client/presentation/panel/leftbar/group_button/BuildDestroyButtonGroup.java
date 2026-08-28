@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.rtsbuilding.uifw.window.button.AbstractButtonGroup;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.render.SdfRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.TextRenderer;
 import com.rtsbuilding.uifw.render.model.TextureInfo;
 import com.rtsbuilding.uifw.state.TooltipController;
@@ -96,7 +97,7 @@ public final class BuildDestroyButtonGroup extends AbstractButtonGroup {
         if (disabled) {
             // 半透明黑色圆角矩形覆盖整个按钮组，表示无法启用
             SdfRenderer.drawRoundedRect(g, originX, originY, buttonSize, totalHeight(),
-                    4f, OVERLAY_COLOR);
+                    UiMetrics.RADIUS_PANEL, OVERLAY_COLOR);
         }
     }
 

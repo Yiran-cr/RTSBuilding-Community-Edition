@@ -29,6 +29,7 @@
 
     "button_bg": "#DD1A232E",
     "button_hover_bg": "#DD2A3442",
+    "button_selected_bg": "#FF7BC58A",
     "button_border_light": "#647B92",
     "button_border_dark": "#0D1117",
     "button_text": "#D8E3EE",
@@ -113,6 +114,7 @@
 
     "button_bg": "#E9EDF2",
     "button_hover_bg": "#DDE3EB",
+    "button_selected_bg": "#FF5FA46B",
     "button_border_light": "#8E99A8",
     "button_border_dark": "#B5BDC9",
     "button_text": "#2E3A4A",

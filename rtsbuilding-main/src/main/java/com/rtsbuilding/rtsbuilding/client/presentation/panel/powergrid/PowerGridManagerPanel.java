@@ -13,6 +13,7 @@ import com.rtsbuilding.rtsbuilding.client.presentation.standalone.BuilderScreen;
 import com.rtsbuilding.uifw.animate.AnimFloat;
 import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.animate.Easing;
+import com.rtsbuilding.uifw.component.ToggleSwitch;
 import com.rtsbuilding.rtsbuilding.util.RtsPinyinSearch;
 import com.rtsbuilding.uifw.render.SdfRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
@@ -22,6 +23,10 @@ import com.rtsbuilding.uifw.theme.ThemeManager;
 import com.rtsbuilding.uifw.window.window.UiPanel;
 import com.rtsbuilding.uifw.window.component.CollapsibleSection;
 import com.rtsbuilding.uifw.window.component.ScrollBar;
+import com.rtsbuilding.uifw.layout.FlexLayout;
+import com.rtsbuilding.uifw.layout.UiBox;
+import com.rtsbuilding.uifw.layout.UiRect;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -48,11 +53,23 @@ import static com.rtsbuilding.rtsbuilding.client.presentation.standalone.Builder
 public final class PowerGridManagerPanel extends UiPanel {
 
     private static final int PANEL_W = 300;
-    private static final int PANEL_H = 252;
+    private static final int PANEL_H = 280;
     /** 切到「电网总览」仪表盘 Tab 时的面板高度（嵌入饼图+柱状图）。 */
-    private static final int PANEL_H_OVERVIEW = 380;
+    private static final int PANEL_H_OVERVIEW = 408;
+    /** 顶部 KPI 摘要卡片高度（现代仪表盘风格，三卡一排）。 */
+    private static final int CARD_H = 30;
+    /** KPI 卡片间距。 */
+    private static final int CARD_GAP = 4;
+    /** 操作结果提示行高度（卡片栏下方小字行）。 */
+    private static final int RESULT_ROW_H = 10;
+    /** 内容区顶部 → Tab 栏顶部的纵向偏移（2 + CARD_H + 2 + RESULT_ROW_H + 2）。 */
+    private static final int TAB_TOP_OFFSET = CARD_H + RESULT_ROW_H + 6;
     private static final int ROW_H = 17;
     private static final int TAB_H = 18;
+    /** 滚动条与行内容之间的左侧空隙（px），防止滑块与内容拼接/重叠。 */
+    private static final int SCROLL_GAP = 3;
+    /** 滚动条可见时为行内容右侧预留的总宽（滑块实宽 9 + 左侧空隙）。 */
+    private static final int SCROLL_BAR_ROW_RESERVE = SCROLL_GAP + 9;
     /** 内容区左右内边距（对齐面板边框 4px）。 */
     private static final int CONTENT_PAD = 4;
 
@@ -107,11 +124,11 @@ public final class PowerGridManagerPanel extends UiPanel {
     private static final int[] FILTER_CYCLE = {FILTER_ALL, FILTER_GEN, FILTER_CONSUMER};
     /** 设备显隐模式<b>轮换顺序</b>：仅显示 → 全部 → 仅隐藏 → 循环。 */
     private static final int[] VIS_CYCLE = {VIS_VISIBLE_ONLY, VIS_ALL, VIS_HIDDEN_ONLY};
-    /** 设备行内显隐开关按钮宽度。 */
-    private static final int EYE_BTN_W = 20;
-    /** 设备行内显隐开关按钮高度。 */
+    /** 设备行内显隐开关（uifw {@link ToggleSwitch}）宽度预留（与开关轨道宽 28 一致）。 */
+    private static final int EYE_BTN_W = 28;
+    /** 设备行内显隐开关（uifw {@link ToggleSwitch}）高度（与开关轨道高 14 一致）。 */
     private static final int EYE_BTN_H = 14;
-    /** 折叠条组头「一键修改」按钮宽度（与单台设备行内的「◀用电/发电▶」切换按钮一致）。 */
+    /** 折叠条组头「一键修改」按钮宽度（与单台设备行内的「用电/发电」切换按钮一致）。 */
     private static final int QUICK_TOGGLE_BTN_W = 40;
 
     /** 单例（每 BuilderScreen 一个）。 */
@@ -211,6 +228,10 @@ public final class PowerGridManagerPanel extends UiPanel {
     private final AnimFloat filterCycleHover = AnimFloat.hover();
     /** 设备显隐模式轮换按钮悬浮动画。 */
     private final AnimFloat visibilityCycleHover = AnimFloat.hover();
+    /** 每台设备的显隐开关（uifw ToggleSwitch，key="x_y_z"）。独立实例保证各行开关动画互不干扰。 */
+    private final java.util.Map<String, ToggleSwitch> deviceToggleSwitches = new java.util.HashMap<>();
+    /** 折叠条组头的显隐开关（uifw ToggleSwitch，key=分组机器类型）。整组隐藏/恢复共用。 */
+    private final java.util.Map<String, ToggleSwitch> deviceGroupToggleSwitches = new java.util.HashMap<>();
 
     private final List<int[]> hitRects = new ArrayList<>();
     private final List<Integer> hitActions = new ArrayList<>();
@@ -285,24 +306,28 @@ public final class PowerGridManagerPanel extends UiPanel {
         int w = contentWidth() - CONTENT_PAD * 2;
         int cTop = contentY();
         int cBottom = cTop + contentHeight();
-        int cy = cTop + 2;
 
         PowerGridSnapshot snap = RtsPowerGrid.get() == null ? null : RtsPowerGrid.get().currentGrid();
         if (snap == null) {
-            TextRenderer.draw(g, t("screen.rtsbuilding.powergrid.no_grid"), x, cy, UiPalette.border());
+            renderSummaryCards(g, x, w, cTop + 2, null, mouseX, mouseY);
+            TextRenderer.draw(g, t("screen.rtsbuilding.powergrid.no_grid"), x + 2, cTop + CARD_H + 8,
+                    UiPalette.border());
             return;
         }
 
-        // 信息区：仅显示成员操作结果提示（按需求文档「移除顶部总发电/总耗电文字」）。
-        // 高度固定 16（单行），Tab 栏紧随其后避免刷新时跳动。
+        // 顶部 KPI 摘要卡片栏（现代仪表盘风格）：总发电 / 总耗电 / 设备·成员 三卡均分。
+        renderSummaryCards(g, x, w, cTop + 2, snap, mouseX, mouseY);
+
+        // 操作结果提示行（小字，出错时显示，常驻占位避免跳动）。
+        int resultY = cTop + CARD_H + 4;
         int lastResult = RtsPowerGrid.get().lastActionResult();
         if (lastResult != 0) {
-            TextRenderer.draw(g, t("screen.rtsbuilding.powergrid.result_" + lastResult), x, cy,
+            TextRenderer.draw(g, t("screen.rtsbuilding.powergrid.result_" + lastResult), x + 2, resultY,
                     lastResult == 3 ? COLOR_WARN : COLOR_ERR);
         }
 
         // Tab 栏（成员 / 设备 / 电网总览 三选一）。
-        int tabY = cTop + 16;
+        int tabY = cTop + TAB_TOP_OFFSET;
         renderTabBar(g, x, tabY, w, snap, mouseX, mouseY);
         int tabBottom = tabY + TAB_H;
         int gridTop = tabBottom + 4;
@@ -335,12 +360,62 @@ public final class PowerGridManagerPanel extends UiPanel {
             boolean hovered = !active && mouseX >= tx && mouseX < tx + tabW && mouseY >= y && mouseY < y + TAB_H;
             float hoverT = tabHoverAnims.get(i).track(hovered);
             int fill = active ? UiPalette.accent() : lerpColor(0x882E3B4C, 0x99364A5E, hoverT);
-            SdfRenderer.drawBorderedRoundedRect(g, tx, y, tabW, TAB_H, 4, UiPalette.border(), fill, 1);
+            SdfRenderer.drawBorderedRoundedRect(g, tx, y, tabW, TAB_H, UiMetrics.RADIUS_CONTROL, UiPalette.border(), fill, 1);
             int lw = Minecraft.getInstance().font.width(labels[i]);
             TextRenderer.draw(g, labels[i], tx + (tabW - lw) / 2, y + (TAB_H - Minecraft.getInstance().font.lineHeight) / 2 + 1,
                     active ? ThemeManager.getHoverTextColor() : ThemeManager.getTextColor());
             tabRects.add(new int[]{tx, y, tabW, TAB_H});
             tabIndex.add(i);
+        }
+    }
+
+    /**
+     * 顶部 KPI 摘要卡片栏（现代网页仪表盘风格）：总发电 / 总耗电 / 设备·成员 三张卡片，
+     * 用 {@link FlexLayout} 均分等宽（渲染与面板顶部视觉层级保持单一来源）。
+     * <p>每卡左侧 2px 色条 + 顶部小字标签 + 底部大字数值：发电蓝 / 耗电橙 / 节点中性蓝，
+     * 与仪表盘饼图、柱状图配色一致。</p>
+     */
+    private void renderSummaryCards(GuiGraphics g, int x, int w, int y, PowerGridSnapshot snap,
+                                    int mouseX, int mouseY) {
+        List<UiRect> rects = FlexLayout.layout(FlexLayout.Direction.ROW, FlexLayout.Justify.START,
+                FlexLayout.Align.STRETCH, CARD_GAP, x, y, w, CARD_H,
+                List.of(UiBox.fill(1f), UiBox.fill(1f), UiBox.fill(1f)));
+
+        String gen, demand, nodes;
+        int genColor, demandColor, nodesColor;
+        if (snap == null) {
+            gen = "--"; demand = "--"; nodes = "—";
+            genColor = COLOR_OFFLINE; demandColor = COLOR_OFFLINE;
+            nodesColor = UiPalette.get("text_muted");
+        } else {
+            gen = formatNumber(snap.totalGeneration()) + "/tick";
+            demand = formatNumber(snap.totalDemand()) + "/tick";
+            nodes = snap.devices().size() + " · " + snap.members().size();
+            genColor = COLOR_OVERVIEW_GEN;      // 发电蓝（与饼图/柱状图一致）
+            demandColor = COLOR_OVERVIEW_DEMAND; // 耗电橙（与饼图/柱状图一致）
+            nodesColor = COLOR_TOWER;           // 节点中性蓝
+        }
+
+        String[] labels = {
+                t("screen.rtsbuilding.powergrid.kpi_gen"),
+                t("screen.rtsbuilding.powergrid.kpi_demand"),
+                t("screen.rtsbuilding.powergrid.kpi_nodes")};
+        String[] values = {gen, demand, nodes};
+        int[] accentColors = {genColor, demandColor, nodesColor};
+        Font font = Minecraft.getInstance().font;
+
+        for (int i = 0; i < rects.size(); i++) {
+            UiRect r = rects.get(i);
+            // 卡片：圆角背景 + 细描边
+            SdfRenderer.drawBorderedRoundedRect(g, r.x(), r.y(), r.w(), r.h(),
+                    UiMetrics.RADIUS_CONTROL, UiPalette.border(), 0x882E3B4C, 1);
+            // 左侧色条
+            SdfRenderer.drawPill(g, r.x() + 3, r.y() + 5, 2, r.h() - 10, accentColors[i]);
+            // 顶部标签（小字 muted）
+            TextRenderer.draw(g, labels[i], r.x() + 9, r.y() + 3, UiPalette.get("text_muted"));
+            // 底部数值（大字强调色）
+            String value = TextRenderer.trimToWidth(font, values[i], r.w() - 14);
+            TextRenderer.draw(g, value, r.x() + 9, r.y() + 14, accentColors[i]);
         }
     }
 
@@ -529,8 +604,10 @@ public final class PowerGridManagerPanel extends UiPanel {
      * 左侧预留 Y 轴刻度标签区，底部预留 X 轴时间标签区，形成完整的坐标轴柱状图。
      */
     private static final int MAX_BARS = 20;
+    /** 柱宽下限（按原 4px × 3/5 折算，保证最细档仍清晰可辨）。 */
     private static final int MIN_BAR_WIDTH = 3;
-    private static final int MAX_BAR_WIDTH = 18;
+    /** 柱宽上限（原 22px × 3/5 ≈ 13px，柱子更纤细）。 */
+    private static final int MAX_BAR_WIDTH = 13;
     private static final int BAR_GAP = 2;
 
     private void renderOverviewBars(GuiGraphics g, int x, int w, int top, int bottom, int mouseX, int mouseY,
@@ -544,11 +621,13 @@ public final class PowerGridManagerPanel extends UiPanel {
         int chartW = w - 8;                    // 总宽减左右内边距（8px），背景扩大涵盖 Y 轴标签
         int chartX = x + (w - chartW) / 2;     // 图表背景在面板 X 轴居中
 
-        // X 轴标签区（底部预留）
-        int xAxisH = fontH + 4;
+        // X 轴标签区（底部预留，背景框一并涵盖——与 Y 轴标签一样置于柱状图背景框内）
+        // X 轴标签区高度：数字标识已移除，仅保留背景框底部内边距（贴合框底的留白）
+        int xAxisH = 6;
         int chartTop = top;
-        int chartBottom = bottom - xAxisH;
-        int chartH = chartBottom - chartTop;
+        int barsBottom = bottom - xAxisH;      // 柱子绘制区底（背景框底部内边距上缘）
+        int chartFrameH = bottom - chartTop;   // 背景框高（涵盖 Y 轴与 X 轴两个标签区）
+        int chartH = barsBottom - chartTop;    // 柱子绘制区高（中线/柱高基准）
         int midY = chartTop + chartH / 2;
         int halfH = chartH / 2;
         int barMaxH = Math.max(1, halfH - 8);
@@ -573,9 +652,10 @@ public final class PowerGridManagerPanel extends UiPanel {
         }
         float barReveal = barRevealAnim.get();
 
-        // 柱状图外框 + 中线（背景扩大至涵盖 Y 轴标签区）
-        SdfRenderer.drawBorderedRoundedRect(g, chartX, chartTop, chartW, chartH, 3, UiPalette.border(), 0x33223344, 1);
-        g.fill(barAreaX + 1, midY, chartX + chartW - 1, midY + 1, UiPalette.border());
+        // 柱状图外框 + 中线（背景扩大至涵盖 Y 轴标签区与 X 轴标签区）
+        SdfRenderer.drawBorderedRoundedRect(g, chartX, chartTop, chartW, chartFrameH, UiMetrics.RADIUS_CONTROL, UiPalette.border(), 0x33223344, 1);
+        // 中线（零轴）提亮：双向柱状图的对称基准，颜色比普通分隔线更清晰
+        g.fill(barAreaX + 1, midY, chartX + chartW - 1, midY + 1, 0x8899AABB);
 
         if (pts.isEmpty()) {
             String empty = t("screen.rtsbuilding.powergrid.overview_no_data");
@@ -608,21 +688,22 @@ public final class PowerGridManagerPanel extends UiPanel {
         int startX = barAreaX + 6;               // 左 6px 边距，与右 6px 对称
 
         // ==================== Y 轴（左侧，在柱状图背景框内）====================
-        // 标签区在柱状图背景框左侧，紧贴背景左边缘
+        // 中线为零轴：发电侧（正，向上）与耗电侧（负，向下）的刻度都标数字，
+        // 正负两侧数值标识齐全，直观对应双向柱状图的正负轴语义。
         int yLabelX = chartX;
-        long[] yTicks = {0, fMaxVal / 2, fMaxVal};
+        long[] yTicks = {0, fMaxVal / 4, fMaxVal / 2, fMaxVal * 3 / 4, fMaxVal};   // 5 档规整刻度
         for (long tickVal : yTicks) {
             float ratio = (float) tickVal / fMaxVal;
-            int yTop = midY - Math.round(ratio * barMaxH);   // 发电侧（向上）
-            int yBot = midY + Math.round(ratio * barMaxH);   // 耗电侧（向下）
+            int yTop = midY - Math.round(ratio * barMaxH);   // 发电侧（向上）刻度位置
+            int yBot = midY + Math.round(ratio * barMaxH);   // 耗电侧（向下）刻度位置
 
-            // 网格线（半透明，精细 1px，在柱子区域内绘制）
+            // 网格线（半透明，上下对称绘制，形成整体参照系；只在柱子区域绘制）
             if (tickVal > 0) {
                 g.fill(barAreaX + 1, yTop, chartX + chartW - 1, yTop + 1, 0x22334455);
                 g.fill(barAreaX + 1, yBot, chartX + chartW - 1, yBot + 1, 0x22334455);
             }
 
-            // 数字标签（右对齐到 Y 轴标签区右边缘，即柱子区域左边缘）
+            // 数字标签（右对齐到 Y 轴标签区右边缘）：发电侧与耗电侧两侧都标，正负轴数值齐全
             String label = formatNumber(tickVal);
             int lw = font.width(label);
             TextRenderer.draw(g, label, yLabelX + (yAxisW - lw - 4), yTop - fontH / 2, ThemeManager.getTextColor());
@@ -635,8 +716,14 @@ public final class PowerGridManagerPanel extends UiPanel {
         for (int i = 0; i < n; i++) {
             long[] pt = displayPts.get(i);
             int bx = startX + i * (barW + BAR_GAP);
-            int genH = Math.min((int) (pt[0] * barMaxH / fMaxVal), barMaxH);
-            int demH = Math.min((int) (pt[1] * barMaxH / fMaxVal), barMaxH);
+            // 柱高全程用 long 精度计算（先乘后除，保留中间值精度，避免先除后乘截断为 0）。
+            long genHl = Math.min(pt[0] * (long) barMaxH / fMaxVal, barMaxH);
+            long demHl = Math.min(pt[1] * (long) barMaxH / fMaxVal, barMaxH);
+            // 极端对比（某侧远小于峰值导致整除截断为 0）时仍保证至少 1px 可见，柱子不消失。
+            if (genHl == 0 && pt[0] > 0) genHl = 1;
+            if (demHl == 0 && pt[1] > 0) demHl = 1;
+            int genH = (int) genHl;
+            int demH = (int) demHl;
             // 揭晓动画：柱高乘 barReveal（0→1 过渡），底部生长。
             genH = Math.round(genH * barReveal);
             demH = Math.round(demH * barReveal);
@@ -649,46 +736,7 @@ public final class PowerGridManagerPanel extends UiPanel {
             }
         }
 
-        // ==================== X 轴（底部）====================
-        // 每 labelInterval 根柱子显示一个时间标签，保证约 4-6 个标签
-        int labelInterval = Math.max(1, n / 5);
-        int timeStep = switch (overviewGranularity) {
-            case 1 -> 60;     // 1 分钟
-            case 2 -> 3600;   // 1 小时
-            default -> 5;     // 5 秒
-        };
-        String unit = switch (overviewGranularity) {
-            case 1 -> "m";
-            case 2 -> "h";
-            default -> "s";
-        };
-
-        int xAxisY = bottom - xAxisH + 2;
-        for (int i = 0; i < n; i++) {
-            int bx = startX + i * (barW + BAR_GAP);
-            int tickX = bx + barW / 2;
-
-            if (i % labelInterval == 0 || i == n - 1) {
-                // 从最后一个柱子往前算相对时间
-                int offset = (n - 1 - i) * timeStep;
-                String timeLabel;
-                if (offset == 0) {
-                    timeLabel = t("screen.rtsbuilding.powergrid.overview_time_now");
-                } else if (offset >= 3600) {
-                    timeLabel = "-" + (offset / 3600) + "h";
-                } else if (offset >= 60) {
-                    timeLabel = "-" + (offset / 60) + "m";
-                } else {
-                    timeLabel = "-" + offset + unit;
-                }
-
-                // 刻度短线
-                g.fill(tickX, chartBottom, tickX + 1, chartBottom + 3, UiPalette.border());
-                // 标签文字
-                int tlw = font.width(timeLabel);
-                TextRenderer.draw(g, timeLabel, tickX - tlw / 2, xAxisY, UiPalette.border());
-            }
-        }
+        // X 轴数字标识已移除（时间标签冗余无必要）。X 轴区域仅保留贴合背景框的底部内边距。
     }
 
     /**
@@ -847,8 +895,8 @@ public final class PowerGridManagerPanel extends UiPanel {
         int visibleH = Math.max(1, listH);
         memberScrollBar.setContent(totalContentH, visibleH);
         int scroll = memberScrollBar.getScroll();
-        // 滚动条可见时，行内容宽度扣除滚动条宽度（8px），避免重叠
-        int rowW = memberScrollBar.isVisible() ? w - 8 : w;
+        // 滚动条可见时，行内容宽度扣除滚动条预留总宽（滑块实宽 + 左侧空隙），避免与滑块拼接
+        int rowW = memberScrollBar.isVisible() ? w - SCROLL_BAR_ROW_RESERVE : w;
 
         // 裁剪：滚动内容限定在 listTop 到 gridBottom 之间，防止与 Tab 栏/搜索框重叠
         g.flush();
@@ -870,9 +918,9 @@ public final class PowerGridManagerPanel extends UiPanel {
         g.flush();
         g.disableScissor();
 
-        // 渲染滚动条（右侧）
+        // 渲染滚动条（右侧，与行内容间留空隙）
         if (memberScrollBar.isVisible()) {
-            int barX = x + rowW;
+            int barX = x + rowW + SCROLL_GAP;
             memberScrollBar.render(g, barX, listTop, visibleH);
         }
     }
@@ -1003,8 +1051,8 @@ public final class PowerGridManagerPanel extends UiPanel {
         int visibleH = Math.max(1, listH);
         deviceScrollBar.setContent(totalContentH, visibleH);
         int scroll = deviceScrollBar.getScroll();
-        // 滚动条可见时，内容宽度扣除滚动条宽度（8px），避免重叠
-        int rowW = deviceScrollBar.isVisible() ? w - 8 : w;
+        // 滚动条可见时，内容宽度扣除滚动条预留总宽（滑块实宽 + 左侧空隙），避免与滑块拼接
+        int rowW = deviceScrollBar.isVisible() ? w - SCROLL_BAR_ROW_RESERVE : w;
 
         // 裁剪：设备内容限定在 listTop 到 gridBottom 之间，防止与 Tab 栏/搜索框重叠
         // x/listTop/gridBottom 已是屏幕全局坐标，使用 screen.enableUiScissor 适配 RTS GUI 缩放。
@@ -1050,8 +1098,19 @@ public final class PowerGridManagerPanel extends UiPanel {
             // 组内可切换角色的设备数（>0 时显示「一键修改」按钮，批量切换发电↔用电）。
             long toggleableCount = group.stream().filter(PowerDevice::canToggleRole).count();
             int quickToggleW = toggleableCount > 0 ? QUICK_TOGGLE_BTN_W : 0;
-            // 标题空间：右侧为聚合 + 「一键修改」按钮预留。
-            int titleMax = rowW - 42 - 66 - 12 - (quickToggleW + 6);
+            // 是否为输电塔组（整组都是输电塔时显示「刷新」按钮，批量重扫供电范围覆盖）。
+            boolean isTowerGroup = group.stream().allMatch(d -> d.role() == RtsDeviceRole.TOWER);
+            int refreshBtnW = isTowerGroup ? QUICK_TOGGLE_BTN_W : 0;   // 与「发电/用电」按钮同宽
+            // 右侧从右到左排布：组显隐开关（最右端）→ 「刷新」（输电塔组）→ 「一键修改」按钮 → 聚合文本。
+            int secH = CollapsibleSection.headerHeight();
+            int groupToggleX = x + rowW - 4 - EYE_BTN_W;      // 显隐开关最右端（与单台设备行对齐）
+            int groupToggleY = y + (secH - EYE_BTN_H) / 2;
+            int refreshBtnX = groupToggleX - 4 - refreshBtnW;
+            int quickBtnX = refreshBtnX - 4 - (quickToggleW > 0 ? quickToggleW : 0);
+            int aggRight = (quickToggleW > 0 ? quickBtnX
+                    : (isTowerGroup ? refreshBtnX : groupToggleX)) - 4;
+            // 标题空间：右侧为聚合 + 「一键修改」 + 「刷新」 + 组显隐开关预留。
+            int titleMax = rowW - 42 - 66 - 12 - (quickToggleW + 6) - (refreshBtnW + 6) - (EYE_BTN_W + 8);
             TextRenderer.draw(g, TextRenderer.trimToWidth(Minecraft.getInstance().font, headTitle,
                             Math.max(20, titleMax)),
                     headTitleX, y + 7, ThemeManager.getTextColor());
@@ -1066,14 +1125,13 @@ public final class PowerGridManagerPanel extends UiPanel {
                 case TOWER -> COLOR_TOWER;
                 default -> COLOR_WARN;
             };
-            int aggRight = x + rowW - 4 - (quickToggleW + 6);
             TextRenderer.draw(g, agg, aggRight - Minecraft.getInstance().font.width(agg), y + 7, groupColor);
             // 「一键修改」按钮（批量切换本组全部可切换设备，发电↔用电）——样式/文案/颜色与单台
-            // 设备行内的「◀用电 / 发电▶」切换按钮完全一致：以组内第一台可切换设备的<b>相反角色</b>
+            // 设备行内的「用电 / 发电」切换按钮完全一致：以组内第一台可切换设备的<b>相反角色</b>
             // 为目标角色，按钮据此显示目标方向（绿=当前发电、橙=当前用电）。点击后整组统一切换
             // （见 {@link #handleContentClick} action 17 → {@link #batchToggleGroup}）。
             if (toggleableCount > 0) {
-                // 组内第一台可切换设备的角色（决定按钮颜色与「◀/▶」目标方向）。
+                // 组内第一台可切换设备的角色（决定按钮颜色与切换目标方向）。
                 RtsDeviceRole toggleBase = RtsDeviceRole.CONSUMER;
                 for (PowerDevice d : group) {
                     if (d.canToggleRole()) {
@@ -1090,7 +1148,7 @@ public final class PowerGridManagerPanel extends UiPanel {
                 if (hovering) {
                     btnColor = (btnColor & 0x00FFFFFF) | 0xBB000000;  // 悬浮加深
                 }
-                String btnLabel = toggleBase == RtsDeviceRole.GENERATOR ? "◀用电" : "发电▶";
+                String btnLabel = toggleBase == RtsDeviceRole.GENERATOR ? "用电" : "发电";
                 SdfRenderer.drawPill(g, btnX, btnY, btnW, btnH, btnColor);
                 int labelColor = hovering ? 0xFFFFFFFF : 0xCCFFFFFF;
                 TextRenderer.draw(g, btnLabel,
@@ -1101,6 +1159,41 @@ public final class PowerGridManagerPanel extends UiPanel {
                 hitActions.add(17);
                 hitArg.add(e.getKey());
             }
+            // 「刷新」按钮（输电塔组）：批量重扫整组输电塔的供电范围覆盖（绕过自适应退避）。
+            // 样式/颜色与单台设备行的刷新按钮一致；背景宽与「发电/用电」切换按钮相同。
+            if (isTowerGroup) {
+                int refreshY = y + (secH - 14) / 2;
+                boolean refreshHovered = mouseX >= refreshBtnX && mouseX < refreshBtnX + refreshBtnW
+                        && mouseY >= refreshY && mouseY < refreshY + 14;
+                int refreshColor = 0x8845A1C9;
+                if (refreshHovered) {
+                    refreshColor = (refreshColor & 0x00FFFFFF) | 0xBB000000;  // 悬浮加深
+                }
+                SdfRenderer.drawPill(g, refreshBtnX, refreshY, refreshBtnW, 14, refreshColor);
+                String refreshLabel = t("screen.rtsbuilding.powergrid.refresh_tower");
+                int labelColor = refreshHovered ? 0xFFFFFFFF : 0xE8FFFFFF;
+                TextRenderer.draw(g, refreshLabel,
+                        refreshBtnX + refreshBtnW / 2 - Minecraft.getInstance().font.width(refreshLabel) / 2,
+                        refreshY + (14 - Minecraft.getInstance().font.lineHeight) / 2 + 1, labelColor);
+                // 命中检测（arg = 该组在 byType 中的 key）
+                hitRects.add(new int[]{refreshBtnX, refreshY, refreshBtnW, 14});
+                hitActions.add(19);
+                hitArg.add(e.getKey());
+            }
+            // 组显隐开关（组头最右端）：整组隐藏 ↔ 恢复；状态 = 组内设备是否全部隐藏。
+            boolean groupAllHidden = true;
+            for (PowerDevice d : group) {
+                if (!hiddenDeviceKeys.contains(d.x() + "_" + d.y() + "_" + d.z())) {
+                    groupAllHidden = false;
+                    break;
+                }
+            }
+            ToggleSwitch groupToggle = deviceGroupToggleSwitches.computeIfAbsent(e.getKey(),
+                    k -> new ToggleSwitch());
+            groupToggle.render(g, groupToggleX, groupToggleY, !groupAllHidden);
+            hitRects.add(new int[]{groupToggleX, groupToggleY, EYE_BTN_W, EYE_BTN_H});
+            hitActions.add(18);
+            hitArg.add(e.getKey());
             // 组头命中：折叠/展开折叠条。
             if (section.isHeaderClicked(mouseX, mouseY, x, y, rowW)) {
                 hitRects.add(new int[]{x, y, rowW, CollapsibleSection.headerHeight()});
@@ -1136,9 +1229,9 @@ public final class PowerGridManagerPanel extends UiPanel {
         g.flush();
         g.disableScissor();
 
-        // 渲染设备滚动条（右侧）
+        // 渲染设备滚动条（右侧，与内容间留空隙）
         if (deviceScrollBar.isVisible()) {
-            int barX = x + rowW;
+            int barX = x + rowW + SCROLL_GAP;
             deviceScrollBar.render(g, barX, listTop, visibleH);
         }
     }
@@ -1342,11 +1435,11 @@ public final class PowerGridManagerPanel extends UiPanel {
             case TOWER -> COLOR_TOWER;
             default -> COLOR_WARN;   // 用电橙
         };
-        // 可切换角色时，在量值左侧预留切换按钮空间（40px，含按钮+间距）；输电塔预留刷新按钮空间（按文案自适应）。
+        // 可切换角色时，在量值左侧预留切换按钮空间（40px，含按钮+间距）；输电塔预留刷新按钮空间。
         final int toggleBtnW = 40;
-        // 刷新按钮文案（lang 管理，避免硬编码）；按钮宽 = 文案宽 + 8px 内边距。
+        // 刷新按钮文案（lang 管理，避免硬编码）；按钮背景宽度固定与「发电/用电」切换按钮一致（40px）。
         String refreshLabel = t("screen.rtsbuilding.powergrid.refresh_tower");
-        int refreshBtnW = Minecraft.getInstance().font.width(refreshLabel) + 8;
+        int refreshBtnW = toggleBtnW;
         // 右侧按钮区（从右到左）：[显隐开关(eyeBtnW)] + [切换/刷新按钮] + [量值文本]。
         // 显隐开关始终显示在最右端；切换/刷新按设备类型各占其一（互斥）。
         int eyeAlloc = EYE_BTN_W + 4;
@@ -1355,26 +1448,17 @@ public final class PowerGridManagerPanel extends UiPanel {
         int metricRightEdge = x + w - 4 - rightReserved;
         int metricLeft = metricRightEdge - Minecraft.getInstance().font.width(metric);
         TextRenderer.draw(g, metric, metricLeft, textY, metricColor);
-        // 显隐开关按钮（最右端）：方框图标——未隐藏→框内绿色实心矩形（当前显示中）；
-        // 已隐藏→空心框（当前被隐藏，框内无绿矩）。点击切换隐藏/恢复显示。
+        // 显隐开关（最右端）：uifw ToggleSwitch（与设置面板开关按钮同款）——
+        // 开=未隐藏（显示中），关=已隐藏。点击命中走 hitRects/hitActions case 16 统一处理。
         {
             int btnX = x + w - 4 - EYE_BTN_W;
             int btnY = y + (ROW_H - EYE_BTN_H) / 2 + 1;
-            int btnW = EYE_BTN_W;
-            int btnH = EYE_BTN_H;
             boolean hidden = hiddenDeviceKeys.contains(devKey);
-            boolean hover = mouseX >= btnX && mouseX < btnX + btnW && mouseY >= btnY && mouseY < btnY + btnH;
-            // 外框：未隐藏用中性描边、已隐藏用暖色描边；悬浮时提亮。
-            int frameColor = hover ? 0xBBFFFFFF : (hidden ? 0xBB7B68EE : 0xBB8AA0B5);
-            SdfRenderer.drawRoundedOutline(g, btnX, btnY, btnW, btnH, 3, frameColor, 1);
-            // 未隐藏（显示中）：框内绿色实心矩形；已隐藏：空心（不画内矩形）。
-            if (!hidden) {
-                int pad = 4;
-                SdfRenderer.drawRoundedRect(g, btnX + pad, btnY + pad,
-                        btnW - pad * 2, btnH - pad * 2, 2, 0xFF66BB6A);
-            }
+            // 每台设备独立开关实例（externalOn 版本渲染，动画目标自动跟随隐藏状态）
+            ToggleSwitch toggle = deviceToggleSwitches.computeIfAbsent(devKey, k -> new ToggleSwitch());
+            toggle.render(g, btnX, btnY, !hidden);
             // 命中检测
-            hitRects.add(new int[]{btnX, btnY, btnW, btnH});
+            hitRects.add(new int[]{btnX, btnY, EYE_BTN_W, EYE_BTN_H});
             hitActions.add(16);
             hitArg.add(devKey);
         }
@@ -1389,7 +1473,7 @@ public final class PowerGridManagerPanel extends UiPanel {
             if (hover) {
                 btnColor = (btnColor & 0x00FFFFFF) | 0xBB000000;  // 悬浮加深
             }
-            String btnLabel = role == RtsDeviceRole.GENERATOR ? "◀用电" : "发电▶";
+            String btnLabel = role == RtsDeviceRole.GENERATOR ? "用电" : "发电";
             SdfRenderer.drawPill(g, btnX, btnY, btnW, btnH, btnColor);
             int labelColor = hover ? 0xFFFFFFFF : 0xCCFFFFFF;
             TextRenderer.draw(g, btnLabel,
@@ -1454,7 +1538,7 @@ public final class PowerGridManagerPanel extends UiPanel {
             int x = contentX() + CONTENT_PAD;
             int w = cw - CONTENT_PAD * 2;
             int cTop = cy;
-            int tabY = cTop + 16;
+            int tabY = cTop + TAB_TOP_OFFSET;
             int gridTop = tabY + TAB_H + 4;
 
             if (memberScrollBar.isDragging()) {
@@ -1623,6 +1707,8 @@ public final class PowerGridManagerPanel extends UiPanel {
         this.deviceSections.clear();
         this.memberRowHoverAnims.clear();
         this.deviceRowHoverAnims.clear();
+        this.deviceToggleSwitches.clear();
+        this.deviceGroupToggleSwitches.clear();
         // 重置设备筛选 / 显隐视图状态（隐藏集合保留供下次打开继续生效）。
         this.deviceFilter = FILTER_ALL;
         this.deviceVisibilityMode = VIS_VISIBLE_ONLY;
@@ -1645,7 +1731,7 @@ public final class PowerGridManagerPanel extends UiPanel {
         int x = cx + CONTENT_PAD;
         int w = cw - CONTENT_PAD * 2;
         int cTop = cy;
-        int tabY = cTop + 16;
+        int tabY = cTop + TAB_TOP_OFFSET;
         int gridTop = tabY + TAB_H + 4;
 
         // ── 搜索框点击（与渲染坐标一致） ──────────────────────────────
@@ -1685,7 +1771,7 @@ public final class PowerGridManagerPanel extends UiPanel {
 
         // 成员 Tab 滚动条点击
         if (currentTab == TAB_MEMBER && memberScrollBar.isVisible()) {
-            int barX = cx + cw - 12;
+            int barX = x + (w - SCROLL_BAR_ROW_RESERVE) + SCROLL_GAP;
             int titleY = memberSearchY + SEARCH_H + SEARCH_LIST_GAP;
             int listTop = titleY + ROW_H;
             int listH = cy + ch - listTop;
@@ -1695,7 +1781,7 @@ public final class PowerGridManagerPanel extends UiPanel {
         }
         // 设备 Tab 滚动条点击
         if (currentTab == TAB_DEVICE && deviceScrollBar.isVisible()) {
-            int barX = cx + cw - 12;
+            int barX = x + (w - SCROLL_BAR_ROW_RESERVE) + SCROLL_GAP;
             int listTop = deviceSearchY + SEARCH_H + SEARCH_LIST_GAP;
             int listH = cy + ch - listTop;
             if (deviceScrollBar.handleClick(mx, my, barX, listTop, listH)) {
@@ -1828,6 +1914,16 @@ public final class PowerGridManagerPanel extends UiPanel {
                     batchToggleGroup(itemId);
                 }
             }
+            case 18 -> {                // 折叠条组头显隐开关：整组隐藏 ↔ 恢复
+                if (arg instanceof String itemId && !itemId.isEmpty()) {
+                    toggleGroupVisibility(itemId);
+                }
+            }
+            case 19 -> {                // 折叠条组头「刷新」（输电塔组）：批量重扫整组输电塔
+                if (arg instanceof String itemId && !itemId.isEmpty()) {
+                    batchRefreshGroup(itemId);
+                }
+            }
             default -> { }
         }
     }
@@ -1855,6 +1951,55 @@ public final class PowerGridManagerPanel extends UiPanel {
         for (PowerDevice d : group) {
             RtsPowerGrid.get().toggleDeviceRole(d.x(), d.y(), d.z(), target);
         }
+    }
+
+    /**
+     * 批量刷新输电塔组：对组内所有输电塔立即重扫供电范围覆盖（绕过每个塔的自适应退避）。
+     * <p>供折叠条组头「刷新」按钮使用（语义与单台设备行内的刷新按钮一致）。</p>
+     */
+    private void batchRefreshGroup(String groupKey) {
+        RtsPowerGrid grid = RtsPowerGrid.get();
+        PowerGridSnapshot snap = grid == null ? null : grid.currentGrid();
+        if (snap == null) return;
+        for (PowerDevice d : snap.devices()) {
+            String k = (d.itemId() == null || d.itemId().isEmpty())
+                    ? (d.label() == null ? "" : d.label()) : d.itemId();
+            if (k.equals(groupKey) && d.role() == RtsDeviceRole.TOWER) {
+                grid.refreshTower(d.x(), d.y(), d.z());
+            }
+        }
+    }
+
+    /**
+     * 整组显隐切换（折叠条组头显隐开关）：组内设备全部隐藏时恢复整组，否则隐藏整组。
+     * <p>复用单台设备隐藏集合 {@link #hiddenDeviceKeys}：整组隐藏 = 组内所有设备坐标 key 全部
+     * 加入隐藏集合，恢复 = 全部移除，后续过滤逻辑天然生效。</p>
+     */
+    private void toggleGroupVisibility(String groupKey) {
+        PowerGridSnapshot snap = RtsPowerGrid.get() == null ? null : RtsPowerGrid.get().currentGrid();
+        if (snap == null) return;
+        List<String> keys = new ArrayList<>();
+        for (PowerDevice d : snap.devices()) {
+            String k = (d.itemId() == null || d.itemId().isEmpty())
+                    ? (d.label() == null ? "" : d.label()) : d.itemId();
+            if (k.equals(groupKey)) {
+                keys.add(d.x() + "_" + d.y() + "_" + d.z());
+            }
+        }
+        if (keys.isEmpty()) return;
+        boolean allHidden = true;
+        for (String key : keys) {
+            if (!hiddenDeviceKeys.contains(key)) {
+                allHidden = false;
+                break;
+            }
+        }
+        for (String key : keys) {
+            if (allHidden) hiddenDeviceKeys.remove(key);
+            else hiddenDeviceKeys.add(key);
+        }
+        PowerGridSnapshot cur = RtsPowerGrid.get() == null ? null : RtsPowerGrid.get().currentGrid();
+        if (cur != null) refreshDeviceFilteredList(cur);
     }
 
     private UUID localUuid() {

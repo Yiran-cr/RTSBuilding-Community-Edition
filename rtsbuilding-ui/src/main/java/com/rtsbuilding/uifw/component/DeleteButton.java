@@ -5,6 +5,7 @@ import com.rtsbuilding.uifw.animate.ColorAnimation;
 import com.rtsbuilding.uifw.animate.Easing;
 import com.rtsbuilding.uifw.render.SdfRenderer;
 import com.rtsbuilding.uifw.render.TextRenderer;
+import com.rtsbuilding.uifw.render.UiMetrics;
 import com.rtsbuilding.uifw.render.UiPalette;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -25,7 +26,6 @@ public final class DeleteButton {
     public static final int SIZE = 14;
     /** 文字左右内边距（px）。 */
     private static final int TEXT_PAD = 6;
-    private static final int RADIUS = 3;
 
     /** 普通态按钮文字 key（走 uifw 自己的语言文件）。 */
     private static final String LABEL_KEY = "button.uifw.delete";
@@ -73,7 +73,7 @@ public final class DeleteButton {
             float pulse = (float) Math.sin(flash * Math.PI);
             bg = ColorAnimation.lerpRGB(bg, ColorAnimation.scale(base, 1.5f), pulse);
         }
-        SdfRenderer.drawRoundedRect(g, x, y, w, SIZE, RADIUS, bg);
+        SdfRenderer.drawRoundedRect(g, x, y, w, SIZE, UiMetrics.RADIUS_CONTROL, bg);
 
         Font font = Minecraft.getInstance().font;
         String text = Component.translatable(confirm ? CONFIRM_KEY : LABEL_KEY).getString();
