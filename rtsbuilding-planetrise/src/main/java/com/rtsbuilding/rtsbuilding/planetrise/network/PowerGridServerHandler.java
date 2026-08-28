@@ -9,10 +9,13 @@ import com.rtsbuilding.rtsbuilding.api.powergrid.RtsDeviceRole;
 import com.rtsbuilding.rtsbuilding.api.powergrid.RtsMachineType;
 import com.rtsbuilding.rtsbuilding.api.powergrid.RtsPowerStatus;
 import com.rtsbuilding.rtsbuilding.planetrise.block.entity.PowerTowerBlockEntity;
+import org.jetbrains.annotations.Nullable;
+import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.C2SDeviceRoleToggle;
 import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.C2SPowerGridExternalConfig;
 import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.C2SPowerGridInvite;
 import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.C2SPowerGridMemberAction;
 import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.C2SPowerGridRemove;
+import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.C2SPowerGridTowerRefresh;
 import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.DeviceEntry;
 import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.ExternalConfigEntry;
 import com.rtsbuilding.rtsbuilding.planetrise.network.PowerGridPackets.MemberEntry;
@@ -22,18 +25,22 @@ import com.rtsbuilding.rtsbuilding.planetrise.power.PowerGridManager;
 import com.rtsbuilding.rtsbuilding.planetrise.power.PowerGridOwnership;
 import com.rtsbuilding.rtsbuilding.planetrise.power.PowerRole;
 import com.rtsbuilding.rtsbuilding.planetrise.server.powergrid.PowerGridExternalConfigStore;
+import com.rtsbuilding.rtsbuilding.planetrise.server.powergrid.PowerGridHistoryStore;
 import com.rtsbuilding.rtsbuilding.platform.Platform;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,10 +58,91 @@ public final class PowerGridServerHandler {
     private PowerGridServerHandler() {
     }
 
+    /**
+     * 设备角色覆盖存储：{@code 维度key + BlockPos -> 覆盖角色}。
+     * <p>玩家在设备列表点击切换按钮时，把该位置的角色写入此 map；<br>
+     * {@link #collectDevices collectDevices} 读取此 map 覆盖设备的 {@code role} 字段。<br>
+     * 同时 {@link PowerTowerBlockEntity} 在广播注能时也读取此 map：<br>
+     * 若覆盖为 {@link RtsDeviceRole#CONSUMER} 则跳过提取，<br>
+     * 若覆盖为 {@link RtsDeviceRole#GENERATOR} 则允许提取。<br>
+     * 无覆盖时按默认行为（可提取则提取，可注入则注入）。</p>
+     * <p><b>注意</b>：{@link BlockPos} 不含维度，若直接用 BlockPos 作 key，两个维度中坐标相同的设备
+     * 会互相串扰。故以「维度 + 坐标」拼成复合字符串 key（见 {@link #roleKey}）。</p>
+     */
+    private static final Map<String, RtsDeviceRole> DEVICE_ROLE_OVERRIDES = new HashMap<>();
+
+    /** 查询指定位置是否有设备角色覆盖，无覆盖返回 {@code null}。 */
+    @Nullable
+    public static RtsDeviceRole getDeviceRoleOverride(ResourceKey<Level> dim, BlockPos pos) {
+        return DEVICE_ROLE_OVERRIDES.get(roleKey(dim, pos));
+    }
+
+    /** 拼接「维度 + 坐标」复合 key，避免跨维度同坐标串扰。 */
+    private static String roleKey(ResourceKey<Level> dim, BlockPos pos) {
+        return dim.location().toString() + "|" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    }
+
     /** 刷新：把请求者所属电网组最新快照回推给请求者。 */
     public static void handleRefresh(IPayloadContext ctx) {
         ServerPlayer player = (ctx.player() instanceof ServerPlayer sp) ? sp : null;
         if (player != null) {
+            pushSnapshot(player, buildSnapshot(player));
+        }
+    }
+
+    /** 历史请求：把请求者所属电网组三档历史时序回推给请求者（仪表盘柱状图渲染用）。 */
+    public static void handleHistoryRequest(IPayloadContext ctx) {
+        ServerPlayer player = (ctx.player() instanceof ServerPlayer sp) ? sp : null;
+        if (player == null) {
+            return;
+        }
+        UUID owner = PowerGridOwnership.get().ownerOf(player.getUUID());
+        if (owner == null) {
+            return;
+        }
+        PowerGridHistoryStore store = PowerGridHistoryStore.get();
+        Platform.sendPacket(player, new PowerGridPackets.S2CPowerGridHistory(
+                store.snapshot5s(owner), store.snapshot1m(owner), store.snapshot1h(owner)));
+    }
+
+    /** 设备角色切换：更新覆盖存储后回推新快照。 */
+    public static void handleDeviceRoleToggle(C2SDeviceRoleToggle payload, IPayloadContext ctx) {
+        ServerPlayer player = (ctx.player() instanceof ServerPlayer sp) ? sp : null;
+        if (player == null) {
+            return;
+        }
+        BlockPos pos = new BlockPos((int) payload.x(), (int) payload.y(), (int) payload.z());
+        ResourceKey<Level> dim = player.serverLevel().dimension();
+        RtsDeviceRole newRole = payload.newRole() >= 0 && payload.newRole() < RtsDeviceRole.values().length
+                ? RtsDeviceRole.values()[payload.newRole()] : null;
+        if (newRole == null) {
+            return;
+        }
+        // 只允许切换为 CONSUMER 或 GENERATOR。两种角色均为<b>显式权威标记</b>：
+        // 玩家点击按钮即强制指定该设备的供电方向，而非移除覆盖回落到「按能力自动判定」——
+        // 否则「改成用电」对只可输出的设备不会生效（仍会被当发电机提取）。
+        if (newRole == RtsDeviceRole.CONSUMER) {
+            DEVICE_ROLE_OVERRIDES.put(roleKey(dim, pos), RtsDeviceRole.CONSUMER);
+        } else if (newRole == RtsDeviceRole.GENERATOR) {
+            DEVICE_ROLE_OVERRIDES.put(roleKey(dim, pos), RtsDeviceRole.GENERATOR);
+        } else {
+            return;
+        }
+        pushSnapshot(player, buildSnapshot(player));
+    }
+
+    /** 强制刷新指定输电塔：立即重扫供电范围覆盖（绕过自适应退避），并回推新快照。
+     * <p>刷新为无害操作，仅触发该塔立即扫描一遍供电范围内的用电器，不改变任何权威数据，因此不校验权限。</p> */
+    public static void handleTowerRefresh(C2SPowerGridTowerRefresh payload, IPayloadContext ctx) {
+        ServerPlayer player = (ctx.player() instanceof ServerPlayer sp) ? sp : null;
+        if (player == null) {
+            return;
+        }
+        BlockPos pos = new BlockPos((int) payload.x(), (int) payload.y(), (int) payload.z());
+        BlockEntity be = player.serverLevel().getBlockEntity(pos);
+        if (be instanceof PowerTowerBlockEntity tower) {
+            // forceRescan 触发该塔立即重扫供电范围（收窄扫描周期为最密档，下 tick 起扫一整圈）。
+            tower.forceRescan();
             pushSnapshot(player, buildSnapshot(player));
         }
     }
@@ -190,26 +278,34 @@ public final class PowerGridServerHandler {
             if (node.role() == PowerRole.GENERATOR) {
                 out.add(new PowerDevice(RtsDeviceRole.GENERATOR, pos.getX(), pos.getY(), pos.getZ(),
                         node.generation() > 0 ? RtsPowerStatus.POWERED : RtsPowerStatus.OFFLINE,
-                        node.generation(), labelAt(level, pos), itemIdOf(level, pos)));
+                        node.generation(), labelAt(level, pos), itemIdOf(level, pos), false));
             } else if (node instanceof PowerTowerBlockEntity tower) {
-                // 传输电量 = 最近一次电网分配的本塔配额（broadcast 用后不清零，避免快照恒显示 0）。
-                long quota = tower.lastAssignedQuota();
+                // 传输电量 = 塔最近一次广播<b>实际输送</b>的总量（电网分得配额注入 + 外部发电机提取），
+                // 而非仅调度分配的配额——否则外部模组发电设备经塔中转的电力在设备列表里显示为 0。
+                long transferred = tower.actualTransferredRate();
                 // 输电塔不标记「电力不足」，仅区分通电 / 离线（不足由电动机器反映）。
-                RtsPowerStatus st = quota > 0 ? RtsPowerStatus.POWERED : RtsPowerStatus.OFFLINE;
+                RtsPowerStatus st = transferred > 0 ? RtsPowerStatus.POWERED : RtsPowerStatus.OFFLINE;
                 out.add(new PowerDevice(RtsDeviceRole.TOWER, pos.getX(), pos.getY(), pos.getZ(),
-                        st, quota, labelAt(level, pos), itemIdOf(level, pos)));
+                        st, transferred, labelAt(level, pos), itemIdOf(level, pos), false));
                 for (BlockPos p : tower.consumers()) {
                     // 过滤已被移除的用电器坐标（能量能力失效），避免设备列表残留坐标渲染成「空气」。
                     if (!tower.isConsumerAlive(p)) {
                         continue;
                     }
                     if (!consumers.containsKey(p)) {
-                        // 耗电 = 该用电器最近一次广播<b>实际注入</b>的电量（真实耗电，而非可注入缺口）。
-                        long metric = tower.consumerInjectedRate(p);
-                        consumers.put(p, new PowerDevice(RtsDeviceRole.CONSUMER,
+                        // 权威角色（权威级设计）：玩家显式标记优先；无覆盖时以塔最近一次广播的<b>实际
+                        // 方向</b>为准（可注入→用电，自动识别的可提取→发电），使快照角色与实际供电流向一致。
+                        RtsDeviceRole override = getDeviceRoleOverride(level.dimension(), p);
+                        RtsDeviceRole finalRole = override != null ? override : tower.actualRoleAt(p);
+                        // 耗电/发电量：用电端显示 <b>实测每 tick 功耗</b>（反映机器真实吞电速率，
+                        // 供电不足=降速后实际值），发电端显示最近一次广播<b>实际提取</b>量。
+                        long metric = finalRole == RtsDeviceRole.GENERATOR
+                                ? tower.consumerInjectedRate(p)
+                                : tower.consumerConsumptionRate(p);
+                        consumers.put(p, new PowerDevice(finalRole,
                                 p.getX(), p.getY(), p.getZ(),
                                 metric > 0 ? RtsPowerStatus.POWERED : RtsPowerStatus.OFFLINE,
-                                metric, labelAt(level, p), itemIdOf(level, p)));
+                                metric, labelAt(level, p), itemIdOf(level, p), true));
                     }
                 }
             }
@@ -236,7 +332,8 @@ public final class PowerGridServerHandler {
         List<DeviceEntry> devices = new ArrayList<>();
         for (PowerDevice d : snapshot.devices()) {
             devices.add(new DeviceEntry((byte) d.role().ordinal(), d.x(), d.y(), d.z(),
-                    (byte) d.status().ordinal(), d.metric(), d.label(), d.itemId()));
+                    (byte) d.status().ordinal(), d.metric(), d.label(), d.itemId(),
+                    d.canToggleRole() ? (byte) 1 : (byte) 0));
         }
         List<ExternalConfigEntry> configs = new ArrayList<>();
         for (ExternalMachineConfig c : PowerGridExternalConfigStore.all()) {

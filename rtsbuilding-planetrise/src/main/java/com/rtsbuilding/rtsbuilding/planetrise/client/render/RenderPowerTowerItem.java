@@ -22,6 +22,9 @@ public class RenderPowerTowerItem extends BlockEntityWithoutLevelRenderer {
 
     public static final RenderPowerTowerItem RENDERER = new RenderPowerTowerItem();
 
+    /** 放置虚影透明度（NONE display context 时使用，与 BlockPlacementPreviewPass 的 GHOST_ALPHA 一致）。 */
+    private static final float GHOST_ALPHA = 0.45F;
+
     private ModelPowerTower model;
 
     private RenderPowerTowerItem() {
@@ -56,7 +59,9 @@ public class RenderPowerTowerItem extends BlockEntityWithoutLevelRenderer {
         poseStack.pushPose();
         // 模型原点对准物品体素中心（与方块实体渲染器的底部中心不同）。
         poseStack.translate(0.5, 0.5, 0.5);
-        model.render(poseStack, bufferSource, timeSeconds, packedLight, packedOverlay);
+        // NONE 表示 RTS 放置虚影场景：用半透明渲染；其余（物品栏/手持）用不透明。
+        float alpha = displayContext == ItemDisplayContext.NONE ? GHOST_ALPHA : 1.0F;
+        model.render(poseStack, bufferSource, timeSeconds, packedLight, packedOverlay, alpha);
         poseStack.popPose();
     }
 }

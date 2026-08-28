@@ -5,6 +5,7 @@ build/
 .vscode/
 run/
 /entity/
+bin/
 
 # 本地 libs 目录：放入的第三方 mod jar（如 Mekanism）用于 dev 编译/运行时，不提交
 libs/

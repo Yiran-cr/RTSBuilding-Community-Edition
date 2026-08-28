@@ -6,6 +6,7 @@ import com.rtsbuilding.rtsbuilding.planetrise.EnergyBlockEntities;
 import com.rtsbuilding.rtsbuilding.planetrise.EnergyBlocks;
 import com.rtsbuilding.rtsbuilding.planetrise.EnergyItems;
 import com.rtsbuilding.rtsbuilding.planetrise.EnergyMod;
+import com.rtsbuilding.rtsbuilding.planetrise.client.link.RtsGridLinkPreviewRenderer;
 import com.rtsbuilding.rtsbuilding.planetrise.client.model.ModelPowerTower;
 import com.rtsbuilding.rtsbuilding.planetrise.client.model.ModelWindGenerator;
 import com.rtsbuilding.rtsbuilding.planetrise.client.power.PowerRangeOverlayRenderer;
@@ -155,6 +156,9 @@ public final class EnergyClient {
         }
         PowerRangeVisualStore.INSTANCE.setGlobalShow(POWER_RANGE_OVERLAY_KEY.isDown());
         PowerRangeOverlayRenderer.render(event);
+        // 玩家正在放置能量设备（输电塔/发电机）时，绘制它与附近已放置能量节点的连接虚线
+        // （蓝色=可连接、红色=超出范围、超过 1.5×链路范围不画）。RTS 与手动模式统一入口。
+        RtsGridLinkPreviewRenderer.render(event);
     }
 }
 

@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.planetrise.client.model;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.rtsbuilding.rtsbuilding.client.render.util.RtsAlphaVertexConsumer;
 import com.rtsbuilding.rtsbuilding.planetrise.EnergyMod;
 import com.rtsbuilding.rtsbuilding.planetrise.block.WindGeneratorBlock;
 import net.minecraft.client.model.geom.ModelLayerLocation;
@@ -160,8 +161,28 @@ public class ModelWindGenerator {
      * @param angle 风叶当前旋转角（度），驱动 {@code bone} 组绕 y 轴（竖直方向）旋转。
      */
     public void render(PoseStack poseStack, MultiBufferSource buffer, float angle, int light, int overlay) {
+        render(poseStack, buffer, angle, light, overlay, 1.0F);
+    }
+
+    /**
+     * 渲染整座塔（带透明度）。
+     * <p>
+     * {@code alpha} &lt; 1 时使用半透明实体层（{@code RenderType.entityTranslucent}，
+     * TRANSLUCENT_TRANSPARENCY 混合 + NO_CULL，顶点格式 NEW_ENTITY 与不透明层一致），
+     * 并把顶点 alpha 统一乘以 {@code alpha}，用于 RTS 放置虚影；{@code alpha} = 1 时退化为
+     * 常规不透明 cutout 渲染（方块实体/物品显示）。
+     *
+     * @param angle 风叶当前旋转角（度），驱动 {@code bone} 组绕 y 轴（竖直方向）旋转。
+     */
+    public void render(PoseStack poseStack, MultiBufferSource buffer, float angle, int light, int overlay,
+                       float alpha) {
         // 风叶组绕 y 轴（竖直方向为轴心）旋转，形成旋转动画。
         bone.yRot = angle * DEG_TO_RAD;
+
+        boolean translucent = alpha < 0.999F;
+        RenderType renderType = translucent
+                ? RenderType.entityTranslucent(TEXTURE)
+                : RenderType.entityCutoutNoCull(TEXTURE);
 
         poseStack.pushPose();
         // 实体坐标（Y 向下为正）→ 方块世界坐标（Y 向上为正）。
@@ -171,7 +192,8 @@ public class ModelWindGenerator {
         poseStack.translate(0, 1.5F, 0);
         poseStack.scale(-1, -1, 1);
 
-        VertexConsumer consumer = buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE));
+        VertexConsumer base = buffer.getBuffer(renderType);
+        VertexConsumer consumer = translucent ? new RtsAlphaVertexConsumer(base, alpha) : base;
         bone.render(poseStack, consumer, light, overlay, 0xFFFFFFFF);
         bbMain.render(poseStack, consumer, light, overlay, 0xFFFFFFFF);
         poseStack.popPose();

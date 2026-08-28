@@ -7,6 +7,10 @@ package com.rtsbuilding.rtsbuilding.planetrise.power;
  * {@link PowerScheduler} 只依赖本类，便于单测；方块实体层（{@code PowerTowerBlockEntity}
  * 等）负责把它构造出来。坐标以三个 {@code long} 存储，避免依赖 {@code BlockPos}，
  * 使算法模块保持纯逻辑、可独立测试。
+ * <p>
+ * <b>外部发电</b>：所有字段中 {@code generation}（本机产电，仅发电机非零）与
+ * {@code externalGeneration}（塔从供电范围<b>外部</b>设备提取并注入电网的电，仅塔非零）
+ * 都会并入电网聚合的「总发电」，参与跨塔配额分配。
  */
 public record GridNode(
         long x,
@@ -17,7 +21,8 @@ public record GridNode(
         long powerRange,
         long throughput,
         long generation,
-        long demand) {
+        long demand,
+        long externalGeneration) {
 
     /** 位置编码为单一 long，供 union-find 索引 / 电网身份查询使用。 */
     public long key() {

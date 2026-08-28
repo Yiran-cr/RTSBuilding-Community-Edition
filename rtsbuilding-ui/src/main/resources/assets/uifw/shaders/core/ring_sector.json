@@ -1,0 +1,53 @@
+{
+    "vertex": "uifw:ring_sector",
+    "fragment": "uifw:ring_sector",
+    "samplers": [],
+    "uniforms": [
+        {
+            "name": "ModelViewMat",
+            "type": "matrix4x4",
+            "count": 16,
+            "values": [
+                1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            ]
+        },
+        {
+            "name": "ProjMat",
+            "type": "matrix4x4",
+            "count": 16,
+            "values": [
+                1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            ]
+        },
+        {
+            "name": "u_OuterR",
+            "type": "float",
+            "count": 1,
+            "values": [36.0]
+        },
+        {
+            "name": "u_InnerR",
+            "type": "float",
+            "count": 1,
+            "values": [22.0]
+        },
+        {
+            "name": "u_StartAngle",
+            "type": "float",
+            "count": 1,
+            "values": [0.0]
+        },
+        {
+            "name": "u_EndAngle",
+            "type": "float",
+            "count": 1,
+            "values": [360.0]
+        }
+    ]
+}

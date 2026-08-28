@@ -33,7 +33,8 @@ public final class PowerGridClientHandler {
         List<PowerDevice> devices = new ArrayList<>();
         for (PowerGridPackets.DeviceEntry d : payload.devices()) {
             devices.add(new PowerDevice(roleOf(d.role()), d.x(), d.y(), d.z(),
-                    statusOf(d.status()), d.metric(), d.label(), d.itemId()));
+                    statusOf(d.status()), d.metric(), d.label(), d.itemId(),
+                    d.canToggle() != 0));
         }
         List<ExternalMachineConfig> configs = new ArrayList<>();
         for (PowerGridPackets.ExternalConfigEntry e : payload.externalConfigs()) {
@@ -49,6 +50,12 @@ public final class PowerGridClientHandler {
     /** 成员操作结果：写入缓存供 UI 显示。 */
     public static void handleActionResult(PowerGridPackets.S2CPowerGridActionResult payload) {
         PowerGridClientCache.INSTANCE.setActionResult(payload.code());
+    }
+
+    /** 历史时序回包：写入三档历史缓存供仪表盘柱状图渲染。 */
+    public static void handleHistory(PowerGridPackets.S2CPowerGridHistory payload) {
+        PowerGridClientCache.INSTANCE.updateHistory(payload.points5s(), payload.points1m(),
+                payload.points1h());
     }
 
     private static RtsAccessLevel accessOf(byte b) {

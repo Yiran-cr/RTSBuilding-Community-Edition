@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.api.powergrid;
 import org.jetbrains.annotations.ApiStatus;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -60,6 +61,52 @@ public interface RtsPowerGrid {
 
     /** 在世界中定位某设备（UI「点击定位」，客户端把相机/视角移动到该设备）。 */
     void locateDevice(long x, long y, long z);
+
+    /**
+     * 请求服务端推送当前电网组的发耗电<b>历史时序数据</b>（5 秒 / 1 分钟 / 1 小时三档）。
+     * <p>UI 打开「电网总览」仪表盘时调用；服务端经 {@code S2CPowerGridHistory} 回包，
+     * 客户端经 {@link #history5s()} / {@link #history1m()} / {@link #history1h()} 读取。
+     */
+    void requestHistory();
+
+    /**
+     * 切换设备角色（用电 ↔ 发电）。服务端更新覆盖标记后回推新快照。
+     *
+     * @param x      设备世界 X 坐标
+     * @param y      设备世界 Y 坐标
+     * @param z      设备世界 Z 坐标
+     * @param newRole 目标角色（仅 {@link RtsDeviceRole#CONSUMER} 或 {@link RtsDeviceRole#GENERATOR}）
+     */
+    void toggleDeviceRole(long x, long y, long z, RtsDeviceRole newRole);
+
+    /**
+     * 强制刷新某<b>输电塔</b>的供电范围覆盖（重新扫描供电范围内的用电器）。
+     * <p>输电塔正常情况下用自适应退避调度扫描（电网稳定时最长退避到 10 秒一轮），此方法绕过退避，
+     * 立即触发一次全量重扫并把最新快照回推给请求者。用于玩家放置/移除机器后手动刷新设备列表。
+     *
+     * @param x 输电塔世界 X 坐标（设备列表中的主方块坐标）
+     * @param y 输电塔世界 Y 坐标
+     * @param z 输电塔世界 Z 坐标
+     */
+    void refreshTower(long x, long y, long z);
+
+    /**
+     * 5 秒粒度的历史数据点（最近约 2 分钟，24 个点）。每点为 {@code [generation, demand]}，
+     * 按时间顺序（旧 → 新）。客户端经 S2C 同步；未请求或未推送时返回空列表。
+     */
+    List<long[]> history5s();
+
+    /**
+     * 1 分钟粒度的历史数据点（最近约 1 小时，60 个点）。每点为 {@code [generation, demand]}，
+     * 按时间顺序（旧 → 新）。
+     */
+    List<long[]> history1m();
+
+    /**
+     * 1 小时粒度的历史数据点（最近约 24 小时，24 个点）。每点为 {@code [generation, demand]}，
+     * 按时间顺序（旧 → 新）。
+     */
+    List<long[]> history1h();
 
     /**
      * 设置内部实现。仅由 {code rtsbuilding-planetrise} 在初始化期间调用。

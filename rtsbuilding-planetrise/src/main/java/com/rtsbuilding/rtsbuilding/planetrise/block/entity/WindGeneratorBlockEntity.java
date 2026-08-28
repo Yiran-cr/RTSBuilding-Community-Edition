@@ -24,9 +24,10 @@ import java.util.List;
  * <ul>
  *   <li><b>高度增益</b>：每秒（20 tick）重算一次产能倍率——塔顶（{@code above(2)}）
  *       能看见天空时，倍率 = 塔顶高度在世界建筑高度区间内的比例（越高产电越多）；</li>
- *   <li><b>缓冲</b>：FE 进入内部缓冲（容量见 {@code Config.windGeneratorCapacity()}），
- *       暴露为 extract-only {@code IEnergyStorage}，可被覆盖范围内的无线输电塔吸取；</li>
- *   <li><b>节能</b>：天空不可见（被遮挡/夜间需另行判断的简化）或缓冲满时停止产电。</li>
+ *   <li><b>缓冲（旁路）</b>：产出的 FE 写入内部缓冲（容量见 {@code Config.windGeneratorCapacity()}），
+ *       暴露为 extract-only {@code IEnergyStorage}，仅供外部管道/其它模组抽取；<b>不作为</b>电网供电路径；</li>
+ *   <li><b>电网供电</b>：本 tick 产电速率经 {@link #generation()} <b>声明</b>注入所在电网，由调度器分配、
+ *       由输电塔广播给用电器——<b>不受</b>本地缓冲容量钳制（buffer 满不导致断电，仅不再旁路存储）。</li>
  * </ul>
  * <p>
  * 继承 {@link AbstractEnergyMachineBlockEntity}：能量缓冲 / 能力工厂 / tick 模板（含首次占位
@@ -69,8 +70,13 @@ public class WindGeneratorBlockEntity extends AbstractEnergyMachineBlockEntity i
             }
         }
         long generation = currentGeneration();
-        if (generation > 0 && getBuffer().getNeeded() > 0) {
-            addEnergy(generation);
+        if (generation > 0) {
+            // 电网发电走 {@link #generation()}（声明产电速率，参与调度后由输电塔广播），<b>不</b>受本地
+            // 缓冲容量钳制——电网供电是速率模型，不受「多少 FE 暂存于 buffer」影响。缓冲仅供外部管道
+            // 旁路抽取：有空位才写入，满则跳过（下次有空间再写），不影响本机的电网产电声明。
+            if (getBuffer().getNeeded() > 0) {
+                addEnergy(generation);
+            }
         }
         // 注册本发电机器并驱动一次电网调度。
         if (level instanceof ServerLevel serverLevel) {
@@ -179,8 +185,4 @@ public class WindGeneratorBlockEntity extends AbstractEnergyMachineBlockEntity i
         return 0L;
     }
 
-    /** 发电机器不接受分配给塔的配额。 */
-    @Override
-    public void acceptQuota(long quota) {
-    }
 }

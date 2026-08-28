@@ -52,6 +52,8 @@ public class UiFrameworkMod {
                     shader(event, "reset_icon"), shader -> UiShaders.resetIcon = shader);
             event.registerShader(
                     shader(event, "colorwheel"), shader -> UiShaders.colorwheel = shader);
+            event.registerShader(
+                    shader(event, "ring_sector"), shader -> UiShaders.ringSector = shader);
         } catch (java.io.IOException e) {
             throw new RuntimeException("uifw: failed to register shaders", e);
         }

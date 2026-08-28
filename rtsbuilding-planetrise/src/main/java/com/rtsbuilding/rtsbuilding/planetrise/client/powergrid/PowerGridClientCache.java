@@ -22,6 +22,11 @@ public final class PowerGridClientCache {
     private PowerGridSnapshot grid;
     private final List<ExternalMachineConfig> externalConfigs = new ArrayList<>();
 
+    /** 三档历史时序数据：每点 [generation, demand]，按时间顺序（旧 → 新）。 */
+    private volatile List<long[]> history5s = List.of();
+    private volatile List<long[]> history1m = List.of();
+    private volatile List<long[]> history1h = List.of();
+
     /** 最近一次成员操作结果码（0=成功，1=无管理员权限，2=无所有者权限，3=无效/不在线）。 */
     private int actionResult;
 
@@ -35,6 +40,13 @@ public final class PowerGridClientCache {
         if (configs != null) {
             this.externalConfigs.addAll(configs);
         }
+    }
+
+    /** 更新历史时序数据缓存（由 S2C 历史回包写入）。 */
+    public synchronized void updateHistory(List<long[]> h5, List<long[]> h1m, List<long[]> h1h) {
+        this.history5s = h5 == null ? List.of() : List.copyOf(h5);
+        this.history1m = h1m == null ? List.of() : List.copyOf(h1m);
+        this.history1h = h1h == null ? List.of() : List.copyOf(h1h);
     }
 
     /** 记录最近一次成员操作结果。 */
@@ -51,6 +63,21 @@ public final class PowerGridClientCache {
     @Nullable
     public synchronized PowerGridSnapshot grid() {
         return grid;
+    }
+
+    /** 5 秒档历史时序（只读副本，旧 → 新）。 */
+    public List<long[]> history5s() {
+        return history5s;
+    }
+
+    /** 1 分钟档历史时序（只读副本，旧 → 新）。 */
+    public List<long[]> history1m() {
+        return history1m;
+    }
+
+    /** 1 小时档历史时序（只读副本，旧 → 新）。 */
+    public List<long[]> history1h() {
+        return history1h;
     }
 
     /** 外部机器类型配置（只读副本）。 */

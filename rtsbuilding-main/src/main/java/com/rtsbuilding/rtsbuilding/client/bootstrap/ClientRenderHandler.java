@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
 import com.rtsbuilding.rtsbuilding.client.infrastructure.module.camera.CameraModule;
 import com.rtsbuilding.rtsbuilding.client.kernel.RtsClientKernel;
+import com.rtsbuilding.rtsbuilding.client.render.pass.TowerRangePreviewPass;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -60,5 +61,24 @@ public final class ClientRenderHandler {
     public static void onRenderDroneBeams(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
         com.rtsbuilding.rtsbuilding.client.render.DroneBeamRenderer.INSTANCE.render(event);
+    }
+
+    /**
+     * 手动放置输电塔时绘制覆盖范围圆环：当玩家手持输电塔物品且不在 RTS 模式时，
+     * 在目标放置位置绘制链路范围（蓝）和供电范围（黄）水平圆环。
+     * 独立于 RTS 管线，在 {@link RenderLevelStageEvent} 中渲染。
+     */
+    @SubscribeEvent
+    public static void onRenderManualTowerPreview(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
+
+        // 仅在非 RTS 模式时渲染（RTS 模式下由 RenderPipeline 处理）
+        RtsClientKernel kernel = RtsClientKernel.get();
+        if (!kernel.isInitialized()) return;
+        CameraModule cam = kernel.module(CameraModule.class);
+        boolean cameraEnabled = cam != null && cam.getState().isEnabled();
+        if (cameraEnabled || kernel.isRegionValid()) return;
+
+        TowerRangePreviewPass.renderManual(event);
     }
 }

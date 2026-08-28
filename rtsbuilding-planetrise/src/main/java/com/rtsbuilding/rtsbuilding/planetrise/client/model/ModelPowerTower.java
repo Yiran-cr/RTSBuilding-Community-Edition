@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.planetrise.client.model;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.rtsbuilding.rtsbuilding.client.render.util.RtsAlphaVertexConsumer;
 import com.rtsbuilding.rtsbuilding.planetrise.EnergyMod;
 import com.rtsbuilding.rtsbuilding.planetrise.block.PowerTowerBlock;
 import net.minecraft.client.model.geom.ModelLayerLocation;
@@ -171,6 +172,20 @@ public class ModelPowerTower {
      *                    物品渲染器在无世界时传固定值）。
      */
     public void render(PoseStack poseStack, MultiBufferSource buffer, float timeSeconds, int light, int overlay) {
+        render(poseStack, buffer, timeSeconds, light, overlay, 1.0F);
+    }
+
+    /**
+     * 渲染整座塔（带透明度）。
+     * <p>
+     * {@code alpha} &lt; 1 时使用半透明实体层（{@code RenderType.entityTranslucent}，
+     * TRANSLUCENT_TRANSPARENCY 混合 + NO_CULL，顶点格式 NEW_ENTITY 与不透明层一致），
+     * 并把顶点 alpha 统一乘以 {@code alpha}，用于 RTS 放置虚影；{@code alpha} = 1 时退化为
+     * 常规不透明 cutout 渲染（方块实体/物品显示）。同一处方块发射的顶点格式一致，
+     * 保证半透明与不透明路径共用同一份几何数据。
+     */
+    public void render(PoseStack poseStack, MultiBufferSource buffer, float timeSeconds, int light, int overlay,
+                       float alpha) {
         // 顶部天线动画：绕 y 轴旋转 + 缩放脉冲（周期 3 秒）。
         float animTime = timeSeconds % ANIM_DURATION;
         rotate.yRot = (-360.0F * animTime / ANIM_DURATION) * DEG_TO_RAD;
@@ -180,11 +195,17 @@ public class ModelPowerTower {
                 : 0.8F + (1.0F - 0.8F) * ((animTime - half) / half); // 0.8 → 1.0
         rotate.xScale = rotate.yScale = rotate.zScale = scale;
 
+        boolean translucent = alpha < 0.999F;
+        RenderType renderType = translucent
+                ? RenderType.entityTranslucent(TEXTURE)
+                : RenderType.entityCutoutNoCull(TEXTURE);
+
         poseStack.pushPose();
         poseStack.translate(0, 1.5F, 0);
         poseStack.scale(-1, -1, 1);
 
-        VertexConsumer consumer = buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE));
+        VertexConsumer base = buffer.getBuffer(renderType);
+        VertexConsumer consumer = translucent ? new RtsAlphaVertexConsumer(base, alpha) : base;
         rotate.render(poseStack, consumer, light, overlay, 0xFFFFFFFF);
         body.render(poseStack, consumer, light, overlay, 0xFFFFFFFF);
         poseStack.popPose();

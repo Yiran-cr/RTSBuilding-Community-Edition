@@ -909,4 +909,88 @@ public final class SdfRenderer {
             }
         }
     }
+
+    /**
+     * 使用<b>矢量环形扇形 SDF shader</b>绘制圆环饼状图扇区——对
+     * {@code startAngleDeg} 到 {@code endAngleDeg} 角度区间填充内外径之间的环形区域。
+     * <p>
+     * 由 {@link UiShaders#ringSector} 在 fragment 中逐像素计算「环 ∩ 扇形」有向距离场，
+     * 并用 dFdx/dFdy 梯度归一化做 <b>1 像素过渡带的真矢量抗锯齿</b>：外圆弧 / 内圆弧 /
+     * 两条径向边均平滑无锯齿，与像素分辨率无关（缩放任意大小都清晰）。
+     * 绘制管线与 {@link #drawRoundedRect} / {@link #drawColorWheel} 完全一致
+     * （{@code RenderSystem.setShader} + {@code BufferUploader.drawWithShader}），
+     * 半透明 alpha 正确混合。
+     * <p>
+     * 屏幕坐标系：0° = 右侧（+X），90° = 下方（+Y），顺时针增大。
+     *
+     * @param cx             圆心 X（屏幕坐标）
+     * @param cy             圆心 Y（屏幕坐标）
+     * @param outerR         外半径（>0）
+     * @param innerR         内半径（≥0，<outerR；=0 时为实心扇形）
+     * @param startAngleDeg  起始角度（度）
+     * @param endAngleDeg    结束角度（度；> startAngleDeg；可超过 360 画完整环）
+     * @param color          ARGB 颜色
+     */
+    public static void drawRingSector(GuiGraphics g, int cx, int cy, int outerR, int innerR,
+                                      float startAngleDeg, float endAngleDeg, int color) {
+        if (outerR <= 0 || innerR < 0 || innerR >= outerR || endAngleDeg <= startAngleDeg) {
+            return;
+        }
+
+        g.flush();
+
+        ShaderInstance shader = UiShaders.ringSector;
+        if (shader == null) return;
+
+        // 外接正方形的左上角与边长，UV 用「相对圆心的局部坐标」，恰好 ±outerR，
+        // 与 ring_sector.fsh 中 p = texCoord0 的局部坐标系对应。
+        int x = cx - outerR;
+        int y = cy - outerR;
+        int d = 2 * outerR;
+
+        float r = ((color >> 16) & 0xFF) / 255f;
+        float gr = ((color >> 8) & 0xFF) / 255f;
+        float b = (color & 0xFF) / 255f;
+        float a = ((color >> 24) & 0xFF) / 255f;
+
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShader(() -> shader);
+
+        shader.safeGetUniform("u_OuterR").set((float) outerR);
+        shader.safeGetUniform("u_InnerR").set((float) innerR);
+        shader.safeGetUniform("u_StartAngle").set(startAngleDeg);
+        shader.safeGetUniform("u_EndAngle").set(endAngleDeg);
+
+        var matrix = g.pose().last().pose();
+        var backing = new ByteBufferBuilder(256);
+        var builder = new BufferBuilder(backing, VertexFormat.Mode.QUADS,
+                DefaultVertexFormat.POSITION_TEX_COLOR);
+
+        builder.addVertex(matrix, x, y + d, 0).setUv(-outerR, outerR).setColor(r, gr, b, a);
+        builder.addVertex(matrix, x + d, y + d, 0).setUv(outerR, outerR).setColor(r, gr, b, a);
+        builder.addVertex(matrix, x + d, y, 0).setUv(outerR, -outerR).setColor(r, gr, b, a);
+        builder.addVertex(matrix, x, y, 0).setUv(-outerR, -outerR).setColor(r, gr, b, a);
+
+        MeshData data = builder.build();
+        if (data != null) {
+            BufferUploader.drawWithShader(data);
+        }
+        backing.close();
+
+        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
+    }
+
+    /**
+     * 绘制完整<b>圆环</b>（360°），等价于 {@code drawRingSector(..., 0, 360, color)}。
+     *
+     * @param cx     圆心 X
+     * @param cy     圆心 Y
+     * @param outerR 外半径
+     * @param innerR 内半径
+     * @param color  ARGB 颜色
+     */
+    public static void drawFullRing(GuiGraphics g, int cx, int cy, int outerR, int innerR, int color) {
+        drawRingSector(g, cx, cy, outerR, innerR, 0, 360, color);
+    }
 }

@@ -19,10 +19,11 @@ import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
 /**
  * Block entity for the thermal generator. Burns lava to produce FE.
  * <p>
- * Generated FE accumulates in the internal buffer, which is exposed as an
- * extract-only {@code IEnergyStorage} capability. A power tower placed inside
- * the generator's neighbourhood can suck this buffer dry and redistribute the
- * energy wirelessly — the Dyson-Sphere-Program-style transmission backbone.
+ * Generated FE is reported to the grid via {@link #generation()} as a rate-based
+ * supply and is distributed through the power grid (towers) to consumers. The
+ * internal buffer is exposed as an extract-only {@code IEnergyStorage} capability
+ * merely as an out-of-band hook for external pipes / third-party mods — it is no
+ * longer the path the grid uses to take energy from the generator.
  * <p>
  * 继承 {@link AbstractEnergyMachineBlockEntity}（能量缓冲 / NBT / tick 模板均由基类承担），
  * 本类专注：岩浆罐燃料供给 + 每 tick 燃烧产电 + LIT 状态同步，并作为<b>发电机器</b>
@@ -171,10 +172,5 @@ public class ThermalGeneratorBlockEntity extends AbstractEnergyMachineBlockEntit
     @Override
     public long demand() {
         return 0L;
-    }
-
-    /** 发电机器不接受分配给塔的配额。 */
-    @Override
-    public void acceptQuota(long quota) {
     }
 }

@@ -153,6 +153,12 @@ public final class RenderPipeline {
         // 蓝图放置模式幽灵预览：半透明线框示意蓝图方块目标位置
         registerPass(new BlueprintPlacementPreviewPass());
 
+        // 单方块放置幽灵预览：建造成型时在目标位置渲染方块半透明虚影，多格结构额外渲染占位块
+        registerPass(new BlockPlacementPreviewPass());
+
+        // 无线输电塔/风力发电机放置预览：目标位置的水平圆环（链路范围蓝 + 供电范围黄）
+        registerPass(new TowerRangePreviewPass());
+
         var lbrp = new LineBrushRenderPass(lineBrush);
         this.lineBrushRenderPass = lbrp;
         registerPass(lbrp);

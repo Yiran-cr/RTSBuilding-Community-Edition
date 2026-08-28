@@ -22,17 +22,24 @@ import java.util.Collection;
  * <p>
  * 挂在 {@link RenderLevelStageEvent} 的 {@code AFTER_TRANSLUCENT_BLOCKS} 阶段，独立于 RTS
  * 客户端内核执行；当 {@link PowerRangeVisualStore} 的全局显示开关开启时，为每个已注册的
- * 能量节点绘制<b>水平圆环</b>：
+ * 能量节点绘制<b>标准球体线框</b>（三轴同半径、高度=半径）：
  * <ul>
- *   <li><b>链路范围圈</b>（蓝色）——发电机 / 输电塔均绘制，表示组网距离；</li>
- *   <li><b>供电范围圈</b>（黄色）——仅输电塔绘制，表示广播供电的圆形区域。</li>
+ *   <li><b>链路范围球</b>（蓝色）——发电机 / 输电塔均绘制，表示组网距离球；</li>
+ *   <li><b>供电范围球</b>（黄色）——仅输电塔绘制，表示广播供电的球体区域。</li>
  * </ul>
- * 圆圈为地面水平线环（XZ 平面），以节点中心为圆心；靠近玩家的节点会被优先绘制。
+ * 以节点方块中心为球心（纬线圈 + 经线圈描绘），与逻辑上的球体供电/链路范围一致。
+ * 靠近玩家的节点会被优先绘制。
  */
 public final class PowerRangeOverlayRenderer {
 
     /** 圆环分段数（约 3.75° 步长，视觉圆滑）。 */
     private static final int SEGMENTS = 96;
+
+    /** 标准球体线框：纬线圈数（含赤道，不画极点单点）。 */
+    private static final int LAT_SEGMENTS = 6;
+
+    /** 标准球体线框：经线圈数（过球心的垂直大圆数）。 */
+    private static final int LONG_SEGMENTS = 8;
 
     /** 渲染缓冲区容量。 */
     private static final int BUFFER_CAPACITY = 1024 * 256;
@@ -95,11 +102,11 @@ public final class PowerRangeOverlayRenderer {
             if (distSq > MAX_DRAW_DISTANCE_SQ) {
                 continue;
             }
-            // 链路范围圈（蓝）：所有节点均有。
-            drawCircle(builder, pose, pos, node.linkRange(), LINK_COLOR[0], LINK_COLOR[1], LINK_COLOR[2]);
-            // 供电范围圈（黄）：仅输电塔。
+            // 链路范围圈（蓝）：所有节点均有（球体线框）。
+            drawSphere(builder, pose, pos, node.linkRange(), LINK_COLOR[0], LINK_COLOR[1], LINK_COLOR[2]);
+            // 供电范围圈（黄）：仅输电塔（球体线框）。
             if (node.role() == PowerRole.TOWER && node.powerRange() > 0) {
-                drawCircle(builder, pose, pos, node.powerRange(), POWER_COLOR[0], POWER_COLOR[1], POWER_COLOR[2]);
+                drawSphere(builder, pose, pos, node.powerRange(), POWER_COLOR[0], POWER_COLOR[1], POWER_COLOR[2]);
             }
         }
 
@@ -112,21 +119,46 @@ public final class PowerRangeOverlayRenderer {
         poseStack.popPose();
     }
 
-    /** 绘制某个节点为中心、给定半径的地面水平圆环（XZ 平面）。 */
-    private static void drawCircle(BufferBuilder builder, PoseStack.Pose pose,
+    /** 绘制某个节点为中心、给定半径的<b>标准球体线框</b>（纬线圈 + 经线圈，与逻辑球体范围一致）。 */
+    private static void drawSphere(BufferBuilder builder, PoseStack.Pose pose,
             BlockPos pos, double radius, float r, float g, float b) {
-        double cx = pos.getX() + 0.5D;
-        double cy = pos.getY();          // 以节点底部所在格的地面为圆面
+        double cx = pos.getX() + 0.5D;          // 以节点方块中心为球心
+        double cy = pos.getY() + 0.5D;
         double cz = pos.getZ() + 0.5D;
-        double step = Math.PI * 2 / SEGMENTS;
+        // 纬线圈（水平圆，随纬度变化半径/高度）。
+        for (int lat = 1; lat < LAT_SEGMENTS; lat++) {
+            double phi = -Math.PI / 2 + Math.PI * lat / LAT_SEGMENTS;
+            double ringR = radius * Math.cos(phi);
+            double y = cy + radius * Math.sin(phi);
+            putHorizontalRing(builder, pose, cx, y, cz, ringR, r, g, b);
+        }
+        // 经线圈（过球心的垂直大圆，方位角扫描半圈即可覆盖全部经线）。
+        for (int lon = 0; lon < LONG_SEGMENTS; lon++) {
+            double theta = Math.PI * lon / LONG_SEGMENTS;
+            double ct = Math.cos(theta), st = Math.sin(theta);
+            for (int s = 0; s < SEGMENTS; s++) {
+                int s1 = (s + 1) % SEGMENTS;
+                double phi0 = -Math.PI / 2 + 2 * Math.PI * s / SEGMENTS;
+                double phi1 = -Math.PI / 2 + 2 * Math.PI * s1 / SEGMENTS;
+                double rp0 = radius * Math.cos(phi0), y0 = cy + radius * Math.sin(phi0);
+                double rp1 = radius * Math.cos(phi1), y1 = cy + radius * Math.sin(phi1);
+                addLine(builder, pose,
+                        cx + rp0 * ct, y0, cz + rp0 * st,
+                        cx + rp1 * ct, y1, cz + rp1 * st, r, g, b);
+            }
+        }
+    }
+
+    /** 追加一条水平圆环（XZ 平面、固定高度 y、半径 ringR）。 */
+    private static void putHorizontalRing(BufferBuilder builder, PoseStack.Pose pose,
+            double cx, double y, double cz, double ringR, float r, float g, float b) {
         for (int s = 0; s < SEGMENTS; s++) {
-            double t0 = s * step;
-            double t1 = t0 + step;
-            double x0 = cx + radius * Math.cos(t0);
-            double z0 = cz + radius * Math.sin(t0);
-            double x1 = cx + radius * Math.cos(t1);
-            double z1 = cz + radius * Math.sin(t1);
-            addLine(builder, pose, x0, cy, z0, x1, cy, z1, r, g, b);
+            int s1 = (s + 1) % SEGMENTS;
+            double a0 = CIRCLE_COEFFS[s][0], a1 = CIRCLE_COEFFS[s1][0];
+            double b0 = CIRCLE_COEFFS[s][1], b1 = CIRCLE_COEFFS[s1][1];
+            addLine(builder, pose,
+                    cx + ringR * a0, y, cz + ringR * b0,
+                    cx + ringR * a1, y, cz + ringR * b1, r, g, b);
         }
     }
 
@@ -140,4 +172,18 @@ public final class PowerRangeOverlayRenderer {
 
     /** 绘图距离剔除：超过该距离的节点不画圈（避免远处小圈被忽略、近处大圈爆量）。 */
     private static final double MAX_DRAW_DISTANCE_SQ = 256.0 * 256.0;
+
+    /** 预计算圆环每段的 cos/sin（一次算好，避免按住 P 显示时对每个节点每帧重复三角函数）。
+     *  {@code [seg][0]=cos, [seg][1]=sin}；下标按 {@link #SEGMENTS} 等分一周。 */
+    private static final double[][] CIRCLE_COEFFS = createCircleCoeffs();
+
+    private static double[][] createCircleCoeffs() {
+        double[][] coeffs = new double[SEGMENTS][2];
+        double step = Math.PI * 2 / SEGMENTS;
+        for (int s = 0; s < SEGMENTS; s++) {
+            coeffs[s][0] = Math.cos(s * step);
+            coeffs[s][1] = Math.sin(s * step);
+        }
+        return coeffs;
+    }
 }

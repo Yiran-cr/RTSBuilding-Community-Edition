@@ -58,6 +58,9 @@ public final class EnergyMod {
         EnergyCreativeTabs.register(modEventBus);
         TerminalEnergyImpl.register(modEventBus);
         modEventBus.addListener(EnergyMod::commonSetup);
+        // 电网「新设备即时响应」：监听方块放置/破坏，唤醒覆盖该位置的输电塔立即重扫
+        //（配合退避调度：稳态省成本、变化即刻响应）。
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(PowerTowerWakeup.class);
     }
 
     /**

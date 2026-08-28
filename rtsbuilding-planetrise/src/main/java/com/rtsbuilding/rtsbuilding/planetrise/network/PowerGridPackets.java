@@ -25,9 +25,9 @@ public final class PowerGridPackets {
     public record MemberEntry(String id, String name, boolean online, byte access) {
     }
 
-    /** S2C 网格设备条目：role(0=GEN,1=TOWER,2=CONSUMER)、坐标、status(0..3)、量值、显示名(翻译键)、物品id。 */
+    /** S2C 网格设备条目：role(0=GEN,1=TOWER,2=CONSUMER)、坐标、status(0..3)、量值、显示名(翻译键)、物品id、可切换角色标记。 */
     public record DeviceEntry(byte role, long x, long y, long z, byte status, long metric, String label,
-                              String itemId) {
+                              String itemId, byte canToggle) {
     }
 
     /** S2C 外部机器配置条目。 */
@@ -118,6 +118,57 @@ public final class PowerGridPackets {
         }
     }
 
+    /** 请求当前电网组的发耗电历史时序（5 秒 / 1 分钟 / 1 小时三档）。服务端回推 S2CPowerGridHistory。 */
+    public record C2SPowerGridHistoryRequest() implements CustomPacketPayload {
+        public static final Type<C2SPowerGridHistoryRequest> TYPE = new Type<>(
+                ResourceLocation.fromNamespaceAndPath(EnergyMod.MODID, "c2s_powergrid_history_request"));
+        public static final StreamCodec<FriendlyByteBuf, C2SPowerGridHistoryRequest> STREAM_CODEC = StreamCodec.of(
+                (buf, p) -> {
+                }, buf -> new C2SPowerGridHistoryRequest());
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** 切换设备角色（用电 ↔ 发电）。服务端更新覆盖标记后回推新快照。 */
+    public record C2SDeviceRoleToggle(long x, long y, long z, byte newRole) implements CustomPacketPayload {
+        public static final Type<C2SDeviceRoleToggle> TYPE = new Type<>(
+                ResourceLocation.fromNamespaceAndPath(EnergyMod.MODID, "c2s_device_role_toggle"));
+        public static final StreamCodec<FriendlyByteBuf, C2SDeviceRoleToggle> STREAM_CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeLong(p.x());
+                    buf.writeLong(p.y());
+                    buf.writeLong(p.z());
+                    buf.writeByte(p.newRole());
+                },
+                buf -> new C2SDeviceRoleToggle(buf.readLong(), buf.readLong(), buf.readLong(), buf.readByte()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** 强制刷新指定输电塔的供电范围覆盖（立即重扫供电范围内的用电器）。服务端回推新快照。 */
+    public record C2SPowerGridTowerRefresh(long x, long y, long z) implements CustomPacketPayload {
+        public static final Type<C2SPowerGridTowerRefresh> TYPE = new Type<>(
+                ResourceLocation.fromNamespaceAndPath(EnergyMod.MODID, "c2s_powergrid_tower_refresh"));
+        public static final StreamCodec<FriendlyByteBuf, C2SPowerGridTowerRefresh> STREAM_CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeLong(p.x());
+                    buf.writeLong(p.y());
+                    buf.writeLong(p.z());
+                },
+                buf -> new C2SPowerGridTowerRefresh(buf.readLong(), buf.readLong(), buf.readLong()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     // ---- S2C ----
 
     /** 成员操作结果回传：code(0=SUCCESS,1=NO_ADMIN,2=NO_OWNER,3=INVALID)。 */
@@ -127,6 +178,45 @@ public final class PowerGridPackets {
         public static final StreamCodec<FriendlyByteBuf, S2CPowerGridActionResult> STREAM_CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeByte(p.code()),
                 buf -> new S2CPowerGridActionResult(buf.readByte()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * S2C 电网发耗电历史时序数据回包：三档（5 秒 / 1 分钟 / 1 小时）独立 List。
+     * 每个数据点为 {@code [generation, demand]}（按时间顺序，旧 → 新）。
+     */
+    public record S2CPowerGridHistory(List<long[]> points5s, List<long[]> points1m,
+                                      List<long[]> points1h) implements CustomPacketPayload {
+        public static final Type<S2CPowerGridHistory> TYPE = new Type<>(
+                ResourceLocation.fromNamespaceAndPath(EnergyMod.MODID, "s2c_powergrid_history"));
+        public static final StreamCodec<FriendlyByteBuf, S2CPowerGridHistory> STREAM_CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    writePoints(buf, p.points5s());
+                    writePoints(buf, p.points1m());
+                    writePoints(buf, p.points1h());
+                },
+                buf -> new S2CPowerGridHistory(readPoints(buf), readPoints(buf), readPoints(buf)));
+
+        private static void writePoints(FriendlyByteBuf buf, List<long[]> pts) {
+            buf.writeVarInt(pts.size());
+            for (long[] pt : pts) {
+                buf.writeLong(pt[0]);
+                buf.writeLong(pt[1]);
+            }
+        }
+
+        private static List<long[]> readPoints(FriendlyByteBuf buf) {
+            int n = buf.readVarInt();
+            List<long[]> out = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) {
+                out.add(new long[]{buf.readLong(), buf.readLong()});
+            }
+            return out;
+        }
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -162,6 +252,7 @@ public final class PowerGridPackets {
                         buf.writeLong(d.metric());
                         buf.writeUtf(d.label());
                         buf.writeUtf(d.itemId());
+                        buf.writeByte(d.canToggle());
                     }
                     buf.writeVarInt(p.externalConfigs().size());
                     for (ExternalConfigEntry e : p.externalConfigs()) {
@@ -186,7 +277,8 @@ public final class PowerGridPackets {
                     List<DeviceEntry> devices = new ArrayList<>(dc);
                     for (int i = 0; i < dc; i++) {
                         devices.add(new DeviceEntry(buf.readByte(), buf.readLong(), buf.readLong(),
-                                buf.readLong(), buf.readByte(), buf.readLong(), buf.readUtf(), buf.readUtf()));
+                                buf.readLong(), buf.readByte(), buf.readLong(), buf.readUtf(), buf.readUtf(),
+                                buf.readByte()));
                     }
                     int ec = buf.readVarInt();
                     List<ExternalConfigEntry> externalConfigs = new ArrayList<>(ec);
@@ -216,9 +308,17 @@ public final class PowerGridPackets {
                 (p, ctx) -> ctx.enqueueWork(() -> PowerGridServerHandler.handleExternalConfig(p, ctx)));
         registrar.playToServer(C2SPowerGridMemberAction.TYPE, C2SPowerGridMemberAction.STREAM_CODEC,
                 (p, ctx) -> ctx.enqueueWork(() -> PowerGridServerHandler.handleMemberAction(p, ctx)));
+        registrar.playToServer(C2SPowerGridHistoryRequest.TYPE, C2SPowerGridHistoryRequest.STREAM_CODEC,
+                (p, ctx) -> ctx.enqueueWork(() -> PowerGridServerHandler.handleHistoryRequest(ctx)));
+        registrar.playToServer(C2SDeviceRoleToggle.TYPE, C2SDeviceRoleToggle.STREAM_CODEC,
+                (p, ctx) -> ctx.enqueueWork(() -> PowerGridServerHandler.handleDeviceRoleToggle(p, ctx)));
+        registrar.playToServer(C2SPowerGridTowerRefresh.TYPE, C2SPowerGridTowerRefresh.STREAM_CODEC,
+                (p, ctx) -> ctx.enqueueWork(() -> PowerGridServerHandler.handleTowerRefresh(p, ctx)));
         registrar.playToClient(S2CPowerGridSnapshot.TYPE, S2CPowerGridSnapshot.STREAM_CODEC,
                 (p, ctx) -> ctx.enqueueWork(() -> PowerGridClientHandler.handleSnapshot(p)));
         registrar.playToClient(S2CPowerGridActionResult.TYPE, S2CPowerGridActionResult.STREAM_CODEC,
                 (p, ctx) -> ctx.enqueueWork(() -> PowerGridClientHandler.handleActionResult(p)));
+        registrar.playToClient(S2CPowerGridHistory.TYPE, S2CPowerGridHistory.STREAM_CODEC,
+                (p, ctx) -> ctx.enqueueWork(() -> PowerGridClientHandler.handleHistory(p)));
     }
 }

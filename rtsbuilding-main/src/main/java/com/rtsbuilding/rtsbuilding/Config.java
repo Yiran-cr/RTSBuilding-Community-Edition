@@ -78,8 +78,11 @@ public class Config {
             .translation("rtsbuilding.configuration.powerTowerPowerRange")
             .defineInRange("powerTowerPowerRange", 12, 0, 128);
 
+    /** 已废弃：自 1.1.4 起供电范围改为<b>标准球体</b>（高度 = 水平半径），此竖直半径配置不再生效。
+     * 保留仅为向后兼容旧配置文件。 */
+    @Deprecated
     public static final ModConfigSpec.IntValue POWER_TOWER_VERTICAL_RADIUS = BUILDER
-            .comment("Vertical radius (blocks, up and down) of one power tower's power supply area (rtsbuilding_planetrise).")
+            .comment("DEPRECATED — supply area is now a standard sphere (height = horizontal radius); this vertical radius is ignored.")
             .translation("rtsbuilding.configuration.powerTowerVerticalRadius")
             .defineInRange("powerTowerVerticalRadius", 8, 0, 128);
 
@@ -87,7 +90,7 @@ public class Config {
             .comment("Maximum FE/t one power tower can broadcast to consumers (rtsbuilding_planetrise).",
                     "A tower receives grid power proportionally to demand but capped by this throughput. Set to 0 to disable supply.")
             .translation("rtsbuilding.configuration.powerTowerThroughput")
-            .defineInRange("powerTowerThroughput", 2000L, 0L, Long.MAX_VALUE);
+            .defineInRange("powerTowerThroughput", (long) Integer.MAX_VALUE, 0L, Long.MAX_VALUE);
 
     public static final ModConfigSpec.LongValue GENERATOR_LINK_RANGE = BUILDER
             .comment("Link range (blocks) of generators (thermal / wind, rtsbuilding_planetrise).",
@@ -228,7 +231,8 @@ public class Config {
         return POWER_TOWER_POWER_RANGE.getAsInt();
     }
 
-    /** Vertical radius (blocks, up and down) of one power tower's supply area. */
+    /** @deprecated 自 1.1.4 起供电范围为球体（竖直 = 水平半径），此竖直半径取值不再生效。 */
+    @Deprecated
     public static int powerTowerVerticalRadius() {
         return POWER_TOWER_VERTICAL_RADIUS.getAsInt();
     }

@@ -14,6 +14,7 @@ public final class UiShaders {
     public static ShaderInstance textured;
     public static ShaderInstance resetIcon;
     public static ShaderInstance colorwheel;
+    public static ShaderInstance ringSector;
 
     private UiShaders() {}
 }

@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.planetrise.network;
 import com.rtsbuilding.rtsbuilding.api.powergrid.ExternalMachineConfig;
 import com.rtsbuilding.rtsbuilding.api.powergrid.PowerGridSnapshot;
 import com.rtsbuilding.rtsbuilding.api.powergrid.RtsAccessLevel;
+import com.rtsbuilding.rtsbuilding.api.powergrid.RtsDeviceRole;
 import com.rtsbuilding.rtsbuilding.api.powergrid.RtsMachineType;
 import com.rtsbuilding.rtsbuilding.api.powergrid.RtsPowerGrid;
 import com.rtsbuilding.rtsbuilding.planetrise.client.powergrid.PowerGridClientCache;
@@ -11,6 +12,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -115,6 +117,40 @@ public final class PowerGridApiImpl implements RtsPowerGrid {
     public void locateDevice(long x, long y, long z) {
         // 阶段2：先记录定位意图（供主模组 RTS 相机消费/后续聚焦）；直接相机跳转挂主 mod 内核。
         LocateIntent.INSTANCE.lastLocate = new long[]{x, y, z};
+    }
+
+    @Override
+    public void requestHistory() {
+        PacketDistributor.sendToServer(new PowerGridPackets.C2SPowerGridHistoryRequest());
+    }
+
+    @Override
+    public void toggleDeviceRole(long x, long y, long z, RtsDeviceRole newRole) {
+        if (newRole == null) {
+            return;
+        }
+        PacketDistributor.sendToServer(new PowerGridPackets.C2SDeviceRoleToggle(
+                x, y, z, (byte) newRole.ordinal()));
+    }
+
+    @Override
+    public void refreshTower(long x, long y, long z) {
+        PacketDistributor.sendToServer(new PowerGridPackets.C2SPowerGridTowerRefresh(x, y, z));
+    }
+
+    @Override
+    public List<long[]> history5s() {
+        return PowerGridClientCache.INSTANCE.history5s();
+    }
+
+    @Override
+    public List<long[]> history1m() {
+        return PowerGridClientCache.INSTANCE.history1m();
+    }
+
+    @Override
+    public List<long[]> history1h() {
+        return PowerGridClientCache.INSTANCE.history1h();
     }
 
     /** 最近一次设备定位意图（客户端，供主模组 / UI 读取）。 */
