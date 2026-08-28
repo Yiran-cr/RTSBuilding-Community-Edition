@@ -1,0 +1,19 @@
+{
+  "name": "rtsbuilding-docs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "RTS Building 社区版文档站 —— 渲染架构图与逻辑链路报告",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.4.0"
+  }
+}

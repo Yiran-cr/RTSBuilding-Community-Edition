@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "RTS Building：社区版 — 模块架构",
+    "locale": "zh-CN",
+    "output": "rtsbuilding-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Yiran-cr/RTSBuilding-Community-Edition",
+      "revision": "15914c7a956b28ce1b3ac145da57f137520dad70"
+    },
+    "views": [
+      { "id": "module-spine", "label": "编译依赖主干", "focus": ["api", "common", "main", "ui", "mc"], "note": "从公共契约到共享逻辑，再到主模组平台层与运行时宿主。" },
+      { "id": "packaging", "label": "单 JAR 多 mod 打包", "focus": ["main", "planetrise", "addon-ae2", "addon-rs", "addon-bd", "addon-sb"], "note": "内置插件与 UI、逻辑全部合并进主模组产物。" },
+      { "id": "host-integration", "label": "宿主集成 SPI", "focus": ["api", "addon-ae2", "addon-rs", "addon-bd", "addon-sb"], "note": "rtsaddon-* 经 RtsCompatRegistry 把外部宿主能力接入存储面板。" }
+    ]
+  },
+  "components": [
+    { "id": "api", "type": "backend", "label": "rtsbuilding-api", "sublabel": "公共 API + 兼容 SPI", "pos": [40, 300], "size": [140, 68], "tag": "契约层", "sources": [{ "path": "rtsbuilding-api/src/main/java/com/rtsbuilding/rtsbuilding/api/RtsAPI.java" }] },
+    { "id": "common", "type": "backend", "label": "rtsbuilding-common", "sublabel": "共享玩法逻辑", "pos": [214, 300], "size": [140, 68], "sources": [{ "path": "rtsbuilding-common/src/main/java/com/rtsbuilding/rtsbuilding/common/blueprint/model/RtsBlueprint.java" }] },
+    { "id": "main", "type": "backend", "label": "rtsbuilding-main", "sublabel": "主模组 · 整合发布", "pos": [420, 300], "size": [150, 68], "tag": "NeoForge 平台层", "sources": [{ "path": "rtsbuilding-main/src/main/java/com/rtsbuilding/rtsbuilding/RtsbuildingMod.java" }] },
+    { "id": "mc", "type": "external", "label": "NeoForge 运行时", "sublabel": "Minecraft 1.21.1", "pos": [420, 20], "size": [150, 68] },
+    { "id": "ui", "type": "frontend", "label": "rtsbuilding-ui", "sublabel": "uifw · 独立 UI 框架", "pos": [220, 110], "size": [150, 68], "sources": [{ "path": "rtsbuilding-ui/src/main/java/com/rtsbuilding/uifw/UiFrameworkMod.java" }] },
+    { "id": "planetrise", "type": "backend", "label": "rtsbuilding-planetrise", "sublabel": "内置能量插件 · 电网", "pos": [40, 430], "size": [150, 68], "sources": [{ "path": "rtsbuilding-planetrise/src/main/java/com/rtsbuilding/rtsbuilding/planetrise/EnergyMod.java" }] },
+    { "id": "addon-ae2", "type": "external", "label": "rtsaddon-ae2", "sublabel": "Applied Energistics 2", "pos": [210, 430], "size": [150, 84], "sources": [{ "path": "rtsaddon-ae2/src/main/java/com/rtsbuilding/addon/ae2/RtsAe2Addon.java" }] },
+    { "id": "addon-rs", "type": "external", "label": "rtsaddon-refinedstorage", "sublabel": "Refined Storage 2", "pos": [380, 430], "size": [150, 84], "sources": [{ "path": "rtsaddon-refinedstorage/src/main/java/com/rtsbuilding/addon/refinedstorage/RtsRefinedStorageAddon.java" }] },
+    { "id": "addon-bd", "type": "external", "label": "rtsaddon-beyonddimensions", "sublabel": "Beyond Dimensions", "pos": [560, 430], "size": [170, 84], "sources": [{ "path": "rtsaddon-beyonddimensions/src/main/java/com/rtsbuilding/addon/beyonddimensions/RtsBeyondDimensionsAddon.java" }] },
+    { "id": "addon-sb", "type": "external", "label": "rtsaddon-sophisticatedbackpacks", "sublabel": "Sophisticated Backpacks", "pos": [750, 430], "size": [215, 84], "sources": [{ "path": "rtsaddon-sophisticatedbackpacks/src/main/java/com/rtsbuilding/addon/sophisticatedbackpacks/RtsSophisticatedBackpacksAddon.java" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "单 JAR 多 mod —— 内置产物合并进主模组产物", "pad": 8, "wraps": ["api", "common", "main", "ui", "planetrise", "addon-ae2", "addon-rs", "addon-bd", "addon-sb"] }
+  ],
+  "connections": [
+    { "id": "api-common", "from": "api", "to": "common" },
+    { "id": "common-main", "from": "common", "to": "main", "label": "编译依赖" },
+    { "id": "main-ui", "from": "main", "to": "ui", "label": "compileOnly", "fromSide": "top" },
+    { "id": "main-runtime", "from": "main", "to": "mc", "fromSide": "top", "toSide": "bottom" },
+    { "id": "planetrise-main", "from": "planetrise", "to": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom" },
+    { "id": "ae2-main", "from": "addon-ae2", "to": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom" },
+    { "id": "rs-main", "from": "addon-rs", "to": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom" },
+    { "id": "bd-main", "from": "addon-bd", "to": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom" },
+    { "id": "sb-main", "from": "addon-sb", "to": "main", "variant": "emphasis", "fromSide": "top", "toSide": "bottom" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "模块化分层", "items": ["api 定义稳定契约与主机 SPI", "common 承载共享玩法逻辑", "main 提供 NeoForge 平台层"] },
+    { "dot": "emerald", "title": "内置打包机制", "items": ["builtin_mods 单一来源清单派生合并", "内置插件 + ui + common + api 合并进主 JAR", "主模组禁止编译期引用内置插件"] },
+    { "dot": "rose", "title": "宿主集成", "items": ["rtsaddon-* 经 RtsCompatRegistry 接入", "运行时反射集成 AE2 / RS / BD / SB", "插件与宿主以接口 + 静态桥通信"] }
+  ]
+}
+
